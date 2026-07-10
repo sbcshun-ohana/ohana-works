@@ -65,3 +65,6 @@ create type office_status as enum ('稼働中', '廃止済み');
 
 -- 設計書20.2 ファイル取込ステータス
 create type file_import_status as enum ('processing', 'awaiting_review', 'applied', 'error');
+
+-- 設計書8章 職員連絡(お知らせ)種別
+create type notice_category as enum ('会社一斉', '園単位', '個別', '役職別', '勤務交代関連', '災害モード');

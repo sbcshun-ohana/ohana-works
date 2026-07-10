@@ -102,6 +102,43 @@ create policy payslips_select_self on payslips
 create policy notifications_select_self on notifications
   for select using (target_employee_id = my_employee_id());
 
+-- 8章 お知らせ: 会社一斉/自分の所属園/自分の役職宛て、または個別の宛先(notice_recipients)に
+-- 含まれる場合に閲覧可。作成者・当該施設の管理者も閲覧可。
+create policy notices_select_target on notices
+  for select using (
+    category = '会社一斉'
+    or created_by = my_employee_id()
+    or (target_office_id is not null and manages_office(target_office_id))
+    or (
+      target_office_id is not null
+      and target_office_id in (select home_office_id from employees where id = my_employee_id())
+    )
+    or (
+      target_position_id is not null
+      and target_position_id in (select position_id from employees where id = my_employee_id())
+    )
+    or exists (
+      select 1 from notice_recipients nr
+      where nr.notice_id = notices.id and nr.employee_id = my_employee_id()
+    )
+  );
+
+create policy notice_attachments_select on notice_attachments
+  for select using (
+    exists (select 1 from notices n where n.id = notice_attachments.notice_id)
+  );
+
+create policy notice_recipients_select_self on notice_recipients
+  for select using (
+    employee_id = my_employee_id()
+    or exists (
+      select 1 from notices n where n.id = notice_recipients.notice_id and n.created_by = my_employee_id()
+    )
+  );
+-- 既読・返信は本人のみ更新可(notice_id/employee_idの変更はトリガーで禁止済み)
+create policy notice_recipients_update_self on notice_recipients
+  for update using (employee_id = my_employee_id()) with check (employee_id = my_employee_id());
+
 -- ============================================================
 -- 参照マスタ(機密性なし): ログイン済み職員なら誰でも参照可
 -- ============================================================

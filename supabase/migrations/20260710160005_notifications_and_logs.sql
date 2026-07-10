@@ -112,6 +112,68 @@ create table disaster_responses (
   unique (disaster_event_id, employee_id)
 );
 
+-- 8章 職員連絡(お知らせ)。配信チャネル(FCM等)は notifications/notification_templates が別途担う。
+create table notices (
+  id uuid primary key default gen_random_uuid(),
+  category notice_category not null,
+  title text not null,
+  body text not null,
+  target_office_id uuid references offices(id), -- 園単位配信時の対象施設
+  target_position_id uuid references positions(id), -- 役職別配信時の対象役職
+  related_shift_change_request_id uuid references shift_change_requests(id), -- 勤務交代関連
+  related_disaster_event_id uuid references disaster_events(id), -- 災害モード
+  requires_read_confirmation boolean not null default false, -- 既読確認フラグ
+  standard_reply_options text[], -- 定型返信選択肢(例: 確認しました/対応します/対応できません/管理者に確認してください)
+  created_by uuid not null references employees(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create trigger trg_notices_updated_at before update on notices
+  for each row execute function set_updated_at();
+create index idx_notices_office on notices(target_office_id);
+create index idx_notices_category on notices(category);
+
+comment on column notices.body is
+  '8章: 個別連絡は管理者が内容確認可能であることを職員に明示する(アプリUI側の注記事項。本テーブルはその対象自体)。';
+
+create table notice_attachments (
+  id uuid primary key default gen_random_uuid(),
+  notice_id uuid not null references notices(id) on delete cascade,
+  file_path text not null,
+  file_name text not null,
+  content_type text,
+  created_at timestamptz not null default now()
+);
+create index idx_notice_attachments_notice on notice_attachments(notice_id);
+
+-- 送信先職員ごとの既読日時・定型返信を記録
+create table notice_recipients (
+  id uuid primary key default gen_random_uuid(),
+  notice_id uuid not null references notices(id) on delete cascade,
+  employee_id uuid not null references employees(id),
+  read_at timestamptz,
+  reply_option text, -- 確認しました/対応します/対応できません/管理者に確認してください 等
+  replied_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (notice_id, employee_id)
+);
+create index idx_notice_recipients_employee on notice_recipients(employee_id);
+
+-- notice_id / employee_id は既読・返信更新時に変更させない(職員は自分の既読状態のみ更新可能にするため)
+create or replace function guard_notice_recipient_identity()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.notice_id <> old.notice_id or new.employee_id <> old.employee_id then
+    raise exception 'notice_id/employee_id は変更できません';
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_notice_recipients_guard before update on notice_recipients
+  for each row execute function guard_notice_recipient_identity();
+
 -- 24章 監査資料管理(職種別必須資料の未提出判定に利用)
 create table audit_documents (
   id uuid primary key default gen_random_uuid(),
@@ -207,7 +269,8 @@ declare
     'company_housing_deductions',
     'special_duty_allowances',
     'shift_imports',
-    'file_import_logs'
+    'file_import_logs',
+    'notices'
   ];
 begin
   foreach t in array audited_tables loop
