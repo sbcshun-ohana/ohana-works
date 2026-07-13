@@ -84,12 +84,14 @@ Deno.serve(async (req) => {
       );
     }
 
+    let punchedAt: Date | null = null;
+
     if (
       ["clock_in", "break_start", "break_end", "clock_out"].includes(
         punch_type,
       )
     ) {
-      await recordPunch(adminClient, {
+      const result = await recordPunch(adminClient, {
         employeeId: employee.id,
         deviceId: device_id,
         officeId: device.office_id,
@@ -97,6 +99,7 @@ Deno.serve(async (req) => {
         source: "qr",
         qrTokenId: qrToken.id,
       });
+      punchedAt = result.punchedAt;
     } else if (punch_type === "admin_review") {
       const { data: rule } = await adminClient
         .from("alert_rules")
@@ -123,6 +126,7 @@ Deno.serve(async (req) => {
         employee_name: employee.name,
         punch_type,
         message: PUNCH_MESSAGES[punch_type] ?? "処理しました",
+        punched_at: punchedAt?.toISOString() ?? null,
       }),
       { headers: { ...headers, "Content-Type": "application/json" } },
     );

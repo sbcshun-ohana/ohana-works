@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/punch_resolution.dart';
 import '../punch_type_display.dart';
+import '../time_format.dart';
 
 const _autoReturnDelay = Duration(seconds: 3);
 
@@ -56,6 +57,17 @@ class _PunchSuccessScreenState extends State<PunchSuccessScreen> {
                 color: Colors.white,
               ),
             ),
+            if (widget.result.punchedAt != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                formatClockTime(widget.result.punchedAt!),
+                style: const TextStyle(
+                  fontSize: 72,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ],
         ),
       ),

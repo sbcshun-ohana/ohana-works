@@ -116,6 +116,7 @@ Deno.serve(async (req) => {
         employee_name: employee.name,
         punch_type,
         message: "代理打刻を記録しました",
+        punched_at: punchedAt.toISOString(),
       }),
       { headers: { ...headers, "Content-Type": "application/json" } },
     );

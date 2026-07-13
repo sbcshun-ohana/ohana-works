@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_theme.dart';
 import '../models/paired_device.dart';
 import '../services/kiosk_punch_service.dart';
+import '../time_format.dart';
 import 'proxy_punch_screen.dart';
 import 'punch_confirm_screen.dart';
 
@@ -25,9 +28,20 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
 
   bool _isProcessing = false;
   String? _statusMessage;
+  DateTime _now = DateTime.now();
+  Timer? _clockTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -111,6 +125,25 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
         padding: const EdgeInsets.only(top: 32),
         child: Column(
           children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 28,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                formatClockTime(_now),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 64,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'QRコードをかざしてください',
               style: TextStyle(
