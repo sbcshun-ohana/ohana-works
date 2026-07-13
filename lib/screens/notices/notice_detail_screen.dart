@@ -32,10 +32,22 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _noticeFuture = widget.service.fetchNotice(widget.noticeId);
+    _noticeFuture = widget.service.fetchNotice(widget.noticeId).then((notice) {
+      if (notice != null && !notice.isRead) {
+        // 既読記録の完了を待たず先に表示するが、完了後にローカル状態も更新して
+        // 一覧画面へ戻る際に最新の既読状態を確実に反映できるようにする。
+        widget.service.markAsRead(widget.noticeId).then((_) {
+          if (mounted) {
+            setState(() {
+              _notice = (_notice ?? notice).copyWith(myReadAt: DateTime.now());
+            });
+          }
+        });
+      }
+      return notice;
+    });
     _attachmentsFuture = widget.service.fetchAttachments(widget.noticeId);
     _canViewAudienceFuture = widget.service.canViewAudienceStatus();
-    widget.service.markAsRead(widget.noticeId);
   }
 
   Future<void> _openAttachment(NoticeAttachment attachment) async {
@@ -57,16 +69,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
       await widget.service.submitReply(widget.noticeId, option);
       if (!mounted) return;
       setState(() {
-        _notice = Notice(
-          id: _notice!.id,
-          category: _notice!.category,
-          title: _notice!.title,
-          body: _notice!.body,
-          requiresReadConfirmation: _notice!.requiresReadConfirmation,
-          standardReplyOptions: _notice!.standardReplyOptions,
-          createdAt: _notice!.createdAt,
-          targetOfficeId: _notice!.targetOfficeId,
-          targetPositionId: _notice!.targetPositionId,
+        _notice = _notice!.copyWith(
           myReadAt: DateTime.now(),
           myReplyOption: option,
         );
@@ -81,6 +84,17 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pop(_notice);
+      },
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('お知らせ'),

@@ -53,6 +53,22 @@ class Notice {
   final String? myReplyOption;
 
   bool get isRead => myReadAt != null;
+
+  Notice copyWith({DateTime? myReadAt, String? myReplyOption}) {
+    return Notice(
+      id: id,
+      category: category,
+      title: title,
+      body: body,
+      requiresReadConfirmation: requiresReadConfirmation,
+      standardReplyOptions: standardReplyOptions,
+      createdAt: createdAt,
+      targetOfficeId: targetOfficeId,
+      targetPositionId: targetPositionId,
+      myReadAt: myReadAt ?? this.myReadAt,
+      myReplyOption: myReplyOption ?? this.myReplyOption,
+    );
+  }
 }
 
 class NoticeAttachment {
