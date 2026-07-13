@@ -12,6 +12,15 @@ class AppColors {
   static const Color surface = Color(0xFFFFFFFF);
   static const Color textPrimary = Color(0xFF3A4750);
   static const Color textSecondary = Color(0xFF8A97A0);
+
+  // 7章 打刻色分け(出勤=緑/休憩開始=黄・オレンジ/勤務再開=青/退勤=赤/キャンセル=グレー/注意=オレンジ/エラー=赤)
+  static const Color punchClockIn = Color(0xFF4CAF7D);
+  static const Color punchBreakStart = Color(0xFFFFB067);
+  static const Color punchBreakEnd = Color(0xFF6FC3E0);
+  static const Color punchClockOut = Color(0xFFE0645F);
+  static const Color punchCancel = Color(0xFF9AA5AD);
+  static const Color punchWarning = Color(0xFFFFB067);
+  static const Color punchError = Color(0xFFE0645F);
 }
 
 class AppTheme {
