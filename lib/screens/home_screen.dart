@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import 'notices/notice_list_screen.dart';
 import 'qr_attendance_screen.dart';
+import 'requests/request_menu_screen.dart';
 
 /// ログイン後に表示する仮のホーム画面。
 class HomeScreen extends StatelessWidget {
@@ -87,6 +88,18 @@ class HomeScreen extends StatelessWidget {
                     },
                     icon: const Icon(Icons.notifications_outlined),
                     label: const Text('お知らせ'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const RequestMenuScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.assignment_outlined),
+                    label: const Text('各種申請'),
                   ),
                 ],
               ),

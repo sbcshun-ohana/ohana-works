@@ -96,9 +96,14 @@ class NoticeAttachment {
 
 /// 管理者モード: お知らせ対象者ごとの既読状況。
 class NoticeAudienceEntry {
-  const NoticeAudienceEntry({required this.employeeName, this.readAt});
+  const NoticeAudienceEntry({
+    required this.employeeName,
+    this.officeName,
+    this.readAt,
+  });
 
   final String employeeName;
+  final String? officeName;
   final DateTime? readAt;
 
   bool get isRead => readAt != null;

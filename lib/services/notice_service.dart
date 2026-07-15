@@ -96,13 +96,15 @@ class NoticeService {
     if (['個別', '勤務交代関連', '災害モード'].contains(notice.category)) {
       final rows = await _client
           .from('notice_recipients')
-          .select('read_at, employees(name)')
+          .select('read_at, employees(name, offices(name))')
           .eq('notice_id', notice.id);
       return (rows as List).map((row) {
         final map = row as Map<String, dynamic>;
         final employee = map['employees'] as Map<String, dynamic>?;
+        final office = employee?['offices'] as Map<String, dynamic>?;
         return NoticeAudienceEntry(
           employeeName: employee?['name'] as String? ?? '(不明な職員)',
+          officeName: office?['name'] as String?,
           readAt: map['read_at'] != null
               ? DateTime.parse(map['read_at'] as String)
               : null,
@@ -111,7 +113,7 @@ class NoticeService {
         ..sort(_unreadFirst);
     }
 
-    var query = _client.from('employees').select('id, name').filter(
+    var query = _client.from('employees').select('id, name, offices(name)').filter(
           'resignation_date',
           'is',
           null,
@@ -135,9 +137,11 @@ class NoticeService {
 
     return (employeeRows as List).map((row) {
       final map = row as Map<String, dynamic>;
+      final office = map['offices'] as Map<String, dynamic>?;
       final readAtRaw = readAtByEmployeeId[map['id'] as String];
       return NoticeAudienceEntry(
         employeeName: map['name'] as String,
+        officeName: office?['name'] as String?,
         readAt: readAtRaw != null ? DateTime.parse(readAtRaw) : null,
       );
     }).toList()
