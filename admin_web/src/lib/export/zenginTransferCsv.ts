@@ -15,6 +15,7 @@ export type PayrollPayer = {
   account_type: string | null;
   account_number: string | null;
   account_holder_name: string | null;
+  edi_client_code: string | null;
 };
 
 export type PayrollRecipient = {
@@ -67,7 +68,7 @@ function buildHeaderRecord(payer: PayrollPayer, transferDate: Date): string {
     "1",
     "21",
     "0",
-    padNumber("", 10), // 委託者コード: 銀行から付与されるEDIコード。未設定のため要別途入力。
+    padNumber(payer.edi_client_code, 10), // 委託者コード: 銀行から付与されるEDIコード。未設定の間はゼロ埋め。
     padText(payer.account_holder_name, 40),
     formatMMDD(transferDate),
     padNumber(payer.bank_code, 4),

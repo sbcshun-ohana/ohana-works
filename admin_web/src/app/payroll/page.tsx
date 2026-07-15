@@ -10,6 +10,7 @@ import {
 } from "@/lib/export/zenginTransferCsv";
 import { EventCommutePanel } from "@/components/EventCommutePanel";
 import { SpecialDutyAllowancePanel } from "@/components/SpecialDutyAllowancePanel";
+import { exportPayrollByOfficeExcel } from "@/lib/export/payrollExport";
 
 function currentYearMonthStr(): string {
   const now = new Date();
@@ -74,6 +75,9 @@ export default function PayrollPage() {
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
+  const [isExportingPayrollExcel, setIsExportingPayrollExcel] = useState(false);
+  const [payrollExcelError, setPayrollExcelError] = useState<string | null>(null);
+
   const [payrollDetails, setPayrollDetails] = useState<PayrollDetailRow[]>([]);
   const [payslipError, setPayslipError] = useState<string | null>(null);
 
@@ -106,13 +110,21 @@ export default function PayrollPage() {
   }, [canManage, reloadToken]);
 
   useEffect(() => {
+    if (!selectedRun) return;
+    const supabase = createClient();
+    supabase.rpc("compute_payroll_transfer_date", { p_target_month: selectedRun.target_month }).then(({ data, error }) => {
+      // RPC失敗時は土日祝未調整のフォールバックを使い、管理者が手動で確認・修正できるようにする。
+      setTransferDate(error || !data ? defaultTransferDate(selectedRun.target_month) : (data as string));
+    });
+  }, [selectedRun]);
+
+  useEffect(() => {
     function sync() {
       if (!selectedRun) {
         setOffices([]);
         setSelectedOfficeId("");
         return null;
       }
-      setTransferDate(defaultTransferDate(selectedRun.target_month));
       if (selectedRun.status === "draft") {
         setOffices([]);
         return null;
@@ -203,6 +215,19 @@ export default function PayrollPage() {
     );
   }
 
+  async function handlePayrollExcelExport() {
+    if (!selectedRun) return;
+    setIsExportingPayrollExcel(true);
+    setPayrollExcelError(null);
+    try {
+      await exportPayrollByOfficeExcel({ payrollRunId: selectedRun.id, targetMonth: selectedRun.target_month });
+    } catch (e) {
+      setPayrollExcelError(e instanceof Error ? e.message : "エクスポートに失敗しました");
+    } finally {
+      setIsExportingPayrollExcel(false);
+    }
+  }
+
   async function handleExportCsv() {
     if (!selectedRun || !selectedOfficeId) return;
     setIsExporting(true);
@@ -240,10 +265,17 @@ export default function PayrollPage() {
       new Date(transferDate),
       `${selectedRun.target_month}_${officeName}`,
     );
+    const notices: string[] = [];
+    if (!payer.edi_client_code) {
+      notices.push("委託者コードが未設定のためゼロ埋めで出力しています。銀行から値が確定次第、支払元口座の設定に登録してください。実際の振込には使用できません。");
+    }
     if (skippedCount > 0) {
-      setExportNotice(
+      notices.push(
         `${skippedCount}名は振込先口座情報(銀行コード・支店コード・カナ名義等)が未登録のため、振込データから除外しました。`,
       );
+    }
+    if (notices.length > 0) {
+      setExportNotice(notices.join(" "));
     }
   }
 
@@ -397,6 +429,23 @@ export default function PayrollPage() {
                   </div>
                 </div>
 
+                <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
+                  <h3 className="text-base font-bold text-slate-800">施設別給与内訳Excel</h3>
+                  <p className="text-xs text-slate-400">
+                    施設ごとに、職員番号・氏名・基本給・手当・通勤費・控除額・差引支給額の内訳を確認できるExcelを出力します。
+                    振込データ(全銀協CSV)とは別に、給与内容の確認用としてご利用ください。兼務職員は所属施設・兼務施設の両方に行が出力されますが、
+                    控除額・差引支給額は所属施設側にのみ表示されます。
+                  </p>
+                  <button
+                    onClick={handlePayrollExcelExport}
+                    disabled={isExportingPayrollExcel}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {isExportingPayrollExcel ? "出力中…" : "施設別給与Excelダウンロード"}
+                  </button>
+                  {payrollExcelError && <p className="text-sm font-medium text-red-500">{payrollExcelError}</p>}
+                </div>
+
                 {selectedRun.status !== "draft" && (
                   <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
                     <h3 className="text-base font-bold text-slate-800">
@@ -429,6 +478,9 @@ export default function PayrollPage() {
                           onChange={(e) => setTransferDate(e.target.value)}
                           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
                         />
+                        <p className="mt-1 text-xs text-slate-400">
+                          翌月25日を基準に土日祝を自動で前営業日へ調整した値を初期表示します。必要に応じて手動で修正できます。
+                        </p>
                       </div>
                       <button
                         onClick={handleExportCsv}
