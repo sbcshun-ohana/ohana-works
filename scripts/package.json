@@ -1,0 +1,8 @@
+{
+  "name": "ohana-works-scripts",
+  "private": true,
+  "description": "運用スクリプト専用の隔離されたNode環境(admin_web本番依存とは分離)",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}

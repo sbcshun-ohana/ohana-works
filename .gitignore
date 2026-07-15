@@ -46,3 +46,7 @@ app.*.map.json
 
 # Supabase CLI local cache(接続情報を含み得るためコミットしない)
 supabase/.temp/
+
+# データ移行用CSV出力(実在職員の給与・税データを含むため、Git履歴に
+# 恒久的に残さないよう除外する。ソースはDBおよびscripts/の抽出ロジック)
+/output/
