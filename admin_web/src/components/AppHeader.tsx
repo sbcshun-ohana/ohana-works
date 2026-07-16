@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +15,21 @@ const NAV_ITEMS = [
 export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  // 保育業務メニューは機能フラグが有効な施設が1つでもある場合のみ表示する(既定OFF)。
+  const [showChildcare, setShowChildcare] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
+      if (!error && (data ?? []).length > 0) {
+        setShowChildcare(true);
+      }
+    });
+  }, []);
+
+  const navItems = showChildcare
+    ? [...NAV_ITEMS, { href: "/childcare/attendance", label: "保育業務" }]
+    : NAV_ITEMS;
 
   async function handleLogout() {
     const supabase = createClient();
@@ -27,19 +43,22 @@ export function AppHeader() {
       <div className="flex items-center gap-6">
         <h1 className="text-lg font-bold text-slate-800">Ohana Works 管理者Web</h1>
         <nav className="flex gap-1">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                pathname === item.href
-                  ? "bg-sky-50 text-sky-700"
-                  : "text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const isActive = item.href === "/childcare/attendance"
+              ? pathname.startsWith("/childcare")
+              : pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  isActive ? "bg-sky-50 text-sky-700" : "text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
       </div>
       <button
