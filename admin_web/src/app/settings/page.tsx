@@ -36,6 +36,10 @@ import {
   parseCommuteCsv,
   type ParseResult as CommuteParseResult,
 } from "@/lib/import/commuteCsv";
+import {
+  parseWeeklyScheduledHoursCsv,
+  type ParseResult as WeeklyScheduledHoursParseResult,
+} from "@/lib/import/weeklyScheduledHoursCsv";
 
 type ImportHistoryItem = {
   id: string;
@@ -156,6 +160,14 @@ export default function SettingsPage() {
   const [commuteHistory, setCommuteHistory] = useState<BulkImportHistoryItem[]>([]);
   const [commuteReloadToken, setCommuteReloadToken] = useState(0);
 
+  const [weeklyHoursFileName, setWeeklyHoursFileName] = useState<string | null>(null);
+  const [weeklyHoursParseResult, setWeeklyHoursParseResult] = useState<WeeklyScheduledHoursParseResult | null>(null);
+  const [isApplyingWeeklyHours, setIsApplyingWeeklyHours] = useState(false);
+  const [weeklyHoursApplyError, setWeeklyHoursApplyError] = useState<string | null>(null);
+  const [weeklyHoursApplySuccess, setWeeklyHoursApplySuccess] = useState<string | null>(null);
+  const [weeklyHoursHistory, setWeeklyHoursHistory] = useState<BulkImportHistoryItem[]>([]);
+  const [weeklyHoursReloadToken, setWeeklyHoursReloadToken] = useState(0);
+
   useEffect(() => {
     const supabase = createClient();
     supabase.rpc("is_labor_manager_plus").then(({ data, error }) => {
@@ -231,6 +243,14 @@ export default function SettingsPage() {
       if (!error) setCommuteHistory((data ?? []) as BulkImportHistoryItem[]);
     });
   }, [canManage, commuteReloadToken]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    const supabase = createClient();
+    supabase.rpc("fetch_weekly_scheduled_hours_import_history").then(({ data, error }) => {
+      if (!error) setWeeklyHoursHistory((data ?? []) as BulkImportHistoryItem[]);
+    });
+  }, [canManage, weeklyHoursReloadToken]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -394,6 +414,40 @@ export default function SettingsPage() {
     setCommuteParseResult(null);
     setCommuteFileName(null);
     setCommuteReloadToken((t) => t + 1);
+  }
+
+  async function handleWeeklyHoursFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setWeeklyHoursApplyError(null);
+    setWeeklyHoursApplySuccess(null);
+    setWeeklyHoursFileName(file.name);
+    const text = await file.text();
+    setWeeklyHoursParseResult(parseWeeklyScheduledHoursCsv(text, employeeDirectory));
+  }
+
+  async function handleApplyWeeklyHours() {
+    if (!weeklyHoursParseResult || weeklyHoursParseResult.errors.length > 0 || weeklyHoursParseResult.rows.length === 0) return;
+    setIsApplyingWeeklyHours(true);
+    setWeeklyHoursApplyError(null);
+    setWeeklyHoursApplySuccess(null);
+
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("import_weekly_scheduled_hours_csv", {
+      p_file_name: weeklyHoursFileName,
+      p_rows: weeklyHoursParseResult.rows,
+    });
+
+    setIsApplyingWeeklyHours(false);
+    if (error) {
+      setWeeklyHoursApplyError(error.message);
+      return;
+    }
+    const result = data as { imported_count: number };
+    setWeeklyHoursApplySuccess(`${result.imported_count}件の週所定労働時間を反映しました`);
+    setWeeklyHoursParseResult(null);
+    setWeeklyHoursFileName(null);
+    setWeeklyHoursReloadToken((t) => t + 1);
   }
 
   async function handleAllowanceFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -1033,6 +1087,99 @@ export default function SettingsPage() {
             {commuteHistory.length === 0 && <p className="text-sm text-slate-400">まだ取込履歴はありません</p>}
             <ul className="divide-y divide-slate-100">
               {commuteHistory.map((h) => (
+                <li key={h.id} className="py-2 text-sm text-slate-600">
+                  {h.file_name}
+                  {" ・ "}
+                  {h.imported_count}件
+                  {" ・ "}
+                  {h.imported_by_name ?? "(不明)"}
+                  {" ・ "}
+                  {new Date(h.imported_at).toLocaleString("ja-JP")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="text-base font-bold text-slate-800">週所定労働時間 一括CSV取込</h3>
+          <p className="text-xs text-slate-400">
+            1職員=1行のCSV(ヘッダー: employee_number,weekly_hours,effective_start_date)を読み込みます。
+            契約上の週所定労働時間で、給与計算実行時の週20時間社会保険加入判定チェック(insurance_eligibility_mismatch)に使用されます。
+          </p>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">CSVファイル</label>
+            <input type="file" accept=".csv,text/csv" onChange={handleWeeklyHoursFileChange} className="text-sm" />
+          </div>
+
+          {weeklyHoursParseResult && (
+            <div className="space-y-2 rounded-xl border border-slate-200 p-4">
+              <p className="text-sm font-semibold text-slate-700">プレビュー</p>
+              <dl className="grid grid-cols-2 gap-2 text-sm text-slate-600 sm:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-slate-400">ファイル名</dt>
+                  <dd>{weeklyHoursFileName}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-400">取込件数</dt>
+                  <dd>{weeklyHoursParseResult.rows.length}件</dd>
+                </div>
+              </dl>
+
+              {weeklyHoursParseResult.errors.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-red-500">エラー {weeklyHoursParseResult.errors.length}件(反映不可)</p>
+                  <ul className="list-disc pl-5 text-xs text-red-500">
+                    {weeklyHoursParseResult.errors.slice(0, 20).map((e, i) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {weeklyHoursParseResult.rows.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-slate-400">
+                        <th className="px-2 py-1">職員</th>
+                        <th className="px-2 py-1">週所定労働時間</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {weeklyHoursParseResult.rows.slice(0, 8).map((r, i) => (
+                        <tr key={i} className="border-b border-slate-100">
+                          <td className="px-2 py-1">{r.employee_name}</td>
+                          <td className="px-2 py-1">{r.weekly_hours}時間</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {weeklyHoursParseResult.rows.length > 8 && (
+                    <p className="mt-1 text-xs text-slate-400">他{weeklyHoursParseResult.rows.length - 8}件…</p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handleApplyWeeklyHours}
+                disabled={isApplyingWeeklyHours || weeklyHoursParseResult.errors.length > 0 || weeklyHoursParseResult.rows.length === 0}
+                className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-60"
+              >
+                {isApplyingWeeklyHours ? "反映中…" : "この内容で反映する"}
+              </button>
+            </div>
+          )}
+
+          {weeklyHoursApplyError && <p className="text-sm font-medium text-red-500">{weeklyHoursApplyError}</p>}
+          {weeklyHoursApplySuccess && <p className="text-sm font-medium text-emerald-600">{weeklyHoursApplySuccess}</p>}
+
+          <div className="space-y-3 border-t border-slate-100 pt-4">
+            <p className="text-sm font-semibold text-slate-700">反映履歴</p>
+            {weeklyHoursHistory.length === 0 && <p className="text-sm text-slate-400">まだ取込履歴はありません</p>}
+            <ul className="divide-y divide-slate-100">
+              {weeklyHoursHistory.map((h) => (
                 <li key={h.id} className="py-2 text-sm text-slate-600">
                   {h.file_name}
                   {" ・ "}

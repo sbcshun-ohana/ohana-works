@@ -11,6 +11,7 @@ import {
 import { EventCommutePanel } from "@/components/EventCommutePanel";
 import { SpecialDutyAllowancePanel } from "@/components/SpecialDutyAllowancePanel";
 import { exportPayrollByOfficeExcel } from "@/lib/export/payrollExport";
+import { exportPayrollTransferListExcel } from "@/lib/export/payrollTransferListExport";
 
 function currentYearMonthStr(): string {
   const now = new Date();
@@ -77,6 +78,10 @@ export default function PayrollPage() {
 
   const [isExportingPayrollExcel, setIsExportingPayrollExcel] = useState(false);
   const [payrollExcelError, setPayrollExcelError] = useState<string | null>(null);
+
+  const [isExportingTransferList, setIsExportingTransferList] = useState(false);
+  const [transferListError, setTransferListError] = useState<string | null>(null);
+  const [transferListNotice, setTransferListNotice] = useState<string | null>(null);
 
   const [payrollDetails, setPayrollDetails] = useState<PayrollDetailRow[]>([]);
   const [payslipError, setPayslipError] = useState<string | null>(null);
@@ -225,6 +230,26 @@ export default function PayrollPage() {
       setPayrollExcelError(e instanceof Error ? e.message : "エクスポートに失敗しました");
     } finally {
       setIsExportingPayrollExcel(false);
+    }
+  }
+
+  async function handleTransferListExport() {
+    if (!selectedRun) return;
+    setIsExportingTransferList(true);
+    setTransferListError(null);
+    setTransferListNotice(null);
+    try {
+      const { skippedCount } = await exportPayrollTransferListExcel({
+        payrollRunId: selectedRun.id,
+        targetMonth: selectedRun.target_month,
+      });
+      if (skippedCount > 0) {
+        setTransferListNotice(`${skippedCount}名は口座情報が未登録のため、一覧内で赤色ハイライトして区別しています(合計金額には含めていません)。`);
+      }
+    } catch (e) {
+      setTransferListError(e instanceof Error ? e.message : "エクスポートに失敗しました");
+    } finally {
+      setIsExportingTransferList(false);
     }
   }
 
@@ -444,6 +469,23 @@ export default function PayrollPage() {
                     {isExportingPayrollExcel ? "出力中…" : "施設別給与Excelダウンロード"}
                   </button>
                   {payrollExcelError && <p className="text-sm font-medium text-red-500">{payrollExcelError}</p>}
+                </div>
+
+                <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
+                  <h3 className="text-base font-bold text-slate-800">振込一覧Excel</h3>
+                  <p className="text-xs text-slate-400">
+                    「誰に・いくら・どの口座に振り込むか」を目視で確認できる一覧を施設ごとに出力します。全銀協フォーマット(実際の銀行振込データ)とは別の、
+                    確認・検算用の資料です。口座情報が未登録の職員は赤色でハイライトし、合計金額(振込対象のみ)には含めません。
+                  </p>
+                  <button
+                    onClick={handleTransferListExport}
+                    disabled={isExportingTransferList}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {isExportingTransferList ? "出力中…" : "振込一覧Excelダウンロード"}
+                  </button>
+                  {transferListError && <p className="text-sm font-medium text-red-500">{transferListError}</p>}
+                  {transferListNotice && <p className="text-sm font-medium text-amber-600">{transferListNotice}</p>}
                 </div>
 
                 {selectedRun.status !== "draft" && (
