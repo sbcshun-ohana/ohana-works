@@ -4,10 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const CHILDCARE_NAV_ITEMS = [
+  { href: "/childcare/daily-board", label: "デイリーボード" },
   { href: "/childcare/attendance", label: "欠席選択" },
   { href: "/childcare/class-activities", label: "クラス活動" },
   { href: "/childcare/contacts", label: "連絡帳" },
   { href: "/childcare/contacts/copy", label: "コピー" },
+  { href: "/childcare/guardians", label: "保護者管理" },
+  { href: "/childcare/parent-requests", label: "保護者申請" },
+  { href: "/childcare/class-photos", label: "クラス写真" },
+  { href: "/childcare/emergency-contacts", label: "緊急連絡先" },
 ];
 
 export function ChildcareNav() {

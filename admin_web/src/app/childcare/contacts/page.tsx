@@ -6,6 +6,9 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { currentDate } from "@/lib/datetime";
 import type { ChildcareOffice, DailyContactRow } from "@/lib/types";
+import { MEAL_COMPLETION_OPTIONS, TOILETING_TYPES } from "@/lib/types";
+
+const TEMPERATURE_OPTIONS = Array.from({ length: 71 }, (_, i) => (35.0 + i * 0.1).toFixed(1));
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "下書き",
@@ -40,6 +43,13 @@ export default function ChildcareContactsPage() {
 
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [form, setForm] = useState({ guardian_message: "", child_today_notes: "", free_notes: "" });
+  const [napPeriods, setNapPeriods] = useState<{ start: string; end: string }[]>([]);
+  const [toiletingRecords, setToiletingRecords] = useState<{ time: string; type: string }[]>([]);
+  const [mealCompletionPct, setMealCompletionPct] = useState<number | "">("");
+  const [mealFreeNote, setMealFreeNote] = useState("");
+  const [temperature, setTemperature] = useState("");
+  const [temperatureMeasuredAt, setTemperatureMeasuredAt] = useState("");
+  const [bathTaken, setBathTaken] = useState<boolean | null>(null);
   const [editableText, setEditableText] = useState("");
   const [adminComment, setAdminComment] = useState("");
   const [noticeMasters, setNoticeMasters] = useState<NoticeMaster[]>([]);
@@ -107,6 +117,13 @@ export default function ChildcareContactsPage() {
         child_today_notes: selectedRow.child_today_notes ?? "",
         free_notes: selectedRow.free_notes ?? "",
       });
+      setNapPeriods(selectedRow.nap_periods ?? []);
+      setToiletingRecords(selectedRow.toileting_records ?? []);
+      setMealCompletionPct(selectedRow.meal_completion_pct ?? "");
+      setMealFreeNote(selectedRow.meal_free_note ?? "");
+      setTemperature(selectedRow.temperature != null ? selectedRow.temperature.toFixed(1) : "");
+      setTemperatureMeasuredAt(selectedRow.temperature_measured_at?.slice(0, 5) ?? "");
+      setBathTaken(selectedRow.bath_taken);
       setEditableText(selectedRow.current_text ?? selectedRow.ai_generated_text ?? "");
       setAdminComment("");
     }
@@ -153,7 +170,17 @@ export default function ChildcareContactsPage() {
     const supabase = createClient();
     const { error } = await supabase
       .from("child_daily_contacts")
-      .update({ ...form, current_text: editableText })
+      .update({
+        ...form,
+        current_text: editableText,
+        nap_periods: napPeriods,
+        toileting_records: toiletingRecords,
+        meal_completion_pct: mealCompletionPct === "" ? null : mealCompletionPct,
+        meal_free_note: mealFreeNote || null,
+        temperature: temperature === "" ? null : Number(temperature),
+        temperature_measured_at: temperatureMeasuredAt || null,
+        bath_taken: bathTaken,
+      })
       .eq("id", selectedRow.contact_id);
     setIsBusy(false);
     if (error) {
@@ -161,6 +188,26 @@ export default function ChildcareContactsPage() {
       return;
     }
     setReloadToken((t) => t + 1);
+  }
+
+  function addNapPeriod() {
+    setNapPeriods((prev) => [...prev, { start: "13:00", end: "14:30" }]);
+  }
+  function updateNapPeriod(index: number, field: "start" | "end", value: string) {
+    setNapPeriods((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+  }
+  function removeNapPeriod(index: number) {
+    setNapPeriods((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addToiletingRecord() {
+    setToiletingRecords((prev) => [...prev, { time: "10:00", type: TOILETING_TYPES[0] }]);
+  }
+  function updateToiletingRecord(index: number, field: "time" | "type", value: string) {
+    setToiletingRecords((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  }
+  function removeToiletingRecord(index: number) {
+    setToiletingRecords((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function toggleNoticeCheck(noticeMasterId: string) {
@@ -462,6 +509,176 @@ export default function ChildcareContactsPage() {
                     rows={2}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 p-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">午睡時間</label>
+                    {napPeriods.map((p, i) => (
+                      <div key={i} className="mb-2 flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={p.start}
+                          disabled={!canEditInput}
+                          onChange={(e) => updateNapPeriod(i, "start", e.target.value)}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                        />
+                        <span className="text-slate-400">〜</span>
+                        <input
+                          type="time"
+                          value={p.end}
+                          disabled={!canEditInput}
+                          onChange={(e) => updateNapPeriod(i, "end", e.target.value)}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                        />
+                        {canEditInput && (
+                          <button
+                            onClick={() => removeNapPeriod(i)}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            削除
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {canEditInput && (
+                      <button
+                        onClick={addNapPeriod}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                      >
+                        + 時間帯を追加
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">排泄</label>
+                    {toiletingRecords.map((r, i) => (
+                      <div key={i} className="mb-2 flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={r.time}
+                          disabled={!canEditInput}
+                          onChange={(e) => updateToiletingRecord(i, "time", e.target.value)}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                        />
+                        <select
+                          value={r.type}
+                          disabled={!canEditInput}
+                          onChange={(e) => updateToiletingRecord(i, "type", e.target.value)}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                        >
+                          {TOILETING_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                        {canEditInput && (
+                          <button
+                            onClick={() => removeToiletingRecord(i)}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            削除
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {canEditInput && (
+                      <button
+                        onClick={addToiletingRecord}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                      >
+                        + 記録を追加
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">食事(昼食の完食割合)</label>
+                    <select
+                      value={mealCompletionPct}
+                      disabled={!canEditInput}
+                      onChange={(e) => setMealCompletionPct(e.target.value === "" ? "" : Number(e.target.value))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
+                    >
+                      <option value="">未記録</option>
+                      {MEAL_COMPLETION_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}%
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={mealFreeNote}
+                      disabled={!canEditInput}
+                      onChange={(e) => setMealFreeNote(e.target.value)}
+                      placeholder="食事に関する自由記入(連絡帳へ反映)"
+                      className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">検温</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={temperature}
+                        disabled={!canEditInput}
+                        onChange={(e) => setTemperature(e.target.value)}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
+                      >
+                        <option value="">未計測</option>
+                        {TEMPERATURE_OPTIONS.map((t) => (
+                          <option key={t} value={t}>
+                            {t}℃
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="time"
+                        value={temperatureMeasuredAt}
+                        disabled={!canEditInput}
+                        onChange={(e) => setTemperatureMeasuredAt(e.target.value)}
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                      />
+                    </div>
+                    {temperature !== "" && Number(temperature) >= 37.5 && (
+                      <p className="mt-1 text-xs font-medium text-amber-600">
+                        37.5℃以上です。登園基準の確認・欠席申請の案内をご検討ください。
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">入浴</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={!canEditInput}
+                        onClick={() => setBathTaken(true)}
+                        className={`rounded-lg border px-3 py-1 text-xs font-medium ${
+                          bathTaken === true
+                            ? "border-sky-500 bg-sky-50 text-sky-700"
+                            : "border-slate-300 text-slate-600"
+                        }`}
+                      >
+                        あり
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canEditInput}
+                        onClick={() => setBathTaken(false)}
+                        className={`rounded-lg border px-3 py-1 text-xs font-medium ${
+                          bathTaken === false
+                            ? "border-sky-500 bg-sky-50 text-sky-700"
+                            : "border-slate-300 text-slate-600"
+                        }`}
+                      >
+                        なし
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div>

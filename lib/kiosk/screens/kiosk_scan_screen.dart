@@ -6,13 +6,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_theme.dart';
 import '../models/paired_device.dart';
+import '../services/guardian_qr_service.dart';
 import '../services/kiosk_punch_service.dart';
 import '../time_format.dart';
+import '../token_classifier.dart';
+import 'guardian_checkin_result_screen.dart';
 import 'proxy_punch_screen.dart';
 import 'punch_confirm_screen.dart';
 
-/// 10章: QR読取(アイドル画面)。
-/// その日の最初の読取=出勤 等の自動判定は resolve-qr-punch(サーバー側)が行う。
+/// 10章/保護者アプリPhase A: QR読取(アイドル画面)。
+/// 職員QR(出退勤)と保護者QR(登降園)の両方をこの1画面で受け付ける。
+/// トークンの種別(職員/保護者)はクライアント側でJWTペイロードを覗いて判定し
+/// (token_classifier.dart、署名検証はしない)、適切なresolve系Edge Functionへ振り分ける。
+/// その日の最初の読取=出勤 等の自動判定は各resolve系Edge Function(サーバー側)が行う。
 class KioskScanScreen extends StatefulWidget {
   const KioskScanScreen({super.key, required this.device});
 
@@ -25,6 +31,7 @@ class KioskScanScreen extends StatefulWidget {
 class _KioskScanScreenState extends State<KioskScanScreen> {
   final _controller = MobileScannerController();
   final _punchService = KioskPunchService(Supabase.instance.client);
+  final _guardianQrService = GuardianQrService(Supabase.instance.client);
 
   bool _isProcessing = false;
   String? _statusMessage;
@@ -57,6 +64,25 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
     });
     await _controller.stop();
 
+    final kind = classifyQrToken(token);
+    try {
+      switch (kind) {
+        case QrTokenKind.staff:
+          await _handleStaffToken(token);
+        case QrTokenKind.guardian:
+          await _handleGuardianToken(token);
+        case QrTokenKind.unknown:
+          setState(() => _statusMessage = 'QRコードを認識できませんでした。もう一度お試しください');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        await _controller.start();
+      }
+    }
+  }
+
+  Future<void> _handleStaffToken(String token) async {
     try {
       final resolution = await _punchService.resolveQrPunch(
         token: token,
@@ -74,11 +100,23 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
       );
     } on KioskPunchException catch (e) {
       setState(() => _statusMessage = e.message);
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-        await _controller.start();
-      }
+    }
+  }
+
+  Future<void> _handleGuardianToken(String token) async {
+    try {
+      final resolution = await _guardianQrService.resolveGuardianQr(
+        token: token,
+        deviceId: widget.device.deviceId,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => GuardianCheckInResultScreen(resolution: resolution),
+        ),
+      );
+    } on GuardianQrException catch (e) {
+      setState(() => _statusMessage = e.message);
     }
   }
 

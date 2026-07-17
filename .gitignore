@@ -1,3 +1,8 @@
+# Secrets (APNs auth key, Firebase config, etc. — never commit)
+/secrets/
+parent_app/ios/Runner/GoogleService-Info.plist
+parent_app/android/app/google-services.json
+
 # Miscellaneous
 *.class
 *.log

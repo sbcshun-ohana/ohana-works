@@ -1,30 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../services/childcare_service.dart';
 import '../theme/app_theme.dart';
-import 'childcare/childcare_menu_screen.dart';
 import 'notices/notice_list_screen.dart';
 import 'qr_attendance_screen.dart';
 import 'requests/request_menu_screen.dart';
 
 /// ログイン後に表示する仮のホーム画面。
-class HomeScreen extends StatefulWidget {
+/// 職員個人のスマートフォン向け(QR勤怠表示・お知らせ・各種申請)。保育業務は会社iPad専用の
+/// 別アプリ(--dart-define=APP_MODE=childcare)で扱うため、ここには含めない。
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  final _childcareService = ChildcareService(Supabase.instance.client);
-  late final Future<bool> _hasChildcareAccessFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _hasChildcareAccessFuture = _childcareService.hasChildcareAccess();
-  }
 
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
@@ -116,29 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                     icon: const Icon(Icons.assignment_outlined),
                     label: const Text('各種申請'),
-                  ),
-                  // 保育業務メニューは機能フラグが有効な施設が1つでもある場合のみ表示する(既定OFF)。
-                  FutureBuilder<bool>(
-                    future: _hasChildcareAccessFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.data != true) return const SizedBox.shrink();
-                      return Column(
-                        children: [
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => ChildcareMenuScreen(service: _childcareService),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.child_care_rounded),
-                            label: const Text('保育業務'),
-                          ),
-                        ],
-                      );
-                    },
                   ),
                 ],
               ),

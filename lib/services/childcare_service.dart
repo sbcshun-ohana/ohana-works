@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/childcare.dart';
+import '../models/guardian_app.dart';
 
 /// AI連絡帳生成の呼び出しに失敗した場合の例外。
 class ContactAiException implements Exception {
@@ -46,11 +47,6 @@ class ChildcareService {
     return (rows as List)
         .map((row) => ChildcareOffice.fromJson(row as Map<String, dynamic>))
         .toList();
-  }
-
-  Future<bool> hasChildcareAccess() async {
-    final offices = await fetchMyChildcareOffices();
-    return offices.isNotEmpty;
   }
 
   Future<List<ChildcareClass>> fetchChildcareClasses(String officeId) async {
@@ -437,5 +433,82 @@ class ChildcareService {
 
   Future<void> markChildDailyContactCopied(String contactId) async {
     await _client.rpc('mark_child_daily_contact_copied', params: {'p_contact_id': contactId});
+  }
+
+  // ------------------------------------------------------------------
+  // 保護者アプリ・後続保育機能(Phase A): デイリーボード
+  // ------------------------------------------------------------------
+
+  Future<List<DailyBoardRow>> fetchDailyBoardForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_daily_board_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    return (rows as List).map((row) => DailyBoardRow.fromJson(row as Map<String, dynamic>)).toList();
+  }
+
+  /// daily_child_statusの変更をRealtimeで購読する(登降園は保護者アプリ・キオスク端末など
+  /// 複数端末から行われるため、複数端末への即時反映が必要)。呼び出し側でchannelを保持し、
+  /// 画面破棄時にunsubscribe()すること。
+  RealtimeChannel watchDailyChildStatus(String officeId, void Function() onChange) {
+    final channel = _client.channel('daily_board_$officeId');
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'daily_child_status',
+          callback: (payload) => onChange(),
+        )
+        .subscribe();
+    return channel;
+  }
+
+  // ------------------------------------------------------------------
+  // 保護者アプリ・後続保育機能(Phase A): 保護者管理・招待管理
+  // ------------------------------------------------------------------
+
+  Future<List<ChildForInvitation>> fetchChildrenForOffice(String officeId) async {
+    final rows = await _client.rpc('fetch_children_for_office', params: {'p_office_id': officeId});
+    return (rows as List)
+        .map((row) => ChildForInvitation.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<GuardianRow>> fetchGuardiansForOffice(String officeId) async {
+    final rows = await _client.rpc('fetch_guardians_for_office', params: {'p_office_id': officeId});
+    return (rows as List).map((row) => GuardianRow.fromJson(row as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<GuardianInvitationRow>> fetchPendingGuardianInvitations(String officeId) async {
+    final rows = await _client.rpc('fetch_pending_guardian_invitations', params: {'p_office_id': officeId});
+    return (rows as List)
+        .map((row) => GuardianInvitationRow.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> suspendGuardianAccount(String guardianId, String reason) async {
+    await _client.rpc('suspend_guardian_account', params: {
+      'p_guardian_id': guardianId,
+      'p_reason': reason,
+    });
+  }
+
+  Future<void> reactivateGuardianAccount(String guardianId) async {
+    await _client.rpc('reactivate_guardian_account', params: {'p_guardian_id': guardianId});
+  }
+
+  /// 招待コードは発行時のみ取得できる(サーバーはtoken_hashのみ保持する)。
+  Future<({String token, DateTime expiresAt})> createGuardianInvitationByStaff({
+    required String childId,
+    required String role,
+    int ttlHours = 72,
+  }) async {
+    final rows = await _client.rpc('create_guardian_invitation_by_staff', params: {
+      'p_child_id': childId,
+      'p_role': role,
+      'p_ttl_hours': ttlHours,
+    });
+    final row = (rows as List).first as Map<String, dynamic>;
+    return (token: row['token'] as String, expiresAt: DateTime.parse(row['expires_at'] as String));
   }
 }

@@ -109,7 +109,17 @@ export type DailyContactRow = {
   approved_at: string | null;
   copied_at: string | null;
   is_absent: boolean;
+  nap_periods: { start: string; end: string }[];
+  toileting_records: { time: string; type: string }[];
+  meal_completion_pct: 100 | 75 | 50 | 25 | 0 | null;
+  meal_free_note: string | null;
+  temperature: number | null;
+  temperature_measured_at: string | null;
+  bath_taken: boolean | null;
 };
+
+export const TOILETING_TYPES = ["普通", "軟便", "硬便", "下痢便"] as const;
+export const MEAL_COMPLETION_OPTIONS = [100, 75, 50, 25, 0] as const;
 
 export type ChildForAssignment = {
   child_id: string;
@@ -119,6 +129,91 @@ export type ChildForAssignment = {
   current_assignee_employee_id: string | null;
   current_assignee_name: string | null;
   enrollment_status: string;
+};
+
+// --- 保護者アプリ Phase A ---
+
+export type DailyBoardRow = {
+  child_id: string;
+  display_name: string;
+  honorific_suffix: string | null;
+  class_name: string;
+  status: "not_arrived" | "present" | "picked_up" | "absent";
+  last_event_type: string | null;
+  last_event_at: string | null;
+};
+
+export const DAILY_BOARD_STATUS_LABELS: Record<DailyBoardRow["status"], string> = {
+  not_arrived: "未登園",
+  present: "在園中",
+  picked_up: "降園済み",
+  absent: "欠席",
+};
+
+export type GuardianRow = {
+  guardian_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  status: "active" | "suspended";
+  linked_children: string | null;
+};
+
+export type GuardianInvitationRow = {
+  invitation_id: string;
+  child_id: string;
+  child_display_name: string;
+  role: "primary" | "additional";
+  expires_at: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
+};
+
+export const GUARDIAN_INVITATION_STATUS_LABELS: Record<GuardianInvitationRow["status"], string> = {
+  pending: "招待中",
+  accepted: "受諾済み",
+  expired: "期限切れ",
+  revoked: "取消済み",
+};
+
+export type ParentRequestRow = {
+  request_id: string;
+  child_id: string;
+  child_display_name: string;
+  guardian_name: string;
+  request_type: "absence" | "tardiness" | "early_leave" | "infectious_disease" | "pickup_person_change";
+  target_date: string;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+export const PARENT_REQUEST_TYPE_LABELS: Record<ParentRequestRow["request_type"], string> = {
+  absence: "欠席",
+  tardiness: "遅刻",
+  early_leave: "早退",
+  infectious_disease: "感染症",
+  pickup_person_change: "送迎者変更",
+};
+
+export type ClassDailyPhoto = {
+  id: string;
+  class_id: string;
+  business_date: string;
+  storage_path: string;
+  status: "draft" | "checked" | "published";
+  checked_at: string | null;
+  published_at: string | null;
+  created_at: string;
+};
+
+export type EmergencyContact = {
+  id: string;
+  child_id: string;
+  name: string;
+  phone: string;
+  relationship: string | null;
+  sort_order: number;
+  duplicate_approved_by: string | null;
+  duplicate_approved_reason: string | null;
 };
 
 export const CORRECTABLE_FIELDS = [

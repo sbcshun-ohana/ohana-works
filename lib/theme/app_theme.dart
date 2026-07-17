@@ -40,6 +40,11 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
+      // Material既定のグレーのホバー/選択色を、テーマカラー(水色)に統一する。
+      // DropdownButtonのメニュー項目のホバー表示等はここに従う。
+      hoverColor: AppColors.skyBlue.withValues(alpha: 0.08),
+      highlightColor: AppColors.skyBlue.withValues(alpha: 0.12),
+      splashColor: AppColors.skyBlue.withValues(alpha: 0.12),
       fontFamily: 'Roboto',
       textTheme: const TextTheme(
         headlineMedium: TextStyle(

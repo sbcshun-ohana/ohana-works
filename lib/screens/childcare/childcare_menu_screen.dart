@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/childcare.dart';
 import '../../services/childcare_service.dart';
@@ -7,9 +8,11 @@ import 'attendance/childcare_attendance_screen.dart';
 import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
+import 'daily_board/daily_board_screen.dart';
+import 'guardians/guardian_management_screen.dart';
 
-/// 保育業務メニュー。施設・対象日を選び、各画面へ遷移する。
-/// 機能フラグが有効な施設が1つも無い場合はhome_screen側で本画面自体への導線を出さない。
+/// 保育業務メニュー。保育業務専用iPadアプリ(--dart-define=APP_MODE=childcare)の
+/// ルート画面。施設・対象日を選び、各画面へ遷移する。
 class ChildcareMenuScreen extends StatefulWidget {
   const ChildcareMenuScreen({super.key, required this.service});
 
@@ -40,10 +43,23 @@ class _ChildcareMenuScreenState extends State<ChildcareMenuScreen> {
     if (picked != null) setState(() => _businessDate = picked);
   }
 
+  Future<void> _signOut() async {
+    await Supabase.instance.client.auth.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('保育業務')),
+      appBar: AppBar(
+        title: const Text('保育業務'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'ログアウト',
+            onPressed: _signOut,
+          ),
+        ],
+      ),
       body: FutureBuilder<List<ChildcareOffice>>(
         future: _officesFuture,
         builder: (context, snapshot) {
@@ -95,6 +111,22 @@ class _ChildcareMenuScreenState extends State<ChildcareMenuScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              _ChildcareMenuCard(
+                icon: Icons.dashboard_customize_rounded,
+                color: AppColors.skyBlue,
+                title: 'デイリーボード',
+                subtitle: '施設全体の登降園・在園状況を確認します',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DailyBoardScreen(
+                      service: widget.service,
+                      officeId: _selectedOffice!.officeId,
+                      businessDate: _businessDate,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               _ChildcareMenuCard(
                 icon: Icons.event_busy_rounded,
                 color: AppColors.warmOrange,
@@ -156,6 +188,21 @@ class _ChildcareMenuScreenState extends State<ChildcareMenuScreen> {
                       service: widget.service,
                       officeId: _selectedOffice!.officeId,
                       businessDate: _businessDate,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _ChildcareMenuCard(
+                icon: Icons.family_restroom_rounded,
+                color: AppColors.leafGreen,
+                title: '保護者管理',
+                subtitle: '保護者一覧の閲覧・停止/再開・招待の発行',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => GuardianManagementScreen(
+                      service: widget.service,
+                      officeId: _selectedOffice!.officeId,
                     ),
                   ),
                 ),
