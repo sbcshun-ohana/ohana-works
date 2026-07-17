@@ -6,6 +6,18 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- Google Sign-In: REVERSED_CLIENT_ID from secrets/client_1097006569701-ptki1c15tcbentqsglt3ladgr7t9bdlq.apps.googleusercontent.com.plist -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1097006569701-ptki1c15tcbentqsglt3ladgr7t9bdlq</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Ohana Family</string>
 	<key>CFBundleExecutable</key>

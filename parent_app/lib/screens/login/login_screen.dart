@@ -1,11 +1,13 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 
-/// メール+パスワードでのログイン・新規登録。
-/// Sign in with Apple / Googleは、Apple Developer・Google Cloud側のOAuth設定完了後に追加する
-/// (v0.4 §7 Phase A確認事項1。現時点では未設定のためボタンは表示しない)。
+/// メール+パスワード・Sign in with Apple・Googleでのログイン・新規登録。
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.authService});
 
@@ -62,6 +64,40 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isBusy = false);
     }
   }
+
+  Future<void> _submitApple() async {
+    setState(() {
+      _isBusy = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+    try {
+      await widget.authService.signInWithApple();
+    } on GuardianAuthException catch (e) {
+      setState(() => _errorMessage = e.message);
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _submitGoogle() async {
+    setState(() {
+      _isBusy = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+    try {
+      await widget.authService.signInWithGoogle();
+    } on GuardianAuthException catch (e) {
+      setState(() => _errorMessage = e.message);
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  bool get _showAppleSignIn => !kIsWeb && Platform.isIOS;
+  bool get _showGoogleSignIn => !kIsWeb;
+  bool get _showSocialDivider => _showAppleSignIn || _showGoogleSignIn;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +165,40 @@ class _LoginScreenState extends State<LoginScreen> {
                             }),
                     child: Text(_isSignUpMode ? 'ログインはこちら' : '初めての方はこちら(新規登録)'),
                   ),
+                  if (_showSocialDivider) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: AppColors.textSecondary.withValues(alpha: 0.3))),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('または', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        ),
+                        Expanded(child: Divider(color: AppColors.textSecondary.withValues(alpha: 0.3))),
+                      ],
+                    ),
+                  ],
+                  if (_showGoogleSignIn) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _isBusy ? null : _submitGoogle,
+                      icon: const Icon(Icons.g_mobiledata_rounded, size: 28, color: AppColors.textPrimary),
+                      label: const Text('Googleでサインイン', style: TextStyle(color: AppColors.textPrimary)),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        side: BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.3)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ],
+                  if (_showAppleSignIn) ...[
+                    const SizedBox(height: 16),
+                    SignInWithAppleButton(
+                      onPressed: _isBusy ? () {} : _submitApple,
+                      height: 52,
+                      borderRadius: const BorderRadius.all(Radius.circular(16)),
+                    ),
+                  ],
                 ],
               ),
             ),
