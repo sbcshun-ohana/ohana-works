@@ -1,4 +1,4 @@
-/// 9.2 ワンタイムQRトークン(サーバー発行・8時間有効・single-use消費)。
+/// 9.2 ワンタイムQRトークン(サーバー発行・90秒有効・single-use消費)。
 class QrToken {
   const QrToken({
     required this.token,

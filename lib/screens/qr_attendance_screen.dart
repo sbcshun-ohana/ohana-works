@@ -9,7 +9,9 @@ import '../services/qr_attendance_service.dart';
 import '../theme/app_theme.dart';
 
 /// 9.2 職員が打刻用に提示するワンタイムQR。
-/// 8時間有効・single-use消費で、使用されると自動的に新しいQRを取得・表示する。
+/// 90秒有効・single-use消費で、期限が近づくと自動更新し、iPad側で読み取られる
+/// (消費される)とリアルタイムに検知して即座に再発行する(保護者アプリの
+/// ChildQrScreenと同じ設計)。
 class QrAttendanceScreen extends StatefulWidget {
   const QrAttendanceScreen({super.key});
 
@@ -25,6 +27,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   bool _isLoading = true;
   RealtimeChannel? _channel;
   Timer? _clockTimer;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -38,6 +41,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _autoRefreshTimer?.cancel();
     if (_channel != null) {
       Supabase.instance.client.removeChannel(_channel!);
     }
@@ -45,7 +49,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   }
 
   Future<void> _init() async {
-    await _refreshToken();
+    // 発行直後に消費されるレースを避けるため、Realtime購読を先に確立してから発行する。
     final employeeId = await _service.fetchOwnEmployeeId();
     if (employeeId != null && mounted) {
       _channel = _service.watchTokenUsage(
@@ -53,9 +57,11 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
         onTokenUsed: _refreshToken,
       );
     }
+    await _refreshToken();
   }
 
   Future<void> _refreshToken() async {
+    _autoRefreshTimer?.cancel();
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -67,6 +73,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
         _token = token;
         _isLoading = false;
       });
+      final untilRefresh = token.remaining - const Duration(seconds: 10);
+      _autoRefreshTimer = Timer(untilRefresh.isNegative ? Duration.zero : untilRefresh, _refreshToken);
     } on QrAttendanceException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -74,13 +82,6 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
         _isLoading = false;
       });
     }
-  }
-
-  String _formatRemaining(Duration d) {
-    if (d.isNegative) return '期限切れ';
-    final hours = d.inHours;
-    final minutes = d.inMinutes.remainder(60);
-    return '有効期限まで あと$hours時間$minutes分';
   }
 
   @override
@@ -116,7 +117,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
                   const SizedBox(height: 20),
                   if (token != null && !_isLoading && _errorMessage == null)
                     Text(
-                      isExpired ? '期限切れです。更新してください' : _formatRemaining(token.remaining),
+                      isExpired ? '更新中です…' : '残り${token.remaining.inSeconds}秒で自動更新',
                       style: TextStyle(
                         color: isExpired
                             ? Colors.redAccent

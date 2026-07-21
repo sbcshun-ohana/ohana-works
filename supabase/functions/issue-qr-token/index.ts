@@ -1,5 +1,5 @@
-// 9.2 ワンタイムQR発行(確定仕様)
-// - サーバー発行の署名付きトークン(JWT/HS256)、有効期限8時間
+// 9.2 ワンタイムQR発行(確定仕様、開発計画改訂版 2026-07-17 Phase1 B-1で90秒方式に変更)
+// - サーバー発行の署名付きトークン(JWT/HS256)、有効期限90秒(保護者QRと同じ仕様)
 // - 発行のたびに、その職員の未使用トークンは失効させ、常に有効なトークンを1件に保つ
 // - qr_tokens への書込はRLS対象外(service role専用)。クライアントは本Functionを経由する。
 //
@@ -8,7 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
 
-const QR_TOKEN_TTL_SECONDS = 8 * 60 * 60; // 8時間
+const QR_TOKEN_TTL_SECONDS = 90; // 90秒(保護者QRのissue-guardian-qr-tokenと同じ仕様)
 
 function corsHeaders(origin: string | null) {
   return {
