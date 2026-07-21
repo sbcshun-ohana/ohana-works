@@ -7,6 +7,7 @@ import 'notices/notice_list_screen.dart';
 import 'qr_attendance_screen.dart';
 import 'requests/my_attendance_screen.dart';
 import 'requests/my_payslip_list_screen.dart';
+import 'requests/my_shift_screen.dart';
 import 'requests/request_menu_screen.dart';
 
 /// ログイン後に表示する仮のホーム画面。
@@ -129,6 +130,18 @@ class HomeScreen extends StatelessWidget {
                     },
                     icon: const Icon(Icons.description_outlined),
                     label: const Text('給与明細'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MyShiftScreen(service: MyDataService(Supabase.instance.client)),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.event_note_outlined),
+                    label: const Text('自分のシフト'),
                   ),
                 ],
               ),
