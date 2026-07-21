@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/employees", label: "職員マスタ" },
   { href: "/payroll", label: "給与確定" },
   { href: "/settings", label: "設定" },
+  { href: "/feature-flags", label: "機能フラグ" },
 ];
 
 export function AppHeader() {

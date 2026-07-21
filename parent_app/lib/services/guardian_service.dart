@@ -25,6 +25,19 @@ class GuardianService {
 
   final SupabaseClient _client;
 
+  /// 施設・クラス単位の段階公開フラグ(feature_flags)。有効なfeature_keyの集合を返す。
+  /// 例: 'attendance_qr'・'guardian_requests'・'family_daily_report'・'communication_book'・
+  /// 'guardian_notices'・'class_photos'。マスタースイッチ'guardian_app'がOFFの施設では
+  /// 他の全キーがfalseとして返る(RPC側is_guardian_feature_enabled()のロジック)。
+  Future<Set<String>> fetchGuardianFeatureFlags(String childId) async {
+    final rows = await _client.rpc('fetch_guardian_feature_flags', params: {'p_child_id': childId});
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .where((r) => r['enabled'] == true)
+        .map((r) => r['feature_key'] as String)
+        .toSet();
+  }
+
   /// 未登録(招待未受諾)の場合はnullを返す。
   Future<GuardianProfile?> fetchMyProfile() async {
     final userId = _client.auth.currentUser?.id;

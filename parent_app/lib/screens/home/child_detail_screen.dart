@@ -30,11 +30,23 @@ class ChildDetailScreen extends StatefulWidget {
 class _ChildDetailScreenState extends State<ChildDetailScreen> {
   int _unreadCommunicationBookCount = 0;
   int _unreadNoticeCount = 0;
+  Set<String> _enabledFeatures = {};
+  bool _isLoadingFeatures = true;
 
   @override
   void initState() {
     super.initState();
+    _loadFeatureFlags();
     _loadUnreadCounts();
+  }
+
+  Future<void> _loadFeatureFlags() async {
+    final flags = await widget.guardianService.fetchGuardianFeatureFlags(widget.child.childId);
+    if (!mounted) return;
+    setState(() {
+      _enabledFeatures = flags;
+      _isLoadingFeatures = false;
+    });
   }
 
   Future<void> _loadUnreadCounts() async {
@@ -58,83 +70,108 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.child.nameLabel)),
-      body: GridView.count(
-        padding: const EdgeInsets.all(16),
-        crossAxisCount: 3,
-        childAspectRatio: 0.85,
-        children: [
-          _GridMenuItem(
-            icon: Icons.qr_code_2_rounded,
-            color: AppColors.skyBlue,
-            label: '登降園QR',
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => ChildQrScreen(guardianService: widget.guardianService, child: widget.child),
-              ),
+      body: _isLoadingFeatures ? const Center(child: CircularProgressIndicator()) : _buildGrid(),
+    );
+  }
+
+  Widget _buildGrid() {
+    final items = <Widget>[
+      if (_enabledFeatures.contains('attendance_qr'))
+        _GridMenuItem(
+          icon: Icons.qr_code_2_rounded,
+          color: AppColors.skyBlue,
+          label: '登降園QR',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => ChildQrScreen(guardianService: widget.guardianService, child: widget.child),
             ),
           ),
-          _GridMenuItem(
-            icon: Icons.assignment_rounded,
-            color: AppColors.skyBlue,
-            label: '保護者からの申請・連絡',
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => ParentRequestListScreen(
-                  guardianService: widget.guardianService,
-                  child: widget.child,
-                  guardianId: widget.guardianId,
-                ),
-              ),
-            ),
-          ),
-          _GridMenuItem(
-            icon: Icons.edit_note_rounded,
-            color: AppColors.leafGreen,
-            label: 'ご家庭からの連絡帳',
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => FamilyDailyReportScreen(guardianService: widget.guardianService, child: widget.child),
-              ),
-            ),
-          ),
-          _GridMenuItem(
-            icon: Icons.menu_book_rounded,
-            color: AppColors.warmOrange,
-            label: '保育園からの連絡帳',
-            badgeCount: _unreadCommunicationBookCount,
-            onTap: () => _openAndRefresh(
-              CommunicationBookListScreen(
+        ),
+      if (_enabledFeatures.contains('guardian_requests'))
+        _GridMenuItem(
+          icon: Icons.assignment_rounded,
+          color: AppColors.skyBlue,
+          label: '保護者からの申請・連絡',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => ParentRequestListScreen(
                 guardianService: widget.guardianService,
                 child: widget.child,
                 guardianId: widget.guardianId,
               ),
             ),
           ),
-          _GridMenuItem(
-            icon: Icons.campaign_rounded,
-            color: AppColors.warmOrange,
-            label: '保育園からのお知らせ',
-            badgeCount: _unreadNoticeCount,
-            onTap: () => _openAndRefresh(
-              CommunicationBookNoticeListScreen(
-                guardianService: widget.guardianService,
-                child: widget.child,
-                guardianId: widget.guardianId,
-              ),
+        ),
+      if (_enabledFeatures.contains('family_daily_report'))
+        _GridMenuItem(
+          icon: Icons.edit_note_rounded,
+          color: AppColors.leafGreen,
+          label: 'ご家庭からの連絡帳',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => FamilyDailyReportScreen(guardianService: widget.guardianService, child: widget.child),
             ),
           ),
-          _GridMenuItem(
-            icon: Icons.photo_library_rounded,
-            color: AppColors.leafGreen,
-            label: 'クラス写真',
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => ClassPhotosScreen(guardianService: widget.guardianService, child: widget.child),
-              ),
+        ),
+      if (_enabledFeatures.contains('communication_book'))
+        _GridMenuItem(
+          icon: Icons.menu_book_rounded,
+          color: AppColors.warmOrange,
+          label: '保育園からの連絡帳',
+          badgeCount: _unreadCommunicationBookCount,
+          onTap: () => _openAndRefresh(
+            CommunicationBookListScreen(
+              guardianService: widget.guardianService,
+              child: widget.child,
+              guardianId: widget.guardianId,
             ),
           ),
-        ],
-      ),
+        ),
+      if (_enabledFeatures.contains('guardian_notices'))
+        _GridMenuItem(
+          icon: Icons.campaign_rounded,
+          color: AppColors.warmOrange,
+          label: '保育園からのお知らせ',
+          badgeCount: _unreadNoticeCount,
+          onTap: () => _openAndRefresh(
+            CommunicationBookNoticeListScreen(
+              guardianService: widget.guardianService,
+              child: widget.child,
+              guardianId: widget.guardianId,
+            ),
+          ),
+        ),
+      if (_enabledFeatures.contains('class_photos'))
+        _GridMenuItem(
+          icon: Icons.photo_library_rounded,
+          color: AppColors.leafGreen,
+          label: 'クラス写真',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => ClassPhotosScreen(guardianService: widget.guardianService, child: widget.child),
+            ),
+          ),
+        ),
+    ];
+
+    if (items.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            '現在ご利用いただける機能はありません。園からのご案内をお待ちください',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+
+    return GridView.count(
+      padding: const EdgeInsets.all(16),
+      crossAxisCount: 3,
+      childAspectRatio: 0.85,
+      children: items,
     );
   }
 }
