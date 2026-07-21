@@ -180,7 +180,7 @@ export type ParentRequestRow = {
   child_id: string;
   child_display_name: string;
   guardian_name: string;
-  request_type: "absence" | "tardiness" | "early_leave" | "infectious_disease" | "pickup_person_change";
+  request_type: "absence" | "tardiness" | "early_leave" | "pickup_person_change" | "other";
   target_date: string;
   details: Record<string, unknown>;
   created_at: string;
@@ -190,8 +190,8 @@ export const PARENT_REQUEST_TYPE_LABELS: Record<ParentRequestRow["request_type"]
   absence: "欠席",
   tardiness: "遅刻",
   early_leave: "早退",
-  infectious_disease: "感染症",
-  pickup_person_change: "送迎者変更",
+  pickup_person_change: "お迎えの方の変更",
+  other: "その他連絡",
 };
 
 export type ClassDailyPhoto = {

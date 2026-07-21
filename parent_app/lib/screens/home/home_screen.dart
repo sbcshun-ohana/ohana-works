@@ -6,7 +6,7 @@ import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 import '../invitation/invitation_entry_screen.dart';
-import '../qr/child_qr_screen.dart';
+import 'child_detail_screen.dart';
 
 /// 保護者アプリのホーム。紐づく園児一覧と、各園児のQR表示への導線。
 /// 家庭連絡帳・保護者申請・クラス写真等はPhase Aの後続画面として追加していく。
@@ -99,7 +99,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: child,
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(
-                    builder: (_) => ChildQrScreen(guardianService: widget.guardianService, child: child),
+                    builder: (_) => ChildDetailScreen(
+                      guardianService: widget.guardianService,
+                      child: child,
+                      guardianId: widget.profile.id,
+                    ),
                   ),
                 ),
               )).toList(),
@@ -132,7 +136,7 @@ class _ChildCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(color: AppColors.skyBlue.withValues(alpha: 0.15), shape: BoxShape.circle),
-                child: const Icon(Icons.qr_code_2_rounded, color: AppColors.skyBlue),
+                child: const Icon(Icons.child_care_rounded, color: AppColors.skyBlue),
               ),
               const SizedBox(width: 16),
               Expanded(
