@@ -194,6 +194,27 @@ export const PARENT_REQUEST_TYPE_LABELS: Record<ParentRequestRow["request_type"]
   other: "その他連絡",
 };
 
+export type PunchType = "clock_in" | "break_start" | "break_end" | "clock_out";
+
+export const PUNCH_TYPE_LABELS: Record<PunchType, string> = {
+  clock_in: "出勤",
+  break_start: "休憩開始",
+  break_end: "休憩再開",
+  clock_out: "退勤",
+};
+
+export type ProxyPunchLogRow = {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  punch_type: PunchType;
+  punched_at: string;
+  proxy_operator_id: string;
+  proxy_operator_name: string;
+  source_label: string;
+  note: string | null;
+};
+
 export type ClassDailyPhoto = {
   id: string;
   class_id: string;

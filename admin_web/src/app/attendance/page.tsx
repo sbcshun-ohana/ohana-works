@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { CorrectAttendanceModal } from "@/components/CorrectAttendanceModal";
+import { WebProxyPunchModal } from "@/components/WebProxyPunchModal";
 import { currentYearMonth, formatTime, monthRange } from "@/lib/datetime";
 import { exportAttendanceExcel } from "@/lib/export/attendanceExport";
-import type { AttendanceRow, ManageableOffice } from "@/lib/types";
+import { PUNCH_TYPE_LABELS, type AttendanceRow, type ManageableOffice, type ProxyPunchLogRow } from "@/lib/types";
 
 const ALL_OFFICES_VALUE = "__all__";
 
@@ -25,6 +26,16 @@ export default function AttendancePage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [payrollLockStatus, setPayrollLockStatus] = useState<string | null>(null);
   const isLocked = payrollLockStatus === "confirmed" || payrollLockStatus === "transferred";
+
+  const [isProxyPunchOpen, setIsProxyPunchOpen] = useState(false);
+  const [proxyLog, setProxyLog] = useState<ProxyPunchLogRow[]>([]);
+  const [proxyLogError, setProxyLogError] = useState<string | null>(null);
+  const [isLoadingProxyLog, setIsLoadingProxyLog] = useState(false);
+
+  // 代理打刻の対象職員は、当月に勤怠データがある職員から選ぶ(修正ボタンと同じ制約)。
+  const employeesInView = Array.from(
+    new Map(rows.map((r) => [r.employee_id, r.employee_name])).entries(),
+  ).map(([id, name]) => ({ id, name }));
 
   async function handleExport() {
     setIsExporting(true);
@@ -91,6 +102,37 @@ export default function AttendancePage() {
     });
   }, [yearMonth, reloadToken]);
 
+  useEffect(() => {
+    function clearProxyLog() {
+      setProxyLog([]);
+    }
+    if (!selectedOffice || selectedOffice === ALL_OFFICES_VALUE) {
+      clearProxyLog();
+      return;
+    }
+
+    function fetchProxyLog() {
+      setIsLoadingProxyLog(true);
+      setProxyLogError(null);
+      const { start, end } = monthRange(yearMonth);
+      const supabase = createClient();
+      return supabase.rpc("fetch_proxy_punches_for_office", {
+        p_office_id: selectedOffice,
+        p_month_start: start,
+        p_month_end: end,
+      });
+    }
+
+    fetchProxyLog().then(({ data, error }) => {
+      setIsLoadingProxyLog(false);
+      if (error) {
+        setProxyLogError(error.message);
+        return;
+      }
+      setProxyLog((data ?? []) as ProxyPunchLogRow[]);
+    });
+  }, [selectedOffice, yearMonth, reloadToken]);
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -148,6 +190,20 @@ export default function AttendancePage() {
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
           >
             {isExporting ? "出力中…" : "月間勤怠Excelダウンロード"}
+          </button>
+          <button
+            onClick={() => setIsProxyPunchOpen(true)}
+            disabled={isLocked || selectedOffice === ALL_OFFICES_VALUE || employeesInView.length === 0}
+            title={
+              selectedOffice === ALL_OFFICES_VALUE
+                ? "施設を1つ選択してください"
+                : employeesInView.length === 0
+                  ? "対象月の勤怠データがある職員がいません"
+                  : undefined
+            }
+            className="rounded-lg border border-sky-300 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            代理打刻(現在時刻)
           </button>
         </div>
 
@@ -221,6 +277,69 @@ export default function AttendancePage() {
             </tbody>
           </table>
         </div>
+
+        {selectedOffice !== ALL_OFFICES_VALUE && (
+          <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
+            <h3 className="text-base font-bold text-slate-800">代理打刻ログ(監査)</h3>
+            <p className="text-xs text-slate-500">
+              キオスク(iPad、管理者コード入力)とWeb(この画面)どちらの代理打刻もまとめて表示します。
+            </p>
+            {proxyLogError && <p className="text-sm font-medium text-red-500">{proxyLogError}</p>}
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                    <th className="px-4 py-3">対象職員</th>
+                    <th className="px-4 py-3">打刻種別</th>
+                    <th className="px-4 py-3">打刻日時</th>
+                    <th className="px-4 py-3">代理操作者</th>
+                    <th className="px-4 py-3">経路</th>
+                    <th className="px-4 py-3">備考</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoadingProxyLog && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                        読み込み中…
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoadingProxyLog && proxyLog.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                        対象月の代理打刻記録はありません
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoadingProxyLog &&
+                    proxyLog.map((log) => (
+                      <tr key={log.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800">{log.employee_name}</td>
+                        <td className="px-4 py-3 text-slate-700">{PUNCH_TYPE_LABELS[log.punch_type]}</td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {new Date(log.punched_at).toLocaleString("ja-JP")}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{log.proxy_operator_name}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              log.source_label === "Web"
+                                ? "bg-sky-50 text-sky-700"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {log.source_label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{log.note ?? "—"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </main>
 
       {editingRow && (
@@ -229,6 +348,17 @@ export default function AttendancePage() {
           onClose={() => setEditingRow(null)}
           onSaved={() => {
             setEditingRow(null);
+            setReloadToken((t) => t + 1);
+          }}
+        />
+      )}
+
+      {isProxyPunchOpen && (
+        <WebProxyPunchModal
+          employees={employeesInView}
+          onClose={() => setIsProxyPunchOpen(false)}
+          onSaved={() => {
+            setIsProxyPunchOpen(false);
             setReloadToken((t) => t + 1);
           }}
         />
