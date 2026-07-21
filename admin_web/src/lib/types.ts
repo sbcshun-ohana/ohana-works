@@ -248,3 +248,34 @@ export const CORRECTABLE_FIELDS = [
 ] as const;
 
 export type CorrectableFieldKey = (typeof CORRECTABLE_FIELDS)[number]["key"];
+
+// --- Phase 1 C: シフト週次テンプレート・イレギュラー例外 ---
+
+export type OfficeEmployee = {
+  employee_id: string;
+  name: string;
+};
+
+export const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"] as const;
+
+export type ShiftWeeklyTemplateRow = {
+  id: string;
+  employee_id: string;
+  office_id: string;
+  weekday: number; // 0=月 〜 6=日
+  start_time: string;
+  end_time: string;
+  break_minutes: number;
+};
+
+export type ShiftExceptionRow = {
+  id: string;
+  employee_id: string;
+  work_date: string;
+  is_day_off: boolean;
+  office_id: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  break_minutes: number | null;
+  note: string | null;
+};

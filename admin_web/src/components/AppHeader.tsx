@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
   { href: "/attendance", label: "施設別勤怠" },
+  { href: "/shifts", label: "シフト管理" },
   { href: "/employees", label: "職員マスタ" },
   { href: "/payroll", label: "給与確定" },
   { href: "/settings", label: "設定" },
