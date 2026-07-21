@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/my_data_service.dart';
 import '../theme/app_theme.dart';
 import 'notices/notice_list_screen.dart';
 import 'qr_attendance_screen.dart';
+import 'requests/my_attendance_screen.dart';
+import 'requests/my_payslip_list_screen.dart';
 import 'requests/request_menu_screen.dart';
 
 /// ログイン後に表示する仮のホーム画面。
@@ -102,6 +105,30 @@ class HomeScreen extends StatelessWidget {
                     },
                     icon: const Icon(Icons.assignment_outlined),
                     label: const Text('各種申請'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MyAttendanceScreen(service: MyDataService(Supabase.instance.client)),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: const Text('自分の勤怠'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MyPayslipListScreen(service: MyDataService(Supabase.instance.client)),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.description_outlined),
+                    label: const Text('給与明細'),
                   ),
                 ],
               ),
