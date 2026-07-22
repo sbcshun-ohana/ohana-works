@@ -279,3 +279,65 @@ export type ShiftExceptionRow = {
   break_minutes: number | null;
   note: string | null;
 };
+
+// --- Phase 1 E: お知らせ・個別連絡・グループ連絡 ---
+
+export type NoticeCategory = "会社一斉" | "園単位" | "個別" | "役職別" | "勤務交代関連" | "災害モード" | "グループ";
+
+// create_notice RPCが作成に対応するカテゴリ(勤務交代関連・災害モードは専用フロー経由のため対象外)。
+export const COMPOSABLE_NOTICE_CATEGORIES = [
+  { value: "会社一斉", label: "会社一斉", requiresLaborManager: true },
+  { value: "園単位", label: "園単位", requiresLaborManager: false },
+  { value: "役職別", label: "役職別", requiresLaborManager: true },
+  { value: "個別", label: "個別", requiresLaborManager: false },
+  { value: "グループ", label: "グループ", requiresLaborManager: false },
+] as const satisfies readonly { value: NoticeCategory; label: string; requiresLaborManager: boolean }[];
+
+export type ComposableNoticeCategory = (typeof COMPOSABLE_NOTICE_CATEGORIES)[number]["value"];
+
+export const STANDARD_REPLY_OPTION_CHOICES = ["確認しました", "対応します", "対応できません", "管理者に確認してください"] as const;
+
+export type NoticeRow = {
+  id: string;
+  category: NoticeCategory;
+  title: string;
+  body: string;
+  target_office_id: string | null;
+  target_position_id: string | null;
+  target_group_id: string | null;
+  requires_read_confirmation: boolean;
+  standard_reply_options: string[] | null;
+  created_at: string;
+};
+
+export type PositionRow = {
+  id: string;
+  name: string;
+};
+
+export type StaffGroupType = "class_team" | "project_team" | "custom";
+
+export const STAFF_GROUP_TYPE_LABELS: Record<StaffGroupType, string> = {
+  class_team: "クラス担当",
+  project_team: "プロジェクトチーム",
+  custom: "その他",
+};
+
+export type StaffGroupRow = {
+  id: string;
+  office_id: string;
+  group_type: StaffGroupType;
+  name: string;
+  related_class_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type StaffGroupMemberRow = {
+  id: string;
+  group_id: string;
+  employee_id: string;
+  added_at: string;
+  removed_at: string | null;
+};
