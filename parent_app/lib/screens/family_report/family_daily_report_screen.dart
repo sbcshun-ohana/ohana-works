@@ -4,6 +4,8 @@ import '../../models/family_daily_report.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/date_format.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 import 'family_daily_report_history_screen.dart';
 
 /// 家庭連絡帳(保護者→園)。本日分の検温・症状・自宅での様子を入力・提出する。
@@ -309,7 +311,10 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.child.nameLabel}の家庭連絡帳'),
+        title: ChildContextAppBarTitle(
+          title: '${widget.child.nameLabel}の家庭連絡帳',
+          officeName: widget.child.officeName,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.history_rounded),
@@ -330,6 +335,11 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                Text(
+                  '${formatJapaneseDate(_today)}分',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 16),
                 if (_isRequired && (_report == null || !_report!.isSubmitted))
                   Container(
                     padding: const EdgeInsets.all(16),

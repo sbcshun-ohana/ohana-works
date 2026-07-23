@@ -4,6 +4,7 @@ import '../../models/class_photo.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 
 /// クラス写真の閲覧(公開済みのみ)。園から掲載確認を経た写真だけが表示される。
 class ClassPhotosScreen extends StatefulWidget {
@@ -42,7 +43,12 @@ class _ClassPhotosScreenState extends State<ClassPhotosScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.child.nameLabel}のクラス写真')),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(
+          title: '${widget.child.nameLabel}のクラス写真',
+          officeName: widget.child.officeName,
+        ),
+      ),
       body: widget.child.classId == null
           ? const Center(
               child: Text('クラス情報が確認できません', style: TextStyle(color: AppColors.textSecondary)),

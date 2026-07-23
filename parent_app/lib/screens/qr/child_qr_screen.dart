@@ -8,6 +8,7 @@ import '../../models/guardian_qr_token.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 
 /// 登降園用の動的QR(90秒有効)。期限が近づくと自動更新し、
 /// 施設側のiPadで読み取られる(消費される)とリアルタイムに検知して即座に再発行する。
@@ -82,7 +83,9 @@ class _ChildQrScreenState extends State<ChildQrScreen> {
     final isExpired = token?.isExpired ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.child.nameLabel}のQR')),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(title: '${widget.child.nameLabel}のQR', officeName: widget.child.officeName),
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

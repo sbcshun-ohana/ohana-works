@@ -4,6 +4,7 @@ import '../../models/linked_child.dart';
 import '../../models/parent_request.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 import 'new_parent_request_screen.dart';
 import 'parent_request_detail_screen.dart';
 
@@ -72,7 +73,12 @@ class _ParentRequestListScreenState extends State<ParentRequestListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.child.nameLabel}の保護者からの申請・連絡')),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(
+          title: '${widget.child.nameLabel}の保護者からの申請・連絡',
+          officeName: widget.child.officeName,
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openNewRequest,
         icon: const Icon(Icons.add_rounded),

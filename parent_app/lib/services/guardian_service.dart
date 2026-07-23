@@ -71,18 +71,26 @@ class GuardianService {
 
     final childIds = linkRows.map((r) => r['child_id'] as String).toSet().toList();
     final todayStr = _formatDate(DateTime.now());
-    final statusRows = await _client
-        .from('daily_child_status')
-        .select('child_id, status')
-        .inFilter('child_id', childIds)
-        .eq('business_date', todayStr);
+    final results = await Future.wait([
+      _client
+          .from('daily_child_status')
+          .select('child_id, status')
+          .inFilter('child_id', childIds)
+          .eq('business_date', todayStr),
+      _client.rpc('fetch_my_children_office_names'),
+    ]);
     final statusByChild = {
-      for (final row in (statusRows as List).cast<Map<String, dynamic>>())
+      for (final row in (results[0] as List).cast<Map<String, dynamic>>())
         row['child_id'] as String: row['status'] as String,
+    };
+    final officeNameByChild = {
+      for (final row in (results[1] as List).cast<Map<String, dynamic>>())
+        row['child_id'] as String: row['office_name'] as String,
     };
 
     return linkRows
-        .map((row) => LinkedChild.fromJson(row, todayStatus: statusByChild[row['child_id']]))
+        .map((row) => LinkedChild.fromJson(row, todayStatus: statusByChild[row['child_id']])
+            .copyWithOfficeName(officeNameByChild[row['child_id']]))
         .toList();
   }
 

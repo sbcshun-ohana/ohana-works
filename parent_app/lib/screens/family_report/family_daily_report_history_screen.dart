@@ -4,6 +4,8 @@ import '../../models/family_daily_report.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/date_format.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 
 /// 提出済みの家庭連絡帳を一覧・閲覧する(過去の記録は編集不可)。
 class FamilyDailyReportHistoryScreen extends StatefulWidget {
@@ -35,7 +37,7 @@ class _FamilyDailyReportHistoryScreenState extends State<FamilyDailyReportHistor
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_formatDate(report.businessDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(formatJapaneseDate(report.businessDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             _DetailRow(label: '体温', value: report.temperature == null ? '未入力' : '${report.temperature!.toStringAsFixed(1)}℃'),
             _DetailRow(label: '検温時刻', value: report.temperatureMeasuredAt ?? '未入力'),
@@ -79,12 +81,12 @@ class _FamilyDailyReportHistoryScreenState extends State<FamilyDailyReportHistor
     return '$count回(${familyBowelConditionLabels[condition] ?? '未入力'})';
   }
 
-  String _formatDate(DateTime d) => '${d.year}/${d.month}/${d.day}';
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.child.nameLabel}の記録')),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(title: '${widget.child.nameLabel}の記録', officeName: widget.child.officeName),
+      ),
       body: FutureBuilder<List<FamilyDailyReport>>(
         future: _historyFuture,
         builder: (context, snapshot) {
@@ -106,7 +108,7 @@ class _FamilyDailyReportHistoryScreenState extends State<FamilyDailyReportHistor
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   onTap: () => _showDetail(report),
-                  title: Text(_formatDate(report.businessDate)),
+                  title: Text(formatJapaneseDate(report.businessDate)),
                   subtitle: Text(
                     report.temperature == null ? '体温未入力' : '体温 ${report.temperature!.toStringAsFixed(1)}℃',
                     style: TextStyle(color: report.hasFeverWarning ? AppColors.danger : AppColors.textSecondary),

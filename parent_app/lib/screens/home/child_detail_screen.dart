@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
@@ -69,7 +70,9 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.child.nameLabel)),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(title: widget.child.nameLabel, officeName: widget.child.officeName),
+      ),
       body: _isLoadingFeatures ? const Center(child: CircularProgressIndicator()) : _buildGrid(),
     );
   }

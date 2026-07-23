@@ -4,6 +4,7 @@ import '../../models/communication_book_entry.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 import 'communication_book_notice_detail_screen.dart';
 
 /// 個別お知らせが1件以上ある承認済み連絡帳の一覧(新しい日付順)。
@@ -37,7 +38,12 @@ class _CommunicationBookNoticeListScreenState extends State<CommunicationBookNot
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.child.nameLabel}の保育園からのお知らせ')),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(
+          title: '${widget.child.nameLabel}の保育園からのお知らせ',
+          officeName: widget.child.officeName,
+        ),
+      ),
       body: FutureBuilder<List<CommunicationBookEntry>>(
         future: _entriesFuture,
         builder: (context, snapshot) {

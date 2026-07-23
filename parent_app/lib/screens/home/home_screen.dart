@@ -147,6 +147,14 @@ class _ChildCard extends StatelessWidget {
                       child.nameLabel,
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                     ),
+                    if (child.officeName != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          child.officeName!,
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                      ),
                     const SizedBox(height: 4),
                     Text(
                       [

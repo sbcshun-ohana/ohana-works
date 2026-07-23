@@ -10,7 +10,21 @@ class LinkedChild {
     this.className,
     this.ageGroup,
     this.todayStatus,
+    this.officeName,
   });
+
+  LinkedChild copyWithOfficeName(String? officeName) => LinkedChild(
+        childId: childId,
+        officeId: officeId,
+        displayName: displayName,
+        honorificSuffix: honorificSuffix,
+        role: role,
+        classId: classId,
+        className: className,
+        ageGroup: ageGroup,
+        todayStatus: todayStatus,
+        officeName: officeName,
+      );
 
   factory LinkedChild.fromJson(Map<String, dynamic> json, {String? todayStatus}) {
     final children = json['children'] as Map<String, dynamic>?;
@@ -42,6 +56,7 @@ class LinkedChild {
   final String? className;
   final String? ageGroup;
   final String? todayStatus;
+  final String? officeName;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
   bool get isPrimary => role == 'primary';

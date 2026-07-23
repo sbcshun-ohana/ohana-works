@@ -4,6 +4,7 @@ import '../../models/linked_child.dart';
 import '../../models/parent_request.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/child_context_app_bar_title.dart';
 
 /// 保護者からの申請・連絡の新規作成(欠席/遅刻/早退/お迎えの方の変更/その他連絡)。
 /// detailsのキーはadmin_web側の汎用表示(key: value)にそのまま表示されるため日本語で統一する。
@@ -145,7 +146,12 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('保護者からの申請・連絡')),
+      appBar: AppBar(
+        title: ChildContextAppBarTitle(
+          title: '${widget.child.nameLabel}の申請・連絡',
+          officeName: widget.child.officeName,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
