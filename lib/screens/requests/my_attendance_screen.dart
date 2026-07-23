@@ -80,23 +80,19 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
     return byOffice;
   }
 
-  /// 1日分の実労働時間(分)。承認済み(出勤・退勤とも承認済み)を優先し、
-  /// 承認が片方しか無い状態(未承認)なら実打刻の組で代用する。承認済みと
-  /// 実打刻を左右で混在させると、夜勤(日付をまたぐ打刻)で退勤が出勤より
-  /// 前の時刻として計算され、所要時間が負になってしまう。
+  /// 1日分の実労働時間(分)。出勤・退勤それぞれ承認済み時刻を優先し、
+  /// 無ければ実打刻時刻で代用する(片方だけ承認済みの状態も許容する)。
+  /// 日付をまたぐ夜勤で退勤時刻が出勤時刻より前になるケース(例:
+  /// 承認側が当日日付のまま登録されている場合)は、退勤を翌日とみなして
+  /// 24時間分繰り上げる。
   int _workedMinutes(MyAttendanceDay day) {
-    DateTime? start;
-    DateTime? end;
-    if (day.approvedWorkStartAt != null && day.approvedWorkEndAt != null) {
-      start = day.approvedWorkStartAt;
-      end = day.approvedWorkEndAt;
-    } else if (day.actualClockInAt != null && day.actualClockOutAt != null) {
-      start = day.actualClockInAt;
-      end = day.actualClockOutAt;
-    }
+    final start = day.approvedWorkStartAt ?? day.actualClockInAt;
+    final end = day.approvedWorkEndAt ?? day.actualClockOutAt;
     if (start == null || end == null) return 0;
+    var minutes = end.difference(start).inMinutes;
+    if (minutes < 0) minutes += const Duration(days: 1).inMinutes;
     final breakMinutes = day.approvedBreakMinutes ?? 0;
-    return (end.difference(start).inMinutes - breakMinutes).clamp(0, 1 << 30);
+    return (minutes - breakMinutes).clamp(0, 1 << 30);
   }
 
   _OfficeMonthlyTotals _summarizeOffice(String officeName, List<MyAttendanceDay> days) {
