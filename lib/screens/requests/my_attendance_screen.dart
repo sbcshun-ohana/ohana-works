@@ -1,15 +1,27 @@
-import 'dart:io';
-
-import 'package:excel/excel.dart' as xlsx;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../models/my_attendance.dart';
 import '../../services/my_data_service.dart';
 import '../../theme/app_theme.dart';
 
 const _weekdayLabels = ['月', '火', '水', '木', '金', '土', '日'];
+
+enum _ViewMode { daily, summary }
+
+/// 職員1名・1施設分の月間実績。日別データ(MyAttendanceDay)から都度集計する。
+class _OfficeMonthlyTotals {
+  const _OfficeMonthlyTotals({
+    required this.officeName,
+    required this.attendanceDays,
+    required this.workedMinutes,
+    required this.alertCount,
+  });
+
+  final String officeName;
+  final int attendanceDays;
+  final int workedMinutes;
+  final int alertCount;
+}
 
 /// Phase1 A-4: 自分の勤怠(月間・施設別)。daily_attendances(生データ)から
 /// 都度組み立てるfetch_my_attendance RPCを使うため、月次集計が未実行の月でも
@@ -26,7 +38,7 @@ class MyAttendanceScreen extends StatefulWidget {
 class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
   DateTime _targetMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   late Future<List<MyAttendanceDay>> _daysFuture;
-  bool _isExporting = false;
+  _ViewMode _viewMode = _ViewMode.daily;
 
   @override
   void initState() {
@@ -68,60 +80,33 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
     return byOffice;
   }
 
-  Future<void> _exportExcel(List<MyAttendanceDay> days) async {
-    if (days.isEmpty) return;
-    setState(() => _isExporting = true);
-    try {
-      final byOffice = _groupByOffice(days);
-      final workbook = xlsx.Excel.createExcel();
-      final defaultSheetName = workbook.getDefaultSheet();
-
-      for (final entry in byOffice.entries) {
-        // 施設ごとに別シート(全体を合算した1枚のシートは作らない)。
-        final sheet = workbook[entry.key];
-        sheet.appendRow([
-          xlsx.TextCellValue('日付'),
-          xlsx.TextCellValue('曜日'),
-          xlsx.TextCellValue('出勤(実打刻)'),
-          xlsx.TextCellValue('出勤(承認済み)'),
-          xlsx.TextCellValue('退勤(実打刻)'),
-          xlsx.TextCellValue('退勤(承認済み)'),
-          xlsx.TextCellValue('休憩(分)'),
-          xlsx.TextCellValue('勤務区分'),
-          xlsx.TextCellValue('アラート'),
-        ]);
-        for (final day in entry.value) {
-          sheet.appendRow([
-            xlsx.TextCellValue('${day.workDate.month}/${day.workDate.day}'),
-            xlsx.TextCellValue(_weekdayLabels[day.workDate.weekday - 1]),
-            xlsx.TextCellValue(_formatTime(day.actualClockInAt)),
-            xlsx.TextCellValue(_formatTime(day.approvedWorkStartAt)),
-            xlsx.TextCellValue(_formatTime(day.actualClockOutAt)),
-            xlsx.TextCellValue(_formatTime(day.approvedWorkEndAt)),
-            xlsx.TextCellValue(day.approvedBreakMinutes?.toString() ?? '--'),
-            xlsx.TextCellValue(day.shiftType ?? '--'),
-            xlsx.TextCellValue(day.alertCodes.join('、')),
-          ]);
-        }
-      }
-      if (defaultSheetName != null && !byOffice.containsKey(defaultSheetName)) {
-        workbook.delete(defaultSheetName);
-      }
-
-      final bytes = workbook.save();
-      if (bytes == null) throw Exception('Excel生成に失敗しました');
-
-      final directory = await getTemporaryDirectory();
-      final fileName = '勤怠_${_targetMonth.year}年${_targetMonth.month}月.xlsx';
-      final file = File('${directory.path}/$fileName')
-        ..createSync(recursive: true)
-        ..writeAsBytesSync(bytes);
-
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
+  /// 1日分の実労働時間(分)。承認済み時刻を優先し、無ければ実打刻時刻で代用する。
+  int _workedMinutes(MyAttendanceDay day) {
+    final start = day.approvedWorkStartAt ?? day.actualClockInAt;
+    final end = day.approvedWorkEndAt ?? day.actualClockOutAt;
+    if (start == null || end == null) return 0;
+    final breakMinutes = day.approvedBreakMinutes ?? 0;
+    return (end.difference(start).inMinutes - breakMinutes).clamp(0, 1 << 30);
   }
+
+  _OfficeMonthlyTotals _summarizeOffice(String officeName, List<MyAttendanceDay> days) {
+    var attendanceDays = 0;
+    var workedMinutes = 0;
+    var alertCount = 0;
+    for (final day in days) {
+      if (day.approvedWorkStartAt != null || day.actualClockInAt != null) attendanceDays++;
+      workedMinutes += _workedMinutes(day);
+      alertCount += day.alertCodes.length;
+    }
+    return _OfficeMonthlyTotals(
+      officeName: officeName,
+      attendanceDays: attendanceDays,
+      workedMinutes: workedMinutes,
+      alertCount: alertCount,
+    );
+  }
+
+  String _formatHoursMinutes(int minutes) => '${minutes ~/ 60}時間${minutes % 60}分';
 
   void _showDetail(MyAttendanceDay day) {
     showModalBottomSheet<void>(
@@ -171,67 +156,132 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<MyAttendanceDay>>(
-        future: _daysFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final days = snapshot.data ?? const [];
-          if (days.isEmpty) {
-            return const Center(
-              child: Text('この月の勤怠記録はまだありません', style: TextStyle(color: AppColors.textSecondary)),
-            );
-          }
-          final byOffice = _groupByOffice(days);
-          return Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    for (final entry in byOffice.entries) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                      ),
-                      ...entry.value.map(
-                        (day) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            onTap: () => _showDetail(day),
-                            title: Text('${day.workDate.month}/${day.workDate.day}(${_weekdayLabels[day.workDate.weekday - 1]})'),
-                            subtitle: Text(
-                              '出勤 ${_formatTime(day.approvedWorkStartAt ?? day.actualClockInAt)}'
-                              ' 〜 退勤 ${_formatTime(day.approvedWorkEndAt ?? day.actualClockOutAt)}',
-                            ),
-                            trailing: day.alertCodes.isNotEmpty
-                                ? const Icon(Icons.warning_amber_rounded, color: AppColors.warmOrange)
-                                : const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: OutlinedButton.icon(
-                    onPressed: _isExporting ? null : () => _exportExcel(days),
-                    icon: _isExporting
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.ios_share_rounded),
-                    label: Text(_isExporting ? '出力中…' : 'Excelで共有(施設別シート)'),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: SegmentedButton<_ViewMode>(
+              segments: const [
+                ButtonSegment(value: _ViewMode.daily, label: Text('日別'), icon: Icon(Icons.view_agenda_rounded)),
+                ButtonSegment(value: _ViewMode.summary, label: Text('月間サマリー'), icon: Icon(Icons.summarize_rounded)),
+              ],
+              selected: {_viewMode},
+              onSelectionChanged: (selection) => setState(() => _viewMode = selection.first),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<MyAttendanceDay>>(
+              future: _daysFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final days = snapshot.data ?? const [];
+                if (days.isEmpty) {
+                  return const Center(
+                    child: Text('この月の勤怠記録はまだありません', style: TextStyle(color: AppColors.textSecondary)),
+                  );
+                }
+                final byOffice = _groupByOffice(days);
+                return _viewMode == _ViewMode.daily
+                    ? _buildDailyList(byOffice)
+                    : _buildMonthlySummary(days, byOffice);
+              },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildDailyList(Map<String, List<MyAttendanceDay>> byOffice) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final entry in byOffice.entries) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          ...entry.value.map(
+            (day) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                onTap: () => _showDetail(day),
+                title: Text('${day.workDate.month}/${day.workDate.day}(${_weekdayLabels[day.workDate.weekday - 1]})'),
+                subtitle: Text(
+                  '出勤 ${_formatTime(day.approvedWorkStartAt ?? day.actualClockInAt)}'
+                  ' 〜 退勤 ${_formatTime(day.approvedWorkEndAt ?? day.actualClockOutAt)}',
+                ),
+                trailing: day.alertCodes.isNotEmpty
+                    ? const Icon(Icons.warning_amber_rounded, color: AppColors.warmOrange)
+                    : const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMonthlySummary(List<MyAttendanceDay> days, Map<String, List<MyAttendanceDay>> byOffice) {
+    final now = DateTime.now();
+    final isInProgress = _targetMonth.year == now.year && _targetMonth.month == now.month;
+    final officeTotals = byOffice.entries.map((e) => _summarizeOffice(e.key, e.value)).toList();
+    final overall = _summarizeOffice('全体', days);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (isInProgress)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.warmOrange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '※ 今月の実績は集計中です。月末に最終確定します。',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+          ),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('全体', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 12),
+                _DetailRow(label: '出勤日数', value: '${overall.attendanceDays}日'),
+                _DetailRow(label: '実労働時間合計', value: _formatHoursMinutes(overall.workedMinutes)),
+                _DetailRow(label: 'アラート件数', value: '${overall.alertCount}件'),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text('施設別内訳', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+        const SizedBox(height: 8),
+        for (final office in officeTotals)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(office.officeName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  _DetailRow(label: '出勤日数', value: '${office.attendanceDays}日'),
+                  _DetailRow(label: '実労働時間合計', value: _formatHoursMinutes(office.workedMinutes)),
+                  _DetailRow(label: 'アラート件数', value: '${office.alertCount}件'),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
