@@ -80,10 +80,20 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
     return byOffice;
   }
 
-  /// 1日分の実労働時間(分)。承認済み時刻を優先し、無ければ実打刻時刻で代用する。
+  /// 1日分の実労働時間(分)。承認済み(出勤・退勤とも承認済み)を優先し、
+  /// 承認が片方しか無い状態(未承認)なら実打刻の組で代用する。承認済みと
+  /// 実打刻を左右で混在させると、夜勤(日付をまたぐ打刻)で退勤が出勤より
+  /// 前の時刻として計算され、所要時間が負になってしまう。
   int _workedMinutes(MyAttendanceDay day) {
-    final start = day.approvedWorkStartAt ?? day.actualClockInAt;
-    final end = day.approvedWorkEndAt ?? day.actualClockOutAt;
+    DateTime? start;
+    DateTime? end;
+    if (day.approvedWorkStartAt != null && day.approvedWorkEndAt != null) {
+      start = day.approvedWorkStartAt;
+      end = day.approvedWorkEndAt;
+    } else if (day.actualClockInAt != null && day.actualClockOutAt != null) {
+      start = day.actualClockInAt;
+      end = day.actualClockOutAt;
+    }
     if (start == null || end == null) return 0;
     final breakMinutes = day.approvedBreakMinutes ?? 0;
     return (end.difference(start).inMinutes - breakMinutes).clamp(0, 1 << 30);
