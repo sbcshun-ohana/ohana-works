@@ -56,6 +56,7 @@ export type ChildcareClass = {
   class_name: string;
   age_group: string;
   school_year: number;
+  family_daily_report_required: boolean;
 };
 
 export type ChildcareStaff = {
@@ -71,6 +72,7 @@ export type ClassChild = {
   enrollment_status: string;
   is_absent: boolean;
   absence_reason: string | null;
+  family_daily_report_required_override: boolean | null;
 };
 
 export type ClassActivityRow = {
@@ -141,6 +143,45 @@ export type DailyBoardRow = {
   status: "not_arrived" | "present" | "picked_up" | "absent";
   last_event_type: string | null;
   last_event_at: string | null;
+  family_daily_report_status: "draft" | "submitted" | null;
+  temperature: number | null;
+  has_pickup_change: boolean;
+  pickup_person_name: string | null;
+  pickup_person_relationship: string | null;
+  pickup_time_from: string | null;
+  pickup_time_to: string | null;
+};
+
+export const FAMILY_MOOD_LABELS: Record<string, string> = { good: "良い", normal: "普通", bad: "悪い" };
+export const FAMILY_BOWEL_CONDITION_LABELS: Record<string, string> = {
+  normal: "普通",
+  soft: "軟便",
+  hard: "硬便",
+  small: "少量便",
+};
+
+export type FamilyDailyReportSummary = {
+  status: "draft" | "submitted";
+  temperature: number | null;
+  temperature_measured_at: string | null;
+  symptoms: string | null;
+  home_notes: string | null;
+  night_mood: string | null;
+  morning_mood: string | null;
+  night_bowel_count: number | null;
+  night_bowel_condition: string | null;
+  morning_bowel_count: number | null;
+  morning_bowel_condition: string | null;
+  sleep_start_at: string | null;
+  sleep_end_at: string | null;
+  dinner_content: string | null;
+  dinner_at: string | null;
+  breakfast_content: string | null;
+  breakfast_at: string | null;
+  pickup_person_name: string | null;
+  pickup_person_relationship: string | null;
+  pickup_time_from: string | null;
+  pickup_time_to: string | null;
 };
 
 export const DAILY_BOARD_STATUS_LABELS: Record<DailyBoardRow["status"], string> = {

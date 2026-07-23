@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../family_daily_report_summary_view.dart';
 
 /// 保護者アプリ・後続保育機能 Phase A: デイリーボード(iPad中心)。
 /// 登降園は保護者アプリ・キオスク端末など複数端末から記録されるため、Realtimeで即時反映する。
@@ -51,6 +52,30 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     await _rowsFuture;
   }
 
+  Future<void> _showFamilyDailyReport(DailyBoardRow row) async {
+    final report = await widget.service.fetchFamilyDailyReportForStaff(row.childId, widget.businessDate);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${row.nameLabel}の家庭連絡帳', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              FamilyDailyReportSummaryView(report: report),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -78,26 +103,55 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
               itemBuilder: (context, index) {
                 final row = rows[index];
                 return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    title: Text(row.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
-                    trailing: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        _StatusChip(status: row.status),
-                        if (row.lastEventAt != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              '${row.lastEventAt!.hour.toString().padLeft(2, '0')}:'
-                              '${row.lastEventAt!.minute.toString().padLeft(2, '0')}',
-                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                            ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        onTap: () => _showFamilyDailyReport(row),
+                        title: Text(row.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
+                        trailing: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _StatusChip(status: row.status),
+                            if (row.lastEventAt != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  '${row.lastEventAt!.hour.toString().padLeft(2, '0')}:'
+                                  '${row.lastEventAt!.minute.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (row.hasPickupChange)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.warmOrange.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                      ],
-                    ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.person_pin_circle_rounded, size: 18, color: AppColors.warmOrange),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'お迎え変更あり: ${row.pickupPersonName}'
+                                  '${row.pickupTimeFrom != null ? '(${row.pickupTimeFrom}〜${row.pickupTimeTo})' : ''}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 );
               },

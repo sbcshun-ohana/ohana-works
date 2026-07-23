@@ -41,10 +41,42 @@ class _FamilyDailyReportHistoryScreenState extends State<FamilyDailyReportHistor
             _DetailRow(label: '検温時刻', value: report.temperatureMeasuredAt ?? '未入力'),
             _DetailRow(label: '症状', value: (report.symptoms?.isNotEmpty ?? false) ? report.symptoms! : 'なし'),
             _DetailRow(label: '自宅での様子', value: (report.homeNotes?.isNotEmpty ?? false) ? report.homeNotes! : 'なし'),
+            _DetailRow(
+              label: '機嫌(夜/朝)',
+              value: '${familyMoodLabels[report.nightMood] ?? '未入力'} / ${familyMoodLabels[report.morningMood] ?? '未入力'}',
+            ),
+            _DetailRow(label: '排便(夜)', value: _bowelText(report.nightBowelCount, report.nightBowelCondition)),
+            _DetailRow(label: '排便(朝)', value: _bowelText(report.morningBowelCount, report.morningBowelCondition)),
+            _DetailRow(
+              label: '睡眠',
+              value: '${report.sleepStartAt ?? '未入力'} 〜 ${report.sleepEndAt ?? '未入力'}',
+            ),
+            _DetailRow(
+              label: '夕食',
+              value: '${(report.dinnerContent?.isNotEmpty ?? false) ? report.dinnerContent! : '未入力'}'
+                  '(${report.dinnerAt ?? '未入力'})',
+            ),
+            _DetailRow(
+              label: '朝食',
+              value: '${(report.breakfastContent?.isNotEmpty ?? false) ? report.breakfastContent! : '未入力'}'
+                  '(${report.breakfastAt ?? '未入力'})',
+            ),
+            if (report.hasPickupChange)
+              _DetailRow(
+                label: 'お迎え変更',
+                value: '${report.pickupPersonName}(${report.pickupPersonRelationship ?? '続柄未記入'})'
+                    ' ${report.pickupTimeFrom ?? '--'}〜${report.pickupTimeTo ?? '--'}',
+              ),
           ],
         ),
       ),
     );
+  }
+
+  String _bowelText(int? count, String? condition) {
+    if (count == null) return '未入力';
+    if (count == 0) return '0回';
+    return '$count回(${familyBowelConditionLabels[condition] ?? '未入力'})';
   }
 
   String _formatDate(DateTime d) => '${d.year}/${d.month}/${d.day}';

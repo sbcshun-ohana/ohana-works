@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/childcare.dart';
+import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../family_daily_report_summary_view.dart';
 
 /// §10-13 連絡帳の入力・AI生成・申請(職員)と承認・差し戻し(管理者)。
 /// 管理者はiPad・iPhone(本アプリ)からも承認・差し戻し・コメント・直接編集ができる。
@@ -34,6 +36,7 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
   String? _errorMessage;
   String? _myEmployeeId;
   DailyContact? _contact;
+  FamilyDailyReportSummary? _familyDailyReport;
   List<NoticeMaster> _noticeMasters = const [];
   Set<String> _checkedNoticeIds = {};
   List<({String itemName, int quantity})> _supplyItems = const [];
@@ -73,6 +76,7 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
         widget.service.fetchNoticeMasters(widget.officeId),
         widget.service.fetchCheckedNoticeIds(contactId),
         widget.service.fetchSupplyItems(contactId),
+        widget.service.fetchFamilyDailyReportForStaff(widget.childId, widget.businessDate),
       ]);
       _guardianController.text = contact.guardianMessage ?? '';
       _todayNotesController.text = contact.childTodayNotes ?? '';
@@ -83,6 +87,7 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
         _noticeMasters = results[0] as List<NoticeMaster>;
         _checkedNoticeIds = results[1] as Set<String>;
         _supplyItems = results[2] as List<({String itemName, int quantity})>;
+        _familyDailyReport = results[3] as FamilyDailyReportSummary?;
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -224,6 +229,24 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                     const SizedBox(height: 12),
                     _banner(AppColors.warmOrange, '管理者コメント(保護者非公開): ${_contact!.adminComment}'),
                   ],
+                  const SizedBox(height: 16),
+                  Card(
+                    color: AppColors.background,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '保護者記入(家庭連絡帳)',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                          ),
+                          const SizedBox(height: 12),
+                          FamilyDailyReportSummaryView(report: _familyDailyReport),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   _field('保護者からの連絡内容', _guardianController, enabled: _canEditInput, maxLines: 2),
                   _field('今日の園児の様子', _todayNotesController, enabled: _canEditInput, maxLines: 2),

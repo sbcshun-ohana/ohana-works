@@ -12,6 +12,13 @@ class DailyBoardRow {
     required this.status,
     this.lastEventType,
     this.lastEventAt,
+    this.familyDailyReportStatus,
+    this.temperature,
+    this.hasPickupChange = false,
+    this.pickupPersonName,
+    this.pickupPersonRelationship,
+    this.pickupTimeFrom,
+    this.pickupTimeTo,
   });
 
   factory DailyBoardRow.fromJson(Map<String, dynamic> json) => DailyBoardRow(
@@ -23,6 +30,13 @@ class DailyBoardRow {
         lastEventType: json['last_event_type'] as String?,
         lastEventAt:
             json['last_event_at'] != null ? DateTime.parse(json['last_event_at'] as String) : null,
+        familyDailyReportStatus: json['family_daily_report_status'] as String?,
+        temperature: json['temperature'] == null ? null : double.parse(json['temperature'].toString()),
+        hasPickupChange: json['has_pickup_change'] as bool? ?? false,
+        pickupPersonName: json['pickup_person_name'] as String?,
+        pickupPersonRelationship: json['pickup_person_relationship'] as String?,
+        pickupTimeFrom: json['pickup_time_from'] as String?,
+        pickupTimeTo: json['pickup_time_to'] as String?,
       );
 
   final String childId;
@@ -32,8 +46,95 @@ class DailyBoardRow {
   final String status;
   final String? lastEventType;
   final DateTime? lastEventAt;
+  final String? familyDailyReportStatus;
+  final double? temperature;
+  final bool hasPickupChange;
+  final String? pickupPersonName;
+  final String? pickupPersonRelationship;
+  final String? pickupTimeFrom;
+  final String? pickupTimeTo;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
+}
+
+const familyMoodLabels = {'good': '良い', 'normal': '普通', 'bad': '悪い'};
+const familyBowelConditionLabels = {'normal': '普通', 'soft': '軟便', 'hard': '硬便', 'small': '少量便'};
+
+/// 家庭連絡帳(family_daily_reports)の職員側閲覧用サマリー。保護者アプリの
+/// FamilyDailyReportモデルと同じテーブルを参照する(職員アプリ・保護者アプリは別Flutter
+/// プロジェクトのためモデルクラスは重複定義)。
+class FamilyDailyReportSummary {
+  const FamilyDailyReportSummary({
+    required this.status,
+    this.temperature,
+    this.temperatureMeasuredAt,
+    this.symptoms,
+    this.homeNotes,
+    this.nightMood,
+    this.morningMood,
+    this.nightBowelCount,
+    this.nightBowelCondition,
+    this.morningBowelCount,
+    this.morningBowelCondition,
+    this.sleepStartAt,
+    this.sleepEndAt,
+    this.dinnerContent,
+    this.dinnerAt,
+    this.breakfastContent,
+    this.breakfastAt,
+    this.pickupPersonName,
+    this.pickupPersonRelationship,
+    this.pickupTimeFrom,
+    this.pickupTimeTo,
+  });
+
+  factory FamilyDailyReportSummary.fromJson(Map<String, dynamic> json) => FamilyDailyReportSummary(
+        status: json['status'] as String,
+        temperature: json['temperature'] == null ? null : double.parse(json['temperature'].toString()),
+        temperatureMeasuredAt: json['temperature_measured_at'] as String?,
+        symptoms: json['symptoms'] as String?,
+        homeNotes: json['home_notes'] as String?,
+        nightMood: json['night_mood'] as String?,
+        morningMood: json['morning_mood'] as String?,
+        nightBowelCount: json['night_bowel_count'] as int?,
+        nightBowelCondition: json['night_bowel_condition'] as String?,
+        morningBowelCount: json['morning_bowel_count'] as int?,
+        morningBowelCondition: json['morning_bowel_condition'] as String?,
+        sleepStartAt: json['sleep_start_at'] as String?,
+        sleepEndAt: json['sleep_end_at'] as String?,
+        dinnerContent: json['dinner_content'] as String?,
+        dinnerAt: json['dinner_at'] as String?,
+        breakfastContent: json['breakfast_content'] as String?,
+        breakfastAt: json['breakfast_at'] as String?,
+        pickupPersonName: json['pickup_person_name'] as String?,
+        pickupPersonRelationship: json['pickup_person_relationship'] as String?,
+        pickupTimeFrom: json['pickup_time_from'] as String?,
+        pickupTimeTo: json['pickup_time_to'] as String?,
+      );
+
+  final String status;
+  final double? temperature;
+  final String? temperatureMeasuredAt;
+  final String? symptoms;
+  final String? homeNotes;
+  final String? nightMood;
+  final String? morningMood;
+  final int? nightBowelCount;
+  final String? nightBowelCondition;
+  final int? morningBowelCount;
+  final String? morningBowelCondition;
+  final String? sleepStartAt;
+  final String? sleepEndAt;
+  final String? dinnerContent;
+  final String? dinnerAt;
+  final String? breakfastContent;
+  final String? breakfastAt;
+  final String? pickupPersonName;
+  final String? pickupPersonRelationship;
+  final String? pickupTimeFrom;
+  final String? pickupTimeTo;
+
+  bool get isSubmitted => status == 'submitted';
 }
 
 String dailyBoardStatusLabel(String status) {

@@ -447,6 +447,22 @@ class ChildcareService {
     return (rows as List).map((row) => DailyBoardRow.fromJson(row as Map<String, dynamic>)).toList();
   }
 
+  /// 家庭連絡帳(保護者記入)の職員側閲覧。RLS(family_daily_reports_select)で
+  /// staff_has_guardian_data_access(child_id)により保護のため直接SELECTでよい。
+  Future<FamilyDailyReportSummary?> fetchFamilyDailyReportForStaff(
+    String childId,
+    DateTime businessDate,
+  ) async {
+    final row = await _client
+        .from('family_daily_reports')
+        .select()
+        .eq('child_id', childId)
+        .eq('business_date', dateOnly(businessDate))
+        .maybeSingle();
+    if (row == null) return null;
+    return FamilyDailyReportSummary.fromJson(row);
+  }
+
   /// daily_child_statusの変更をRealtimeで購読する(登降園は保護者アプリ・キオスク端末など
   /// 複数端末から行われるため、複数端末への即時反映が必要)。呼び出し側でchannelを保持し、
   /// 画面破棄時にunsubscribe()すること。

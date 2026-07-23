@@ -132,19 +132,21 @@ export default function ChildcareDailyBoardPage() {
                 <th className="px-4 py-3">クラス</th>
                 <th className="px-4 py-3">状態</th>
                 <th className="px-4 py-3">最終イベント</th>
+                <th className="px-4 py-3">家庭連絡帳</th>
+                <th className="px-4 py-3">お迎え変更</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
                     在籍園児がいません
                   </td>
                 </tr>
@@ -176,6 +178,25 @@ export default function ChildcareDailyBoardPage() {
                       {row.last_event_at
                         ? `${row.last_event_type} (${new Date(row.last_event_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })})`
                         : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {row.family_daily_report_status === "submitted" ? (
+                        <span className="text-emerald-700">
+                          提出済み{row.temperature != null ? `(${row.temperature.toFixed(1)}℃)` : ""}
+                        </span>
+                      ) : row.family_daily_report_status === "draft" ? (
+                        <span className="text-slate-400">下書き中</span>
+                      ) : (
+                        <span className="text-slate-400">未提出</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.has_pickup_change && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                          変更あり: {row.pickup_person_name}
+                          {row.pickup_time_from ? `(${row.pickup_time_from.slice(0, 5)}〜${row.pickup_time_to?.slice(0, 5) ?? ""})` : ""}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

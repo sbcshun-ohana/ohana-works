@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareOffice, DailyContactRow } from "@/lib/types";
-import { MEAL_COMPLETION_OPTIONS, TOILETING_TYPES } from "@/lib/types";
+import type { ChildcareOffice, DailyContactRow, FamilyDailyReportSummary } from "@/lib/types";
+import { FAMILY_BOWEL_CONDITION_LABELS, FAMILY_MOOD_LABELS, MEAL_COMPLETION_OPTIONS, TOILETING_TYPES } from "@/lib/types";
 
 const TEMPERATURE_OPTIONS = Array.from({ length: 71 }, (_, i) => (35.0 + i * 0.1).toFixed(1));
 
@@ -56,6 +56,7 @@ export default function ChildcareContactsPage() {
   const [checkedNoticeIds, setCheckedNoticeIds] = useState<Set<string>>(new Set());
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [familyDailyReport, setFamilyDailyReport] = useState<FamilyDailyReportSummary | null>(null);
 
   const selectedRow = rows.find((r) => r.child_id === selectedChildId) ?? null;
 
@@ -145,6 +146,27 @@ export default function ChildcareContactsPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRow?.contact_id, selectedRow?.child_id]);
+
+  useEffect(() => {
+    // family_daily_reports(保護者記入の家庭連絡帳)は既存RLS(staff_has_guardian_data_access)で
+    // 保護されているため、専用RPCを介さず直接SELECTでよい。
+    function loadFamilyDailyReport() {
+      if (!selectedRow?.child_id) {
+        setFamilyDailyReport(null);
+        return null;
+      }
+      return createClient()
+        .from("family_daily_reports")
+        .select()
+        .eq("child_id", selectedRow.child_id)
+        .eq("business_date", businessDate)
+        .maybeSingle();
+    }
+
+    loadFamilyDailyReport()?.then(({ data }) => {
+      setFamilyDailyReport((data as FamilyDailyReportSummary | null) ?? null);
+    });
+  }, [selectedRow?.child_id, businessDate]);
 
   async function ensureAndSelect(childId: string) {
     setSelectedChildId(childId);
@@ -479,6 +501,64 @@ export default function ChildcareContactsPage() {
                     管理者コメント(保護者非公開): {selectedRow.admin_comment}
                   </div>
                 )}
+
+                <div className="rounded-xl bg-slate-50 p-4 text-sm">
+                  <p className="mb-2 font-semibold text-slate-700">保護者記入(家庭連絡帳)</p>
+                  {!familyDailyReport && <p className="text-slate-400">本日分の家庭連絡帳はまだ提出されていません</p>}
+                  {familyDailyReport && (
+                    <div className="space-y-1 text-slate-600">
+                      {familyDailyReport.status !== "submitted" && (
+                        <p className="text-amber-600">※下書き中(未提出)の内容です</p>
+                      )}
+                      <p>
+                        体温: {familyDailyReport.temperature != null ? `${familyDailyReport.temperature.toFixed(1)}℃` : "—"}(
+                        {familyDailyReport.temperature_measured_at?.slice(0, 5) ?? "—"})
+                        {familyDailyReport.temperature != null && familyDailyReport.temperature >= 37.5 && (
+                          <span className="ml-2 font-semibold text-red-600">37.5℃以上</span>
+                        )}
+                      </p>
+                      <p>症状: {familyDailyReport.symptoms || "—"}</p>
+                      <p>自宅での様子: {familyDailyReport.home_notes || "—"}</p>
+                      <p>
+                        機嫌(夜/朝): {FAMILY_MOOD_LABELS[familyDailyReport.night_mood ?? ""] ?? "—"} /{" "}
+                        {FAMILY_MOOD_LABELS[familyDailyReport.morning_mood ?? ""] ?? "—"}
+                      </p>
+                      <p>
+                        排便(夜/朝):{" "}
+                        {familyDailyReport.night_bowel_count == null
+                          ? "—"
+                          : familyDailyReport.night_bowel_count === 0
+                            ? "0回"
+                            : `${familyDailyReport.night_bowel_count}回(${FAMILY_BOWEL_CONDITION_LABELS[familyDailyReport.night_bowel_condition ?? ""] ?? "—"})`}{" "}
+                        /{" "}
+                        {familyDailyReport.morning_bowel_count == null
+                          ? "—"
+                          : familyDailyReport.morning_bowel_count === 0
+                            ? "0回"
+                            : `${familyDailyReport.morning_bowel_count}回(${FAMILY_BOWEL_CONDITION_LABELS[familyDailyReport.morning_bowel_condition ?? ""] ?? "—"})`}
+                      </p>
+                      <p>
+                        睡眠: {familyDailyReport.sleep_start_at?.slice(0, 5) ?? "—"} 〜{" "}
+                        {familyDailyReport.sleep_end_at?.slice(0, 5) ?? "—"}
+                      </p>
+                      <p>
+                        夕食: {familyDailyReport.dinner_content || "—"}({familyDailyReport.dinner_at?.slice(0, 5) ?? "—"})
+                      </p>
+                      <p>
+                        朝食: {familyDailyReport.breakfast_content || "—"}(
+                        {familyDailyReport.breakfast_at?.slice(0, 5) ?? "—"})
+                      </p>
+                      {familyDailyReport.pickup_person_name && (
+                        <div className="mt-2 rounded-lg bg-amber-100 p-2 font-semibold text-amber-800">
+                          お迎え変更あり: {familyDailyReport.pickup_person_name}(
+                          {familyDailyReport.pickup_person_relationship || "続柄未記入"}){" "}
+                          {familyDailyReport.pickup_time_from?.slice(0, 5) ?? "—"}〜
+                          {familyDailyReport.pickup_time_to?.slice(0, 5) ?? "—"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">保護者からの連絡内容</label>

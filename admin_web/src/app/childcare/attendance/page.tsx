@@ -21,6 +21,11 @@ export default function ChildcareAttendancePage() {
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [savingChildId, setSavingChildId] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [savingFlagChildId, setSavingFlagChildId] = useState<string | null>(null);
+
+  const selectedClassInfo = classes.find((c) => c.class_id === selectedClass);
+  // クラスのデフォルトが必須(0〜2歳児相当)の場合、園児単位の上書きトグルは意味を持たないため表示しない。
+  const showRequiredToggle = selectedClassInfo != null && !selectedClassInfo.family_daily_report_required;
 
   useEffect(() => {
     const supabase = createClient();
@@ -90,6 +95,21 @@ export default function ChildcareAttendancePage() {
       p_absence_reason: reason,
     });
     setSavingChildId(null);
+    if (error) {
+      setRowsError(error.message);
+      return;
+    }
+    setReloadToken((t) => t + 1);
+  }
+
+  async function toggleFamilyDailyReportRequired(child: ClassChild) {
+    setSavingFlagChildId(child.child_id);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_family_daily_report_required_override", {
+      p_child_id: child.child_id,
+      p_required: !child.family_daily_report_required_override,
+    });
+    setSavingFlagChildId(null);
     if (error) {
       setRowsError(error.message);
       return;
@@ -172,20 +192,21 @@ export default function ChildcareAttendancePage() {
                 <th className="px-4 py-3">在籍状況</th>
                 <th className="px-4 py-3">出欠</th>
                 <th className="px-4 py-3">欠席理由</th>
+                {showRequiredToggle && <th className="px-4 py-3">連絡帳提出必須</th>}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={showRequiredToggle ? 6 : 5} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && children.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={showRequiredToggle ? 6 : 5} className="px-4 py-6 text-center text-slate-400">
                     在籍園児がいません
                   </td>
                 </tr>
@@ -211,6 +232,21 @@ export default function ChildcareAttendancePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-500">{child.absence_reason ?? "—"}</td>
+                    {showRequiredToggle && (
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => toggleFamilyDailyReportRequired(child)}
+                          disabled={savingFlagChildId === child.child_id}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold transition disabled:opacity-40 ${
+                            child.family_daily_report_required_override
+                              ? "bg-sky-100 text-sky-700 hover:bg-sky-200"
+                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          }`}
+                        >
+                          {child.family_daily_report_required_override ? "必須" : "任意"}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => toggleAbsence(child)}
