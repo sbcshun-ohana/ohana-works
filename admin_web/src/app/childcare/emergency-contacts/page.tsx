@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
-import type { ChildForAssignment, ChildcareOffice, EmergencyContact } from "@/lib/types";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import type { ChildForAssignment, EmergencyContact } from "@/lib/types";
 
-export default function ChildcareEmergencyContactsPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
+function ChildcareEmergencyContactsPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
 
   const [children, setChildren] = useState<ChildForAssignment[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string>("");
@@ -22,19 +21,6 @@ export default function ChildcareEmergencyContactsPage() {
   const [newPhone, setNewPhone] = useState("");
   const [newRelationship, setNewRelationship] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) setSelectedOffice(list[0].office_id);
-    });
-  }, []);
 
   useEffect(() => {
     if (!selectedOffice) return;
@@ -262,5 +248,13 @@ export default function ChildcareEmergencyContactsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareEmergencyContactsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareEmergencyContactsPageContent />
+    </Suspense>
   );
 }

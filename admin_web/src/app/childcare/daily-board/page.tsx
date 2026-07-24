@@ -1,36 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareOffice, DailyBoardRow } from "@/lib/types";
+import type { DailyBoardRow } from "@/lib/types";
 import { DAILY_BOARD_STATUS_LABELS } from "@/lib/types";
 
-export default function ChildcareDailyBoardPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
+function ChildcareDailyBoardPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<DailyBoardRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) setSelectedOffice(list[0].office_id);
-    });
-  }, []);
 
   useEffect(() => {
     function loadRows() {
@@ -205,5 +191,13 @@ export default function ChildcareDailyBoardPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareDailyBoardPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareDailyBoardPageContent />
+    </Suspense>
   );
 }

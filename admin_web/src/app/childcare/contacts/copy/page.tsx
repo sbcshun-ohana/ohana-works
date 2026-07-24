@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareOffice, DailyContactRow } from "@/lib/types";
+import type { DailyContactRow } from "@/lib/types";
 
-export default function ChildcareContactsCopyPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
+function ChildcareContactsCopyPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<DailyContactRow[]>([]);
@@ -18,19 +17,6 @@ export default function ChildcareContactsCopyPage() {
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [copiedChildId, setCopiedChildId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) setSelectedOffice(list[0].office_id);
-    });
-  }, []);
 
   useEffect(() => {
     function loadRows() {
@@ -166,5 +152,13 @@ export default function ChildcareContactsCopyPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareContactsCopyPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareContactsCopyPageContent />
+    </Suspense>
   );
 }

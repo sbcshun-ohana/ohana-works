@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareOffice, DailyContactRow, FamilyDailyReportSummary } from "@/lib/types";
+import type { DailyContactRow, FamilyDailyReportSummary } from "@/lib/types";
 import { FAMILY_BOWEL_CONDITION_LABELS, FAMILY_MOOD_LABELS, MEAL_COMPLETION_OPTIONS, TOILETING_TYPES } from "@/lib/types";
 
 const TEMPERATURE_OPTIONS = Array.from({ length: 71 }, (_, i) => (35.0 + i * 0.1).toFixed(1));
@@ -29,11 +30,9 @@ const AI_ACTIONS: { key: string; label: string }[] = [
   { key: "regenerate", label: "作り直し" },
 ];
 
-export default function ChildcareContactsPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
-  const [isManager, setIsManager] = useState(false);
+function ChildcareContactsPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<DailyContactRow[]>([]);
@@ -59,22 +58,6 @@ export default function ChildcareContactsPage() {
   const [familyDailyReport, setFamilyDailyReport] = useState<FamilyDailyReportSummary | null>(null);
 
   const selectedRow = rows.find((r) => r.child_id === selectedChildId) ?? null;
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) {
-        setSelectedOffice(list[0].office_id);
-        setIsManager(list[0].is_manager);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     function loadRows() {
@@ -398,7 +381,6 @@ export default function ChildcareContactsPage() {
               value={selectedOffice}
               onChange={(e) => {
                 setSelectedOffice(e.target.value);
-                setIsManager(offices?.find((o) => o.office_id === e.target.value)?.is_manager ?? false);
                 setSelectedChildId(null);
               }}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
@@ -859,5 +841,13 @@ export default function ChildcareContactsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareContactsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareContactsPageContent />
+    </Suspense>
   );
 }

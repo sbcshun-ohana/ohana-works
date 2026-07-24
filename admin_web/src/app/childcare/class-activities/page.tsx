@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareOffice, ChildcareStaff, ClassActivityRow } from "@/lib/types";
+import type { ChildcareStaff, ClassActivityRow } from "@/lib/types";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "下書き",
@@ -14,11 +15,9 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "差し戻し",
 };
 
-export default function ChildcareClassActivitiesPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
-  const [isManager, setIsManager] = useState(false);
+function ChildcareClassActivitiesPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<ClassActivityRow[]>([]);
@@ -39,22 +38,6 @@ export default function ChildcareClassActivitiesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const selectedRow = rows.find((r) => r.class_id === selectedClassId) ?? null;
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) {
-        setSelectedOffice(list[0].office_id);
-        setIsManager(list[0].is_manager);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     function loadRows() {
@@ -239,7 +222,6 @@ export default function ChildcareClassActivitiesPage() {
               value={selectedOffice}
               onChange={(e) => {
                 setSelectedOffice(e.target.value);
-                setIsManager(offices?.find((o) => o.office_id === e.target.value)?.is_manager ?? false);
                 setSelectedClassId(null);
               }}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
@@ -415,5 +397,13 @@ export default function ChildcareClassActivitiesPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareClassActivitiesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareClassActivitiesPageContent />
+    </Suspense>
   );
 }

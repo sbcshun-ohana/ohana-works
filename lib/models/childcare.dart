@@ -83,10 +83,9 @@ class ClassChild {
   final bool isAbsent;
   final String? absenceReason;
 
-  /// 呼称: 個別設定(honorificSuffix)があればそれを、無ければ性別既定を使う。
+  /// honorificSuffixはDB側(honorific_suffix_resolved)で個別設定/性別既定を解決済み。
   String get nameLabel {
-    final suffix = honorificSuffix ?? (gender == '女' ? 'ちゃん' : (gender == '男' ? 'くん' : ''));
-    return '$displayName$suffix';
+    return '$displayName${honorificSuffix ?? ''}';
   }
 }
 

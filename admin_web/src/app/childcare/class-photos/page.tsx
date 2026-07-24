@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
 import { watermarkImage } from "@/lib/imageWatermark";
-import type { ChildcareClass, ChildcareOffice, ClassDailyPhoto } from "@/lib/types";
+import type { ChildcareClass, ClassDailyPhoto } from "@/lib/types";
 
 const STATUS_LABELS: Record<ClassDailyPhoto["status"], string> = {
   draft: "未チェック",
@@ -14,11 +15,9 @@ const STATUS_LABELS: Record<ClassDailyPhoto["status"], string> = {
   published: "公開済み",
 };
 
-export default function ChildcareClassPhotosPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
-  const [isManager, setIsManager] = useState(false);
+function ChildcareClassPhotosPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
   const [classes, setClasses] = useState<ChildcareClass[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>("");
@@ -31,22 +30,6 @@ export default function ChildcareClassPhotosPage() {
   const [reloadToken, setReloadToken] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) {
-        setSelectedOffice(list[0].office_id);
-        setIsManager(list[0].is_manager);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     if (!selectedOffice) return;
@@ -189,10 +172,7 @@ export default function ChildcareClassPhotosPage() {
             <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
             <select
               value={selectedOffice}
-              onChange={(e) => {
-                setSelectedOffice(e.target.value);
-                setIsManager(offices?.find((o) => o.office_id === e.target.value)?.is_manager ?? false);
-              }}
+              onChange={(e) => setSelectedOffice(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             >
               {offices?.map((office) => (
@@ -295,5 +275,13 @@ export default function ChildcareClassPhotosPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareClassPhotosPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareClassPhotosPageContent />
+    </Suspense>
   );
 }

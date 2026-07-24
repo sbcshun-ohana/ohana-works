@@ -1,35 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
-import type { ChildcareOffice, ParentRequestRow } from "@/lib/types";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import type { ParentRequestRow } from "@/lib/types";
 import { PARENT_REQUEST_TYPE_LABELS } from "@/lib/types";
 
-export default function ChildcareParentRequestsPage() {
-  const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
-  const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOffice] = useState<string>("");
+function ChildcareParentRequestsPageContent() {
+  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
 
   const [requests, setRequests] = useState<ParentRequestRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      if (error) {
-        setOfficesError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      if (list.length > 0) setSelectedOffice(list[0].office_id);
-    });
-  }, []);
 
   useEffect(() => {
     function loadRows() {
@@ -185,5 +171,13 @@ export default function ChildcareParentRequestsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChildcareParentRequestsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChildcareParentRequestsPageContent />
+    </Suspense>
   );
 }

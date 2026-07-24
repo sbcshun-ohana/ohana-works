@@ -72,7 +72,6 @@ export type ClassChild = {
   enrollment_status: string;
   is_absent: boolean;
   absence_reason: string | null;
-  family_daily_report_required_override: boolean | null;
 };
 
 export type ClassActivityRow = {
@@ -122,6 +121,20 @@ export type DailyContactRow = {
 
 export const TOILETING_TYPES = ["普通", "軟便", "硬便", "下痢便"] as const;
 export const MEAL_COMPLETION_OPTIONS = [100, 75, 50, 25, 0] as const;
+
+export type ChildMasterRow = {
+  child_id: string;
+  display_name: string;
+  honorific_suffix: string | null;
+  gender: string;
+  birth_date: string;
+  enrollment_status: string;
+  class_id: string | null;
+  class_name: string | null;
+  class_family_daily_report_required: boolean | null;
+  family_daily_report_required_from: string | null;
+  family_daily_report_required_until: string | null;
+};
 
 export type ChildForAssignment = {
   child_id: string;
