@@ -13,20 +13,19 @@ type Props = {
 };
 
 /// age_groupは「クラス名／◯歳児」形式(例:「はな組／0歳児」)から歳児数を取り出す。
-function parseClassAge(ageGroup: string): number | null {
+export function parseClassAge(ageGroup: string): number | null {
   const match = ageGroup.match(/(\d+)\s*歳児/);
   return match ? Number(match[1]) : null;
 }
 
-/// 4/1基準の年度で「◯歳児クラス」相当の年齢を概算する(早生まれの厳密な学年区分けまでは行わない、
-/// 大きなズレを検知するための簡易計算)。
-function estimateCohortAge(birthDate: string, referenceDate: string): number {
-  const [by, bm] = birthDate.split("-").map(Number);
-  const [ry, rm] = referenceDate.split("-").map(Number);
-  const nendoStartYear = rm >= 4 ? ry : ry - 1;
-  let age = nendoStartYear - by;
-  if (bm < 4) age += 1;
-  return age;
+/// 入園日が属する年度(4/1区切り)の4/1時点での年齢区分を求める。
+/// コホートは「毎年4/2生まれ〜翌年4/1生まれ」が1単位(4/1生まれは前のコホート扱い、早生まれ)。
+export function estimateCohortAge(birthDate: string, enrollmentDate: string): number {
+  const [by, bm, bd] = birthDate.split("-").map(Number);
+  const [ry, rm] = enrollmentDate.split("-").map(Number);
+  const nendoYear = rm >= 4 ? ry : ry - 1;
+  const cohortYear = bm > 4 || (bm === 4 && bd >= 2) ? by : by - 1;
+  return nendoYear - cohortYear - 1;
 }
 
 export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props) {
@@ -42,9 +41,18 @@ export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props)
 
   const selectedClass = classes.find((c) => c.class_id === classId);
   const classAge = selectedClass ? parseClassAge(selectedClass.age_group) : null;
-  const cohortAge = birthDate ? estimateCohortAge(birthDate, currentDate()) : null;
+  const cohortAge = birthDate && enrollmentStartDate ? estimateCohortAge(birthDate, enrollmentStartDate) : null;
   const showAgeMismatchWarning =
     classAge != null && cohortAge != null && Math.abs(classAge - cohortAge) >= 2;
+  const noMatchingClass =
+    cohortAge != null && !classId && !classes.some((c) => parseClassAge(c.age_group) === cohortAge);
+
+  function suggestClassId(nextBirthDate: string, nextEnrollmentDate: string) {
+    if (!nextBirthDate || !nextEnrollmentDate) return;
+    const age = estimateCohortAge(nextBirthDate, nextEnrollmentDate);
+    const match = classes.find((c) => parseClassAge(c.age_group) === age);
+    setClassId(match ? match.class_id : "");
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -127,7 +135,10 @@ export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props)
               required
               type="date"
               value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
+              onChange={(e) => {
+                setBirthDate(e.target.value);
+                suggestClassId(e.target.value, enrollmentStartDate);
+              }}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             />
           </div>
@@ -146,21 +157,32 @@ export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props)
                 </option>
               ))}
             </select>
-            {showAgeMismatchWarning && (
+            {noMatchingClass && (
+              <p className="mt-1 text-xs font-medium text-amber-600">
+                この施設には該当する年齢区分のクラスがありません。手動で選択してください。
+              </p>
+            )}
+            {!noMatchingClass && showAgeMismatchWarning && (
               <p className="mt-1 text-xs font-medium text-amber-600">
                 生年月日とクラスの年齢区分が大きく異なります。ご確認ください。
               </p>
             )}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">在籍開始日</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">在籍開始日(入園日)</label>
             <input
               required
               type="date"
               value={enrollmentStartDate}
-              onChange={(e) => setEnrollmentStartDate(e.target.value)}
+              onChange={(e) => {
+                setEnrollmentStartDate(e.target.value);
+                suggestClassId(birthDate, e.target.value);
+              }}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             />
+            <p className="mt-1 text-xs text-slate-400">
+              入園日が属する年度の4月1日時点での年齢でクラスを自動提案します(4月1日生まれは1つ上のコホート扱い)。
+            </p>
           </div>
 
           {errorMessage && <p className="text-sm font-medium text-red-500">{errorMessage}</p>}

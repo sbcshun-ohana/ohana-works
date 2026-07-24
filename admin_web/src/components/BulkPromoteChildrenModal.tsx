@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { parseClassAge } from "@/components/CreateChildModal";
 import type { ChildcareClass, ChildMasterRow } from "@/lib/types";
 
 type Props = {
@@ -29,6 +30,17 @@ export function BulkPromoteChildrenModal({ classes, rows, onClose, onSaved }: Pr
   function handleSourceClassChange(classId: string) {
     setSourceClassId(classId);
     setCheckedChildIds(new Set(rows.filter((r) => r.class_id === classId).map((c) => c.child_id)));
+
+    // 通常の進級は「現在のクラスの1つ上の年齢区分」への移動なので、該当クラスがあれば提案する
+    // (無ければ提案せず、手動選択に委ねる)。
+    const sourceClass = classes.find((c) => c.class_id === classId);
+    const sourceAge = sourceClass ? parseClassAge(sourceClass.age_group) : null;
+    if (sourceAge != null) {
+      const suggested = classes.find((c) => parseClassAge(c.age_group) === sourceAge + 1);
+      setDestinationClassId(suggested ? suggested.class_id : "");
+    } else {
+      setDestinationClassId("");
+    }
   }
 
   function toggleChild(childId: string) {
