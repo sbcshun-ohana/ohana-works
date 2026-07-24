@@ -126,9 +126,12 @@ export type ChildMasterRow = {
   child_id: string;
   display_name: string;
   honorific_suffix: string | null;
+  full_name: string;
+  name_kana: string | null;
   gender: string;
   birth_date: string;
   enrollment_status: string;
+  withdrawal_date: string | null;
   class_id: string | null;
   class_name: string | null;
   class_family_daily_report_required: boolean | null;

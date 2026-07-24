@@ -6,6 +6,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
+import { CreateChildModal } from "@/components/CreateChildModal";
+import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
 import type { ChildcareClass, ChildMasterRow } from "@/lib/types";
@@ -33,6 +35,8 @@ function ChildcareChildrenPageContent() {
   const [selectedClassName, setSelectedClassName] = useState<string>(ALL_CLASSES_VALUE);
   const [editingRow, setEditingRow] = useState<ChildMasterRow | null>(null);
   const [isPromoting, setIsPromoting] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
 
   useEffect(() => {
     function loadRows() {
@@ -96,13 +100,22 @@ function ChildcareChildrenPageContent() {
               個別に必須化したい場合のみ、対象園児に適用期間を設定してください。
             </p>
           </div>
-          <button
-            onClick={() => setIsPromoting(true)}
-            disabled={classes.length === 0}
-            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
-          >
-            翌年度への進級一括登録
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsCreating(true)}
+              disabled={classes.length === 0}
+              className="rounded-lg border border-sky-300 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+            >
+              新規園児登録
+            </button>
+            <button
+              onClick={() => setIsPromoting(true)}
+              disabled={classes.length === 0}
+              className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+            >
+              翌年度への進級一括登録
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
@@ -173,15 +186,29 @@ function ChildcareChildrenPageContent() {
                 filteredRows.map((row) => {
                   const required = isCurrentlyRequired(row, today);
                   const classDefaultRequired = row.class_family_daily_report_required ?? false;
+                  const isWithdrawn = row.enrollment_status === "退園済み";
                   return (
-                    <tr key={row.child_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                    <tr
+                      key={row.child_id}
+                      className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
+                        isWithdrawn ? "text-slate-400" : ""
+                      }`}
+                    >
                       <td className="px-4 py-3 font-medium text-slate-800">
                         {row.display_name}
                         {row.honorific_suffix ?? ""}
                       </td>
                       <td className="px-4 py-3 text-slate-500">{row.class_name ?? "—"}</td>
                       <td className="px-4 py-3 text-slate-500">{row.birth_date}</td>
-                      <td className="px-4 py-3 text-slate-500">{row.enrollment_status}</td>
+                      <td className="px-4 py-3">
+                        {isWithdrawn ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                            退園済み{row.withdrawal_date ? `(${row.withdrawal_date})` : ""}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">{row.enrollment_status}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         {classDefaultRequired ? (
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
@@ -206,14 +233,24 @@ function ChildcareChildrenPageContent() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {!classDefaultRequired && (
-                          <button
-                            onClick={() => setEditingRow(row)}
-                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                          >
-                            期間設定
-                          </button>
-                        )}
+                        <div className="flex justify-end gap-2">
+                          {!classDefaultRequired && (
+                            <button
+                              onClick={() => setEditingRow(row)}
+                              className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                              期間設定
+                            </button>
+                          )}
+                          {!isWithdrawn && (
+                            <button
+                              onClick={() => setWithdrawingRow(row)}
+                              className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                            >
+                              退園
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -241,6 +278,29 @@ function ChildcareChildrenPageContent() {
           onClose={() => setIsPromoting(false)}
           onSaved={() => {
             setIsPromoting(false);
+            setReloadToken((t) => t + 1);
+          }}
+        />
+      )}
+
+      {isCreating && (
+        <CreateChildModal
+          officeId={selectedOffice}
+          classes={classes}
+          onClose={() => setIsCreating(false)}
+          onSaved={() => {
+            setIsCreating(false);
+            setReloadToken((t) => t + 1);
+          }}
+        />
+      )}
+
+      {withdrawingRow && (
+        <WithdrawChildModal
+          row={withdrawingRow}
+          onClose={() => setWithdrawingRow(null)}
+          onSaved={() => {
+            setWithdrawingRow(null);
             setReloadToken((t) => t + 1);
           }}
         />
