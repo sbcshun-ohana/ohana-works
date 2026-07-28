@@ -132,6 +132,9 @@
 3. Phase 0（権限境界整理）のタスク分解をClaude Codeに依頼
 4. グループ連絡機能の要件詰め（グループの種類・作成権限・通知方式・既読管理・終了時の扱い）
 5. 【未対応】園児マスタ（`/childcare/children`）のクラス列表示の基準日統一：`fetch_children_for_office_master`は`effective_end_date is null`の行を無条件表示するため、進級一括登録（`bulk_promote_children`）で未来日付（例：翌年度4/1）を事前登録すると、その瞬間から園児マスタ上はクラスが切り替わって見える。一方デイリーボード（`fetch_daily_board_for_office`）・欠席選択（`fetch_class_children`）・連絡帳必須判定（`is_family_daily_report_required`）・キオスク登園判定（`resolve-guardian-qr`）はいずれも`p_business_date`（実際の当日）基準で在籍クラスを解決するため、事前登録してから実際の開始日を迎えるまでの期間、同じ園児が画面によって違うクラスに見える状態になる。対処案：園児マスタのクラス列も`p_business_date`（今日）基準の解決に変え、あわせて「予約中の進級：○○組（開始日）」を別途表示する。2026-07-28時点で本番の`child_class_enrollments`はまだ実運用前（3行のみ）のため、直すコストが低いうちに対応するのが望ましい。
+6. 【未対応】キオスクの必須判定連動確認（実機QRスキャン）：`resolve-guardian-qr`の家庭連絡帳必須判定（`is_family_daily_report_required`/`has_family_daily_report_submitted`）は保護者アプリ側での確認（2026-07-28実施）で実証済みだが、キオスク端末での実際のQRスキャン→登園拒否のE2E確認はまだ未実施。カメラ(`mobile_scanner`)がiPhoneシミュレータ表示のQRを物理的に読み取れないため、実機（`parent_app`用iPhone実機、または大和オハナ保育園のIPAD-O-01相当の実機）が用意でき次第対応する。代替として`issue-guardian-qr-token`/`resolve-guardian-qr`をcurlで直接呼ぶ経路も特定済み（カメラ・キオスクUI以外は実物コードで検証可能）だが、保護者の実認証トークン入手方法が未確定。
+7. 【未対応・軽微】`/childcare/children`一覧で、退園済みの園児の行にも「期間設定」ボタンが表示されてしまう：`children/page.tsx`の表示条件が`!classDefaultRequired`のみで`!isWithdrawn`を見ていないため、退園済み園児（クラス在籍が無くなり`classDefaultRequired`がfalse扱いになる)でもボタンが出る。退園済みの行では非表示または無効化するのが自然。
+8. 【対応済み・2026-07-28】保護者アプリのホーム画面で、園児カードが保護者の人数分重複する不具合を修正した：マイグレーション98（`20260714000098_guardian_visibility_fixes.sql`）で`guardian_child_links`のSELECTポリシーが`guardian_id = my_guardian_id()`から`guardian_has_child_access(child_id)`に変更され、同じ園児に紐づく他の保護者（共同親権者等）の紐付け行も見えるようになったが（意図的な変更）、`fetchLinkedChildren()`側がこれに追従せず`child_id`単位の重複排除をしていなかったため、園児に保護者が2人以上いる家庭ではカードが重複表示されていた。`fetchLinkedChildren()`に`guardianId`必須引数を追加し明示的に自分の紐付け行のみ取得するよう修正、実機確認済み。
 
 ## 7. 未確定事項（推測で実装しない）
 
