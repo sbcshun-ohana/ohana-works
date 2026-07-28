@@ -131,6 +131,7 @@
 2. 上記完了後のシミュレータE2E再確認とコミット
 3. Phase 0（権限境界整理）のタスク分解をClaude Codeに依頼
 4. グループ連絡機能の要件詰め（グループの種類・作成権限・通知方式・既読管理・終了時の扱い）
+5. 【未対応】園児マスタ（`/childcare/children`）のクラス列表示の基準日統一：`fetch_children_for_office_master`は`effective_end_date is null`の行を無条件表示するため、進級一括登録（`bulk_promote_children`）で未来日付（例：翌年度4/1）を事前登録すると、その瞬間から園児マスタ上はクラスが切り替わって見える。一方デイリーボード（`fetch_daily_board_for_office`）・欠席選択（`fetch_class_children`）・連絡帳必須判定（`is_family_daily_report_required`）・キオスク登園判定（`resolve-guardian-qr`）はいずれも`p_business_date`（実際の当日）基準で在籍クラスを解決するため、事前登録してから実際の開始日を迎えるまでの期間、同じ園児が画面によって違うクラスに見える状態になる。対処案：園児マスタのクラス列も`p_business_date`（今日）基準の解決に変え、あわせて「予約中の進級：○○組（開始日）」を別途表示する。2026-07-28時点で本番の`child_class_enrollments`はまだ実運用前（3行のみ）のため、直すコストが低いうちに対応するのが望ましい。
 
 ## 7. 未確定事項（推測で実装しない）
 
