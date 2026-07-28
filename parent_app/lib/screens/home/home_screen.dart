@@ -26,12 +26,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _childrenFuture = widget.guardianService.fetchLinkedChildren();
+    _childrenFuture = widget.guardianService.fetchLinkedChildren(guardianId: widget.profile.id);
   }
 
   void _reload() {
     setState(() {
-      _childrenFuture = widget.guardianService.fetchLinkedChildren();
+      _childrenFuture = widget.guardianService.fetchLinkedChildren(guardianId: widget.profile.id);
     });
   }
 

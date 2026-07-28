@@ -51,8 +51,10 @@ class GuardianService {
     return GuardianProfile.fromJson(row);
   }
 
-  Future<List<LinkedChild>> fetchLinkedChildren() async {
-    final links = await _client.from('guardian_child_links').select('''
+  Future<List<LinkedChild>> fetchLinkedChildren({required String guardianId}) async {
+    final links = await _client
+        .from('guardian_child_links')
+        .select('''
       child_id,
       role,
       children (
@@ -65,7 +67,8 @@ class GuardianService {
           childcare_classes ( class_name, age_group )
         )
       )
-    ''');
+    ''')
+        .eq('guardian_id', guardianId);
     final linkRows = (links as List).cast<Map<String, dynamic>>();
     if (linkRows.isEmpty) return [];
 
