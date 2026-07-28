@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sha256Hex } from "../_shared/hash.ts";
 import { recordPunch } from "../_shared/record-punch.ts";
+import { getServiceSecretKey } from "../_shared/secret-key.ts";
 
 const VALID_PUNCH_TYPES = ["clock_in", "break_start", "break_end", "clock_out"];
 
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceRoleKey = getServiceSecretKey();
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: device } = await adminClient

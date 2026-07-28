@@ -5,6 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { recordPunch } from "../_shared/record-punch.ts";
+import { getServiceSecretKey } from "../_shared/secret-key.ts";
 
 const CONFIRMATION_WINDOW_MS = 2 * 60 * 1000; // 古い確認トークンの再利用防止
 
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceRoleKey = getServiceSecretKey();
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: device } = await adminClient

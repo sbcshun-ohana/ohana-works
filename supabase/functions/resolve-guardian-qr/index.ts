@@ -13,6 +13,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { sha256Hex } from "../_shared/hash.ts";
 import { tokyoDayBounds } from "../_shared/tokyo.ts";
 import { sendFcmPush } from "../_shared/push.ts";
+import { getServiceSecretKey } from "../_shared/secret-key.ts";
 
 function importHmacKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceRoleKey = getServiceSecretKey();
     const tokenSecret = Deno.env.get("GUARDIAN_QR_TOKEN_SECRET");
     if (!tokenSecret) throw new Error("GUARDIAN_QR_TOKEN_SECRET が未設定です");
 

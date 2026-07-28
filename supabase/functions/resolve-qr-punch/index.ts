@@ -7,6 +7,7 @@ import { verify } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sha256Hex } from "../_shared/hash.ts";
 import { tokyoDayBounds } from "../_shared/tokyo.ts";
+import { getServiceSecretKey } from "../_shared/secret-key.ts";
 
 type PunchRow = { punch_type: string; punched_at: string };
 
@@ -45,7 +46,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceRoleKey = getServiceSecretKey();
     const tokenSecret = Deno.env.get("QR_TOKEN_SECRET");
     if (!tokenSecret) throw new Error("QR_TOKEN_SECRET が未設定です");
 

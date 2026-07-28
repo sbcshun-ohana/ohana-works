@@ -6,6 +6,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sendFcmPush } from "../_shared/push.ts";
+import { getServiceSecretKey } from "../_shared/secret-key.ts";
 
 const FORCE_DELIVER_CATEGORIES = new Set([
   "emergency_contact",
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceRoleKey = getServiceSecretKey();
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     if (guardianId && !FORCE_DELIVER_CATEGORIES.has(category)) {

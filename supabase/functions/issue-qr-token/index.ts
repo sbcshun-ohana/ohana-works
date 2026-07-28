@@ -7,6 +7,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
+import { getServiceSecretKey } from "../_shared/secret-key.ts";
 
 const QR_TOKEN_TTL_SECONDS = 90; // 90秒(保護者QRのissue-guardian-qr-tokenと同じ仕様)
 
@@ -57,7 +58,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceRoleKey = getServiceSecretKey();
     const tokenSecret = Deno.env.get("QR_TOKEN_SECRET");
     if (!tokenSecret) {
       throw new Error("QR_TOKEN_SECRET が未設定です");
