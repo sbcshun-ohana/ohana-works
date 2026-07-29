@@ -201,6 +201,12 @@ cd ~/Desktop/AI開発/ohana-works/ohana_works && claude
 - 手順5: admin_web `.env.local` の既定値をステージング向けに切替(`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` をステージングプロジェクトの値に変更。`.env.local` はgitignore対象のためローカルのみの変更。本番の値はVercelの環境変数側にのみ存在する状態を維持)
 - 手順6: Flutter各アプリ(職員/キオスク/保育業務アプリ = ルートの `lib/`、保護者アプリ = `parent_app/lib/`)の `SupabaseConfig` を `--dart-define=APP_ENV=production` で本番、未指定(既定)でステージングに接続するよう変更。既存の `APP_MODE` と同じ dart-define 方式に揃えた
 
+**注意: 本番ビルド時は `--dart-define=APP_ENV=production` を忘れずに付与すること**
+
+`--dart-define` はコンパイル時定数のため、ビルド時点の値がバイナリに焼き込まれる。既にインストール済みのビルド(TestFlight/App Store配信分、キオスク端末、職員のスマホ等)は今回の変更前にビルドされたものなので影響を受けないが、**次に再ビルド・再配布する際、フラグを付け忘れると本番ではなくステージングに接続するアプリを配布してしまう**。
+
+現時点でCI/CD・fastlane等の自動ビルドの仕組みはリポジトリ内に存在せず、ビルド・配布は手動運用(`flutter build ios` 等を都度手で実行)。自動化するまでは、本番向けビルドを作る人が毎回このフラグの要否を確認すること。
+
 **残っている項目**
 
 - 手順7: 匿名化シードデータ(4施設・クラス構成・テスト職員[ダミーの園長役・施設長役・主任役・一般職員役を含む]・テスト園児)投入スクリプトの作成・実行
