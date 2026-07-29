@@ -198,11 +198,11 @@ cd ~/Desktop/AI開発/ohana-works/ohana_works && claude
 - 手順1: ステージング用Supabaseプロジェクトを作成(project ref: `ulzachwkkyrvmxfzktio`、Tokyoリージョン)
 - 手順3: マイグレーション1〜139番(139番は本項のすぐ下参照)を全適用し、`supabase migration list --linked` で本番・ステージングとも148本/差分0を確認
 - 手順4(前半): Edge Functions一式(10本)をステージングへデプロイ済み。Vault/Secretsは `GUARDIAN_QR_TOKEN_SECRET` / `QR_TOKEN_SECRET` をステージング専用の新規値で設定済み。`FCM_SERVICE_ACCOUNT_JSON` は未設定のまま進める方針(プッシュ通知の実機検証が必要になった時点で改めて設定)
+- 手順5: admin_web `.env.local` の既定値をステージング向けに切替(`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` をステージングプロジェクトの値に変更。`.env.local` はgitignore対象のためローカルのみの変更。本番の値はVercelの環境変数側にのみ存在する状態を維持)
+- 手順6: Flutter各アプリ(職員/キオスク/保育業務アプリ = ルートの `lib/`、保護者アプリ = `parent_app/lib/`)の `SupabaseConfig` を `--dart-define=APP_ENV=production` で本番、未指定(既定)でステージングに接続するよう変更。既存の `APP_MODE` と同じ dart-define 方式に揃えた
 
 **残っている項目**
 
-- 手順5: admin_web `.env.local` の既定値をステージング向けに切替
-- 手順6: Flutter各アプリの dart-define 既定値をステージング向けに切替
 - 手順7: 匿名化シードデータ(4施設・クラス構成・テスト職員[ダミーの園長役・施設長役・主任役・一般職員役を含む]・テスト園児)投入スクリプトの作成・実行
 
 **今回発覚した教訓: マイグレーションの環境依存ハードコーディング**
