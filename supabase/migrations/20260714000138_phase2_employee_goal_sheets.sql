@@ -245,14 +245,21 @@ begin
 end $$;
 
 -- ============================================================
--- 承認者指定テーブルの初期データ(2026-07-29 ユーザー確認済み)
+-- 承認者指定テーブルの初期データ(2026-07-29 ユーザー確認済み、本番の実在職員)。
+-- 該当職員が存在しない環境(ステージング等、まだ職員データが無い新規環境)では
+-- 何もしない(環境ごとのシードスクリプトが別途担当する)。マイグレーションを
+-- 環境非依存に保つため、存在チェックを必須にする。
 -- ============================================================
 insert into employee_goal_sheet_office_approvers (office_id, approver_employee_id)
 select o.id, '338b0302-05f1-4c61-99da-755a3ddc8e3b'::uuid -- 大原利奈
-from offices o where o.name = '大和オハナ保育園'
+from offices o
+where o.name = '大和オハナ保育園'
+  and exists (select 1 from employees e where e.id = '338b0302-05f1-4c61-99da-755a3ddc8e3b'::uuid)
 union all
 select o.id, '720133bb-d7b4-4238-a297-ce672f89cec5'::uuid -- 髙木俊
-from offices o where o.name in ('BABY MAHALO', 'Mahalo Station', 'Halelea');
+from offices o
+where o.name in ('BABY MAHALO', 'Mahalo Station', 'Halelea')
+  and exists (select 1 from employees e where e.id = '720133bb-d7b4-4238-a297-ce672f89cec5'::uuid);
 
 -- ============================================================
 -- RPC: 対象職員候補(経営層=承認者指定テーブル登録者を除外)
