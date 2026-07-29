@@ -3,6 +3,12 @@
   "private": true,
   "description": "運用スクリプト専用の隔離されたNode環境(admin_web本番依存とは分離)",
   "dependencies": {
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@supabase/supabase-js": "^2.110.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.1",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.2"
   }
 }
