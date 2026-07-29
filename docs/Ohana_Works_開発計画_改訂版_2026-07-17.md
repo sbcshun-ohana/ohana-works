@@ -135,6 +135,7 @@
 6. 【未対応】キオスクの必須判定連動確認（実機QRスキャン）：`resolve-guardian-qr`の家庭連絡帳必須判定（`is_family_daily_report_required`/`has_family_daily_report_submitted`）は保護者アプリ側での確認（2026-07-28実施）で実証済みだが、キオスク端末での実際のQRスキャン→登園拒否のE2E確認はまだ未実施。カメラ(`mobile_scanner`)がiPhoneシミュレータ表示のQRを物理的に読み取れないため、実機（`parent_app`用iPhone実機、または大和オハナ保育園のIPAD-O-01相当の実機）が用意でき次第対応する。代替として`issue-guardian-qr-token`/`resolve-guardian-qr`をcurlで直接呼ぶ経路も特定済み（カメラ・キオスクUI以外は実物コードで検証可能）だが、保護者の実認証トークン入手方法が未確定。
 7. 【未対応・軽微】`/childcare/children`一覧で、退園済みの園児の行にも「期間設定」ボタンが表示されてしまう：`children/page.tsx`の表示条件が`!classDefaultRequired`のみで`!isWithdrawn`を見ていないため、退園済み園児（クラス在籍が無くなり`classDefaultRequired`がfalse扱いになる)でもボタンが出る。退園済みの行では非表示または無効化するのが自然。
 8. 【対応済み・2026-07-28】保護者アプリのホーム画面で、園児カードが保護者の人数分重複する不具合を修正した：マイグレーション98（`20260714000098_guardian_visibility_fixes.sql`）で`guardian_child_links`のSELECTポリシーが`guardian_id = my_guardian_id()`から`guardian_has_child_access(child_id)`に変更され、同じ園児に紐づく他の保護者（共同親権者等）の紐付け行も見えるようになったが（意図的な変更）、`fetchLinkedChildren()`側がこれに追従せず`child_id`単位の重複排除をしていなかったため、園児に保護者が2人以上いる家庭ではカードが重複表示されていた。`fetchLinkedChildren()`に`guardianId`必須引数を追加し明示的に自分の紐付け行のみ取得するよう修正、実機確認済み。
+9. 【未対応・TODO】個別目標シートのAI下書き（`generate_employee_goal_section_draft` RPC、`20260714000138`）は**現在モック実装**。Anthropic Console（API従量課金契約）が未契約のため、`ai_runs.provider = 'mock'`で仮の文章（プレフィックス「【AI生成(モック)】」）を返しているだけで、実際にAnthropic APIを呼び出していない。契約完了後、同RPC内のモック応答生成部分をEdge Function経由の実API呼び出しに差し替えること（`generate-contact-note`の`callAI()`と同様の差し替えパターン）。Phase 2の動作確認では「モック応答が返ること」の確認までとし、「AI下書き機能が完成した」とは報告しない（実API接続は別タスクとして残す。指示書§6.2にも記載済み）。
 
 ## 7. 未確定事項（推測で実装しない）
 
