@@ -89,7 +89,9 @@ create index idx_cin_child_cat     on child_internal_notes (child_id, category, 
 | 保護者 | ✗(ポリシー無し) | ✗ | ✗ | ✗ |
 | 一般職員(担任) | 自施設の在籍児 | 可 | 自分の記録のみ、作成から24時間以内 | 自分の記録のみ、作成から24時間以内 |
 | 主任・管理者・園長 | 自施設の在籍児 | 可 | 自施設のすべて | 自施設のすべて |
-| 施設長・system_admin | 全施設 | 可 | 全施設 | 全施設 |
+| system_admin | 全施設 | 可 | 全施設 | 全施設 |
+
+> **役職の実態に関する注記(2026-07-30 追記・修正)**: 本システムに「施設長」という役職コードは存在しない(`roles` は system_admin / labor_manager / director[園長] / chief[主任] / office_manager[園管理者] / viewer / staff の7種)。実装済みの `is_child_internal_notes_chief`(= `is_support_childcare_chief`)は `r.code in ('chief','office_manager','director','system_admin')` かつ施設スコープ(`office_id is null` なら全施設)で判定する。したがって**「全施設」の権限を持つのは `system_admin`(または `employee_roles.office_id is null` の管理ロール)のみ**。業務上の「施設長(オーナー=複数施設の統括者)」は現状 `system_admin`、または複数施設分の `office_manager` として表現される(専用ロールは無い)。将来 `docs/統括管理者_調査報告_2026-07-30.md` の付与方式が実装されれば、その付与で複数施設に管理権限が及ぶ。
 
 「自施設」「主任以上」の判定は既存の職員権限判定関数を再利用する(Phase 2/3 で使ったもの。新しい判定ロジックを書かない)。
 
