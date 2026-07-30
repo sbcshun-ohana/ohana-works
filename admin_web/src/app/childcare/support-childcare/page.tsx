@@ -705,8 +705,7 @@ function SupportChildcarePageContent() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              const candId = rows.find((r) => r.child_id === row.child_id);
-                              if (candId) void createApplication(row.child_id);
+                              void createApplication(row.candidate_id);
                             }}
                             className="rounded-lg border border-sky-300 px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50"
                           >

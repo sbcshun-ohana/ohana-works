@@ -415,6 +415,7 @@ export type SupportChildcareApplicationStatus =
 export type SupportChildcareCandidacyStatus = "candidate" | "under_review" | "submission_target" | "excluded";
 
 export type SupportChildcareApplicationRow = {
+  candidate_id: string;
   application_id: string | null;
   child_id: string;
   child_name: string;
