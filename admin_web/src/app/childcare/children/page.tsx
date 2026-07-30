@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
@@ -37,6 +38,23 @@ function ChildcareChildrenPageContent() {
   const [isPromoting, setIsPromoting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
+  const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
+  const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
+
+  // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
+  useEffect(() => {
+    function load() {
+      if (!selectedOffice) {
+        setInternalNotesEnabled(false);
+        return;
+      }
+      const supabase = createClient();
+      supabase
+        .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
+    }
+    load();
+  }, [selectedOffice]);
 
   useEffect(() => {
     function loadRows() {
@@ -234,6 +252,14 @@ function ChildcareChildrenPageContent() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
+                          {internalNotesEnabled && (
+                            <button
+                              onClick={() => setInternalNotesRow(row)}
+                              className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                              園内記録
+                            </button>
+                          )}
                           {!classDefaultRequired && (
                             <button
                               onClick={() => setEditingRow(row)}
@@ -303,6 +329,15 @@ function ChildcareChildrenPageContent() {
             setWithdrawingRow(null);
             setReloadToken((t) => t + 1);
           }}
+        />
+      )}
+
+      {internalNotesRow && (
+        <ChildInternalNotesModal
+          childId={internalNotesRow.child_id}
+          childName={`${internalNotesRow.display_name}${internalNotesRow.honorific_suffix ?? ""}`}
+          officeId={selectedOffice}
+          onClose={() => setInternalNotesRow(null)}
         />
       )}
     </div>

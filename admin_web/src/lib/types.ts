@@ -534,3 +534,30 @@ export type SupportChildcareAiDraftResult = {
   evidence_count: number;
   low_evidence: boolean;
 };
+
+// ---- 園内記録 ----
+
+export type ChildInternalNoteCategory = "handover" | "observation" | "guardian_contact" | "external_agency" | "other";
+
+// 区分の日本語表示名(定数ファイル1箇所に集約。Ohana Kidsを実装する際もここを参照する)
+export const CHILD_INTERNAL_NOTE_CATEGORY_LABELS: Record<ChildInternalNoteCategory, string> = {
+  handover: "申し送り",
+  observation: "個人日誌",
+  guardian_contact: "保護者との面談記録",
+  external_agency: "療育等との連携記録",
+  other: "その他",
+};
+
+export type ChildInternalNote = {
+  id: string;
+  child_id: string;
+  office_id: string;
+  note_date: string;
+  category: ChildInternalNoteCategory;
+  body: string;
+  ai_excluded: boolean;
+  author_employee_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};

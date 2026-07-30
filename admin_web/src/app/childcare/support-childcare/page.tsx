@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import type {
   SupportChildcareAgencyLink,
@@ -136,6 +137,9 @@ function SupportChildcarePageContent() {
   const [detail, setDetail] = useState<SupportChildcareApplicationDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [childHeaderInfo, setChildHeaderInfo] = useState<SupportChildcareChildHeaderInfo | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [internalNotesOpen, setInternalNotesOpen] = useState(false);
+  const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [terms, setTerms] = useState<SupportChildcareForm2Term[]>([]);
   const [checkItems, setCheckItems] = useState<SupportChildcareCheckItem[]>([]);
   const [checkedBehaviorIds, setCheckedBehaviorIds] = useState<string[]>([]);
@@ -154,6 +158,21 @@ function SupportChildcarePageContent() {
   const [classHeadcounts, setClassHeadcounts] = useState<SupportChildcareClassHeadcount[]>([]);
   const [classSettingsModalOpen, setClassSettingsModalOpen] = useState(false);
   const [classSettingsDraft, setClassSettingsDraft] = useState<Record<number, { extra_staff_count: string; staff_count: string; notes: string }>>({});
+
+  // 園内記録機能フラグ(施設単位)。ONの施設のみ「この児童の園内記録を見る」導線を表示する
+  useEffect(() => {
+    function load() {
+      if (!selectedOffice) {
+        setInternalNotesEnabled(false);
+        return;
+      }
+      const supabase = createClient();
+      supabase
+        .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
+    }
+    load();
+  }, [selectedOffice]);
 
   // 施設の参加プログラム一覧(support_childcare_program_offices+programsを直接読み取り)
   useEffect(() => {
@@ -317,6 +336,7 @@ function SupportChildcarePageContent() {
     function load() {
       if (!selectedApplicationId) {
         setChildHeaderInfo(null);
+        setSelectedChildId(null);
         return;
       }
       const supabase = createClient();
@@ -331,8 +351,10 @@ function SupportChildcarePageContent() {
             | null;
           if (error || !cand) {
             setChildHeaderInfo(null);
+            setSelectedChildId(null);
             return;
           }
+          setSelectedChildId(cand.child_id);
           supabase
             .from("children")
             .select("full_name, name_kana, birth_date, gender")
@@ -814,6 +836,14 @@ function SupportChildcarePageContent() {
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {internalNotesEnabled && selectedChildId && (
+                      <button
+                        onClick={() => setInternalNotesOpen(true)}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                      >
+                        この児童の園内記録を見る
+                      </button>
+                    )}
                     {editable && (detail.status === "draft" || detail.status === "ai_draft" || detail.status === "returned") && (
                       <button onClick={submitForReview} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">
                         提出(確認へ)
@@ -1365,6 +1395,15 @@ function SupportChildcarePageContent() {
               </div>
             </div>
           </div>
+        )}
+
+        {internalNotesOpen && selectedChildId && detail && (
+          <ChildInternalNotesModal
+            childId={selectedChildId}
+            childName={detail.child_name}
+            officeId={selectedOffice}
+            onClose={() => setInternalNotesOpen(false)}
+          />
         )}
       </main>
     </div>
