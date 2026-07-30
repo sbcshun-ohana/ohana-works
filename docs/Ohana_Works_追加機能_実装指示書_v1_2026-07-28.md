@@ -72,6 +72,19 @@ cd ~/Desktop/AI開発/ohana-works/ohana_works && claude
 - ローカル変数は `v_` 接頭辞で統一
 - 作成後、次の観点で自己レビューする: 「戻り値列名の集合」と「本体が参照する全テーブルの列名の集合」の積集合に含まれる名前が、無修飾で本体に出現していないか(この機械的スキャンで過去の全件洗い出しを行った実績がある)
 
+## 3.2b `log_sensitive_access()` を呼ぶ閲覧RPCは `stable` にしない(既知の頻出バグ)
+
+`log_sensitive_access()` は `sensitive_access_logs` への INSERT を伴う。この関数を呼ぶRPCを `stable`(または `immutable`)として定義すると、PostgRESTがそのRPC呼び出しを読み取り専用トランザクションとして実行するため、`cannot execute INSERT in a read-only transaction` で**実行時に必ず失敗**する。
+
+- 「見た目は読み取り専用の関数」に飛びついて `stable` を付けないこと。`log_sensitive_access()` を呼ぶ関数は例外なく `volatile`(既定、`language plpgsql security definer set search_path = public` のみでvolatile/stable指定を書かない)にする
+- 既存の同種関数(`fetch_payroll_transfer_recipients`・`fetch_employees_tax_withholding_status`・`fetch_employee_facility_wages`)はいずれもこの理由でvolatile
+- **型チェック・マイグレーションのドライラン(`begin;`〜`rollback;`)では検出できない。** ドライランはservice_role/postgres接続で実行され読み取り専用トランザクション化の対象にならないため、エラーが再現しない。**実際にPostgREST経由(実サインインセッションまたは相当のRPC呼び出し)で実行する拒否側/正常系E2Eでのみ発覚する**(園内記録機能Phase Bで実際に発生した不具合。マイグレーション145→146番で修正)
+- 新規に閲覧系RPCを作る際は、作成後に `select proname, provolatile from pg_proc where proname = '...';` で `v`(volatile)になっていることを確認する
+
+## 3.2c `stable`/`immutable` 全体の横断チェック(2026-07-30時点)
+
+`log_sensitive_access()` を呼ぶ全関数(`fetch_child_internal_notes`・`fetch_child_internal_notes_for_ai`・`fetch_employee_facility_wages`・`fetch_employees_tax_withholding_status`・`fetch_payroll_transfer_recipients`)は、上記修正後すべて`volatile`であることを確認済み。他に同様の不具合を抱える既存関数は無い。
+
 ## 3.3 本番DBでの検証プロトコル(ステージング導入までの間)
 
 - 書き込みを伴う検証は `begin; ... SELECTで確認 ...; rollback;`(確定するときのみ commit)を**1つのSQLファイルにまとめ、`supabase db query --linked --file` の1回のツール呼び出しで実行**する。分割実行すると begin が効かず即コミットされる
