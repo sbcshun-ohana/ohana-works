@@ -166,3 +166,20 @@ from roles r
 left join employee_roles er on er.role_id = r.id
 group by r.code, r.sort_order
 order by r.sort_order;
+
+
+-- ---------------------------------------------------------------------
+-- ⑦ (任意) burden_fee_masters / burden_fee_records の本番件数
+--    確認内容: ②でヒットした2テーブルは「職員の給食費(まかない)負担金=給与控除」で
+--              M3(保護者請求)とは無関係、と調査済み(Phase A報告§8.2)。本番の規模を
+--              念のため確認するための任意クエリ(M3設計には影響しない)。
+-- ---------------------------------------------------------------------
+select 'burden_fee_masters' as t, count(*) as n from burden_fee_masters
+union all
+select 'burden_fee_records', count(*) from burden_fee_records;
+
+-- 参考: 施設別単価(職員給食費の単価。保育料ではない)
+select o.name as office, m.unit_price, m.effective_start_date
+from burden_fee_masters m
+join offices o on o.id = m.office_id
+order by o.name;
