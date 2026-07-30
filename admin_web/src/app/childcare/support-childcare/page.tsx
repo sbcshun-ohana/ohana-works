@@ -12,6 +12,7 @@ import type {
   SupportChildcareApplicationRow,
   SupportChildcareCandidatePoolRow,
   SupportChildcareCheckItem,
+  SupportChildcareChildHeaderInfo,
   SupportChildcareForm2Term,
   SupportChildcareGuardianMeeting,
   SupportChildcareSubmissionSummary,
@@ -37,11 +38,59 @@ const CANDIDACY_LABELS: Record<string, string> = {
   excluded: "対象外",
 };
 
+// ラベルは原本xlsxのチェック項目の文言そのまま(巡回相談・発達相談の窓口は
+// 大和市「すくすく子育て課発達支援係」が担当するため、その旨を明記する)。
 const AGENCY_TYPE_LABELS: Record<string, string> = {
-  patrol_consultation: "巡回相談",
-  developmental_consultation: "発達相談",
-  child_development_support_office: "児童発達支援事業所",
-  facility_visit_support: "保育所等訪問支援",
+  patrol_consultation: "すくすく子育て課発達支援係の巡回相談にて相談している",
+  developmental_consultation: "すくすく子育て課発達支援係で発達相談をしている",
+  child_development_support_office: "児童発達支援事業所に通っている",
+  facility_visit_support: "保育所等訪問支援が入っている",
+};
+
+// 区分ごとに必要な入力項目が異なる(原本xlsxで区分ごとに別レイアウトのため)
+const AGENCY_FIELD_CONFIG: Record<
+  string,
+  {
+    contactPersonLabel: string | null;
+    showConsultationDate: boolean;
+    showEnrollmentDate: boolean;
+    showAgencyName: boolean;
+    showFrequency: boolean;
+    contentLabel: string;
+  }
+> = {
+  patrol_consultation: {
+    contactPersonLabel: "担当者",
+    showConsultationDate: true,
+    showEnrollmentDate: false,
+    showAgencyName: false,
+    showFrequency: false,
+    contentLabel: "具体的な連携内容",
+  },
+  developmental_consultation: {
+    contactPersonLabel: "担当者",
+    showConsultationDate: true,
+    showEnrollmentDate: false,
+    showAgencyName: false,
+    showFrequency: false,
+    contentLabel: "具体的な連携内容",
+  },
+  child_development_support_office: {
+    contactPersonLabel: null,
+    showConsultationDate: false,
+    showEnrollmentDate: true,
+    showAgencyName: true,
+    showFrequency: true,
+    contentLabel: "具体的な連携内容(事業所等の担当者を含む)",
+  },
+  facility_visit_support: {
+    contactPersonLabel: "担当心理士",
+    showConsultationDate: false,
+    showEnrollmentDate: false,
+    showAgencyName: false,
+    showFrequency: true,
+    contentLabel: "具体的な連携内容",
+  },
 };
 
 const TERM_FIELD_LABELS: { key: "child_behavior" | "considered_factors" | "support_measures" | "evaluation"; label: string }[] = [
@@ -84,6 +133,7 @@ function SupportChildcarePageContent() {
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SupportChildcareApplicationDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [childHeaderInfo, setChildHeaderInfo] = useState<SupportChildcareChildHeaderInfo | null>(null);
   const [terms, setTerms] = useState<SupportChildcareForm2Term[]>([]);
   const [checkItems, setCheckItems] = useState<SupportChildcareCheckItem[]>([]);
   const [checkedBehaviorIds, setCheckedBehaviorIds] = useState<string[]>([]);
@@ -95,6 +145,7 @@ function SupportChildcarePageContent() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [candidatePool, setCandidatePool] = useState<SupportChildcareCandidatePoolRow[] | null>(null);
+  const [newAgencyType, setNewAgencyType] = useState<string>("patrol_consultation");
 
   // 施設の参加プログラム一覧(support_childcare_program_offices+programsを直接読み取り)
   useEffect(() => {
@@ -192,7 +243,7 @@ function SupportChildcarePageContent() {
         });
       supabase
         .from("support_childcare_guardian_meetings")
-        .select("id, meeting_date, meeting_type, attendee, content, guardian_intention")
+        .select("id, meeting_date, attendee, content, guardian_intention")
         .eq("application_id", selectedApplicationId)
         .order("meeting_date", { ascending: false })
         .then(({ data, error }) => {
@@ -200,7 +251,7 @@ function SupportChildcarePageContent() {
         });
       supabase
         .from("support_childcare_agency_links")
-        .select("id, agency_type, contact_person, consultation_date, enrollment_start_date, frequency, content, support_outcome")
+        .select("id, agency_type, contact_person, consultation_date, enrollment_start_date, agency_name, frequency, content, support_outcome")
         .eq("application_id", selectedApplicationId)
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
@@ -217,6 +268,55 @@ function SupportChildcarePageContent() {
     }
     load();
   }, [selectedApplicationId, reloadToken]);
+
+  // 様式2冒頭の児童氏名・生年月日・クラス名は既知の情報のため自動表示のみ(手入力欄にしない)
+  useEffect(() => {
+    function load() {
+      if (!selectedApplicationId) {
+        setChildHeaderInfo(null);
+        return;
+      }
+      const supabase = createClient();
+      supabase
+        .from("support_childcare_applications")
+        .select("support_childcare_candidates(child_id, class_id)")
+        .eq("id", selectedApplicationId)
+        .single()
+        .then(({ data, error }) => {
+          const cand = data?.support_childcare_candidates as unknown as
+            | { child_id: string; class_id: string | null }
+            | null;
+          if (error || !cand) {
+            setChildHeaderInfo(null);
+            return;
+          }
+          supabase
+            .from("children")
+            .select("full_name, name_kana, birth_date, gender")
+            .eq("id", cand.child_id)
+            .single()
+            .then(({ data: child, error: childError }) => {
+              if (childError || !child) {
+                setChildHeaderInfo(null);
+                return;
+              }
+              if (!cand.class_id) {
+                setChildHeaderInfo({ ...child, class_name: null, age_group: null });
+                return;
+              }
+              supabase
+                .from("childcare_classes")
+                .select("class_name, age_group")
+                .eq("id", cand.class_id)
+                .single()
+                .then(({ data: cls }) => {
+                  setChildHeaderInfo({ ...child, class_name: cls?.class_name ?? null, age_group: cls?.age_group ?? null });
+                });
+            });
+        });
+    }
+    load();
+  }, [selectedApplicationId]);
 
   // form1に紐づくチェック・使途を取得(detail確定後)
   useEffect(() => {
@@ -301,14 +401,15 @@ function SupportChildcarePageContent() {
     const { error } = await supabase.rpc("update_support_childcare_form1", {
       p_application_id: detail.application_id,
       p_recorded_on: detail.form1_recorded_on,
-      p_class_size_3: detail.form1_class_size_3,
-      p_class_size_4: detail.form1_class_size_4,
-      p_class_size_5: detail.form1_class_size_5,
       p_extra_staff_count_3: detail.form1_extra_staff_count_3,
       p_extra_staff_count_4: detail.form1_extra_staff_count_4,
       p_extra_staff_count_5: detail.form1_extra_staff_count_5,
-      p_staff_count: detail.form1_staff_count,
-      p_notes: detail.form1_notes,
+      p_staff_count_3: detail.form1_staff_count_3,
+      p_staff_count_4: detail.form1_staff_count_4,
+      p_staff_count_5: detail.form1_staff_count_5,
+      p_notes_3: detail.form1_notes_3,
+      p_notes_4: detail.form1_notes_4,
+      p_notes_5: detail.form1_notes_5,
       p_policy_stance_item_id: detail.form1_policy_stance_item_id,
       p_policy_target_month: detail.form1_policy_target_month,
       p_policy_no_extra_staff_reason: detail.form1_policy_no_extra_staff_reason,
@@ -405,7 +506,6 @@ function SupportChildcarePageContent() {
     const { error } = await supabase.rpc("record_support_childcare_guardian_meeting", {
       p_application_id: detail.application_id,
       p_meeting_date: formData.get("meeting_date"),
-      p_meeting_type: formData.get("meeting_type"),
       p_attendee: formData.get("attendee") || null,
       p_content: formData.get("content") || null,
       p_guardian_intention: formData.get("guardian_intention") || null,
@@ -426,6 +526,7 @@ function SupportChildcarePageContent() {
       p_contact_person: formData.get("contact_person") || null,
       p_consultation_date: formData.get("consultation_date") || null,
       p_enrollment_start_date: formData.get("enrollment_start_date") || null,
+      p_agency_name: formData.get("agency_name") || null,
       p_frequency: formData.get("frequency") || null,
       p_content: formData.get("content") || null,
       p_support_outcome: formData.get("support_outcome") || null,
@@ -693,71 +794,73 @@ function SupportChildcarePageContent() {
                 {/* 様式1 */}
                 <div className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-800">様式1: 集団生活で支援を必要とする子どもの姿</h3>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500">記入日</label>
-                      <input
-                        type="date"
-                        disabled={!editable}
-                        value={detail.form1_recorded_on ?? ""}
-                        onChange={(e) => setDetail({ ...detail, form1_recorded_on: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                      />
-                    </div>
-                    {(["3", "4", "5"] as const).map((age) => (
-                      <div key={age}>
-                        <label className="mb-1 block text-xs text-slate-500">{age}歳児クラス人数</label>
-                        <input
-                          type="number"
-                          disabled={!editable}
-                          value={detail[`form1_class_size_${age}` as keyof SupportChildcareApplicationDetail] as number | null ?? ""}
-                          onChange={(e) =>
-                            setDetail({ ...detail, [`form1_class_size_${age}`]: e.target.value ? Number(e.target.value) : null })
-                          }
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                        />
-                      </div>
-                    ))}
-                    {(["3", "4", "5"] as const).map((age) => (
-                      <div key={`extra-${age}`}>
-                        <label className="mb-1 block text-xs text-slate-500">{age}歳児加配児童数</label>
-                        <input
-                          type="number"
-                          disabled={!editable}
-                          value={detail[`form1_extra_staff_count_${age}` as keyof SupportChildcareApplicationDetail] as number | null ?? ""}
-                          onChange={(e) =>
-                            setDetail({ ...detail, [`form1_extra_staff_count_${age}`]: e.target.value ? Number(e.target.value) : null })
-                          }
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                        />
-                      </div>
-                    ))}
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500">職員数</label>
-                      <input
-                        type="number"
-                        disabled={!editable}
-                        value={detail.form1_staff_count ?? ""}
-                        onChange={(e) => setDetail({ ...detail, form1_staff_count: e.target.value ? Number(e.target.value) : null })}
-                        className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                      />
-                    </div>
-                  </div>
                   <div>
-                    <label className="mb-1 block text-xs text-slate-500">備考</label>
-                    <textarea
+                    <label className="mb-1 block text-xs text-slate-500">記入日</label>
+                    <input
+                      type="date"
                       disabled={!editable}
-                      rows={2}
-                      value={detail.form1_notes ?? ""}
-                      onChange={(e) => setDetail({ ...detail, form1_notes: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
+                      value={detail.form1_recorded_on ?? ""}
+                      onChange={(e) => setDetail({ ...detail, form1_recorded_on: e.target.value })}
+                      className="w-48 rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
                     />
+                  </div>
+
+                  {/* クラス編成・職員配置: 3・4・5歳児クラスごとに加配児童数・職員数・備考が別入力 */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                          <th className="px-2 py-1">クラス</th>
+                          <th className="px-2 py-1">加配児童数</th>
+                          <th className="px-2 py-1">職員数</th>
+                          <th className="px-2 py-1">備考</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(["3", "4", "5"] as const).map((age) => (
+                          <tr key={age} className="border-b border-slate-100 last:border-0">
+                            <td className="px-2 py-1 font-medium text-slate-700">{age}歳児クラス</td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="number"
+                                disabled={!editable}
+                                value={detail[`form1_extra_staff_count_${age}` as keyof SupportChildcareApplicationDetail] as number | null ?? ""}
+                                onChange={(e) =>
+                                  setDetail({ ...detail, [`form1_extra_staff_count_${age}`]: e.target.value ? Number(e.target.value) : null })
+                                }
+                                className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
+                              />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="number"
+                                disabled={!editable}
+                                value={detail[`form1_staff_count_${age}` as keyof SupportChildcareApplicationDetail] as number | null ?? ""}
+                                onChange={(e) =>
+                                  setDetail({ ...detail, [`form1_staff_count_${age}`]: e.target.value ? Number(e.target.value) : null })
+                                }
+                                className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
+                              />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="text"
+                                disabled={!editable}
+                                value={(detail[`form1_notes_${age}` as keyof SupportChildcareApplicationDetail] as string | null) ?? ""}
+                                onChange={(e) => setDetail({ ...detail, [`form1_notes_${age}`]: e.target.value })}
+                                className="w-full min-w-[10rem] rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
 
                   <div>
                     <p className="mb-1 text-xs font-semibold text-slate-600">＜1＞保育園の今後の方針</p>
                     <div className="space-y-1">
-                      {policyItems.map((item) => (
+                      {policyItems.map((item, index) => (
                         <label key={item.id} className="flex items-center gap-2 text-sm text-slate-700">
                           <input
                             type="radio"
@@ -766,32 +869,58 @@ function SupportChildcarePageContent() {
                             onChange={() => setDetail({ ...detail, form1_policy_stance_item_id: item.id })}
                           />
                           {item.label}
+                          {index === 3 && <span className="text-xs text-slate-400">(入力欄は任意)</span>}
                         </label>
                       ))}
                     </div>
-                    <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-                      <input
-                        placeholder="目途(令和何年何月頃)"
-                        disabled={!editable}
-                        value={detail.form1_policy_target_month ?? ""}
-                        onChange={(e) => setDetail({ ...detail, form1_policy_target_month: e.target.value })}
-                        className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                      />
-                      <input
-                        placeholder="保育士配置が困難な理由"
-                        disabled={!editable}
-                        value={detail.form1_policy_no_extra_staff_reason ?? ""}
-                        onChange={(e) => setDetail({ ...detail, form1_policy_no_extra_staff_reason: e.target.value })}
-                        className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                      />
-                      <input
-                        placeholder="申請しない理由"
-                        disabled={!editable}
-                        value={detail.form1_policy_no_application_reason ?? ""}
-                        onChange={(e) => setDetail({ ...detail, form1_policy_no_application_reason: e.target.value })}
-                        className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                      />
-                    </div>
+                    {/* 選択したラジオボタンに応じて必要な入力欄のみ表示する。
+                        1番目=目途必須、2番目=目途+配置困難理由必須、3番目=配置困難理由必須、4番目=いずれも不要(理由欄は任意で表示) */}
+                    {(() => {
+                      const selectedIndex = policyItems.findIndex((p) => p.id === detail.form1_policy_stance_item_id);
+                      if (selectedIndex < 0) return null;
+                      const needsTargetMonth = selectedIndex === 0 || selectedIndex === 1;
+                      const needsNoStaffReason = selectedIndex === 1 || selectedIndex === 2;
+                      const showNoApplicationReason = selectedIndex === 3;
+                      const requiredClass = "border-amber-400 bg-amber-50";
+                      const normalClass = "border-slate-300";
+                      return (
+                        <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                          {needsTargetMonth && (
+                            <div>
+                              <label className="mb-1 block text-xs font-semibold text-amber-700">目途(令和何年何月頃)【必須】</label>
+                              <input
+                                disabled={!editable}
+                                value={detail.form1_policy_target_month ?? ""}
+                                onChange={(e) => setDetail({ ...detail, form1_policy_target_month: e.target.value })}
+                                className={`w-full rounded-lg border px-2 py-1.5 text-sm disabled:bg-slate-50 ${requiredClass}`}
+                              />
+                            </div>
+                          )}
+                          {needsNoStaffReason && (
+                            <div>
+                              <label className="mb-1 block text-xs font-semibold text-amber-700">保育士配置が困難な理由【必須】</label>
+                              <input
+                                disabled={!editable}
+                                value={detail.form1_policy_no_extra_staff_reason ?? ""}
+                                onChange={(e) => setDetail({ ...detail, form1_policy_no_extra_staff_reason: e.target.value })}
+                                className={`w-full rounded-lg border px-2 py-1.5 text-sm disabled:bg-slate-50 ${requiredClass}`}
+                              />
+                            </div>
+                          )}
+                          {showNoApplicationReason && (
+                            <div>
+                              <label className="mb-1 block text-xs text-slate-500">申請しない理由(任意)</label>
+                              <input
+                                disabled={!editable}
+                                value={detail.form1_policy_no_application_reason ?? ""}
+                                onChange={(e) => setDetail({ ...detail, form1_policy_no_application_reason: e.target.value })}
+                                className={`w-full rounded-lg border px-2 py-1.5 text-sm disabled:bg-slate-50 ${normalClass}`}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -875,6 +1004,14 @@ function SupportChildcarePageContent() {
                 {/* 様式2 */}
                 <div className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-800">様式2: 個別支援計画及び発達経過記録</h3>
+                  {childHeaderInfo && (
+                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 md:grid-cols-4">
+                      <p>児童氏名: {childHeaderInfo.full_name}</p>
+                      <p>生年月日: {childHeaderInfo.birth_date}</p>
+                      <p>クラス名: {childHeaderInfo.class_name ?? "-"}</p>
+                      <p>年齢: {childHeaderInfo.age_group ?? "-"}</p>
+                    </div>
+                  )}
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">年間目標</label>
                     <textarea
@@ -935,16 +1072,14 @@ function SupportChildcarePageContent() {
                   ))}
                 </div>
 
-                {/* 保護者面談 */}
+                {/* 保護者面談(すべて正式面談として記録。送迎時の会話は支援記録として認められないため選択肢自体を廃止) */}
                 <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-800">＜2＞保護者との連携(面談記録)</h3>
                   {meetings.map((m) => (
                     <div key={m.id} className="rounded-lg border border-slate-100 p-2 text-sm">
-                      <p className="text-xs text-slate-500">
-                        {m.meeting_date}({m.meeting_type === "formal" ? "正式面談" : "送迎時の会話"}) 面談者: {m.attendee ?? "-"}
-                      </p>
+                      <p className="text-xs text-slate-500">{m.meeting_date} 面談者: {m.attendee ?? "-"}</p>
                       <p className="text-slate-700">{m.content}</p>
-                      {m.guardian_intention && <p className="text-slate-500">保護者の意向: {m.guardian_intention}</p>}
+                      {m.guardian_intention && <p className="mt-1 whitespace-pre-wrap text-slate-500">保護者の意向: {m.guardian_intention}</p>}
                     </div>
                   ))}
                   {editable && (
@@ -955,13 +1090,19 @@ function SupportChildcarePageContent() {
                       className="grid grid-cols-1 gap-2 rounded-lg bg-slate-50 p-3 md:grid-cols-2"
                     >
                       <input name="meeting_date" type="date" required className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-                      <select name="meeting_type" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
-                        <option value="formal">正式面談</option>
-                        <option value="pickup_dropoff_note">送迎時の会話</option>
-                      </select>
                       <input name="attendee" placeholder="面談者" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-                      <input name="guardian_intention" placeholder="保護者の意向" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-                      <textarea name="content" placeholder="面談内容" className="md:col-span-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                      <textarea
+                        name="content"
+                        placeholder="面談内容(現在の支援の状況、今後に向けて等)"
+                        rows={4}
+                        className="md:col-span-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                      <textarea
+                        name="guardian_intention"
+                        placeholder="保護者の意向"
+                        rows={4}
+                        className="md:col-span-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
                       <button type="submit" className="md:col-span-2 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">
                         面談記録を追加
                       </button>
@@ -969,36 +1110,84 @@ function SupportChildcarePageContent() {
                   )}
                 </div>
 
-                {/* 関係機関連携 */}
+                {/* 関係機関連携: 区分(4種類)ごとに必要な入力項目が異なる */}
                 <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-800">＜3＞関係機関との連携</h3>
-                  {agencyLinks.map((a) => (
-                    <div key={a.id} className="rounded-lg border border-slate-100 p-2 text-sm">
-                      <p className="text-xs text-slate-500">
-                        {AGENCY_TYPE_LABELS[a.agency_type]} 担当者: {a.contact_person ?? "-"} 頻度: {a.frequency ?? "-"}
-                      </p>
-                      <p className="text-slate-700">{a.content}</p>
-                      {a.support_outcome && <p className="text-slate-500">連携をとおした具体的な支援内容: {a.support_outcome}</p>}
-                    </div>
-                  ))}
+                  {agencyLinks.map((a) => {
+                    const cfg = AGENCY_FIELD_CONFIG[a.agency_type];
+                    return (
+                      <div key={a.id} className="rounded-lg border border-slate-100 p-2 text-sm">
+                        <p className="text-xs text-slate-500">
+                          {AGENCY_TYPE_LABELS[a.agency_type]}
+                          {cfg.showAgencyName && a.agency_name ? ` / 事業所名: ${a.agency_name}` : ""}
+                          {cfg.contactPersonLabel && a.contact_person ? ` / ${cfg.contactPersonLabel}: ${a.contact_person}` : ""}
+                          {cfg.showConsultationDate && a.consultation_date ? ` / 直近の相談日: ${a.consultation_date}` : ""}
+                          {cfg.showEnrollmentDate && a.enrollment_start_date ? ` / 通所開始日: ${a.enrollment_start_date}` : ""}
+                          {cfg.showFrequency && a.frequency ? ` / 頻度: ${a.frequency}` : ""}
+                        </p>
+                        <p className="text-slate-700">{a.content}</p>
+                        {a.support_outcome && <p className="text-slate-500">連携をとおした具体的な支援内容: {a.support_outcome}</p>}
+                      </div>
+                    );
+                  })}
                   {editable && (
                     <form
+                      key={newAgencyType}
                       action={(fd) => {
                         void addAgencyLink(fd);
                       }}
                       className="grid grid-cols-1 gap-2 rounded-lg bg-slate-50 p-3 md:grid-cols-2"
                     >
-                      <select name="agency_type" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+                      <select
+                        name="agency_type"
+                        value={newAgencyType}
+                        onChange={(e) => setNewAgencyType(e.target.value)}
+                        className="md:col-span-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      >
                         {Object.entries(AGENCY_TYPE_LABELS).map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}
                           </option>
                         ))}
                       </select>
-                      <input name="contact_person" placeholder="担当者" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-                      <input name="consultation_date" type="date" placeholder="相談日" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-                      <input name="frequency" placeholder="頻度" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-                      <textarea name="content" placeholder="具体的な連携内容" className="md:col-span-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                      {AGENCY_FIELD_CONFIG[newAgencyType].contactPersonLabel && (
+                        <input
+                          name="contact_person"
+                          placeholder={AGENCY_FIELD_CONFIG[newAgencyType].contactPersonLabel ?? ""}
+                          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      )}
+                      {AGENCY_FIELD_CONFIG[newAgencyType].showConsultationDate && (
+                        <input
+                          name="consultation_date"
+                          type="date"
+                          placeholder="直近の相談日"
+                          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      )}
+                      {AGENCY_FIELD_CONFIG[newAgencyType].showEnrollmentDate && (
+                        <input
+                          name="enrollment_start_date"
+                          type="date"
+                          placeholder="通所開始日"
+                          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      )}
+                      {AGENCY_FIELD_CONFIG[newAgencyType].showAgencyName && (
+                        <input
+                          name="agency_name"
+                          placeholder="事業所名"
+                          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      )}
+                      {AGENCY_FIELD_CONFIG[newAgencyType].showFrequency && (
+                        <input name="frequency" placeholder="頻度" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                      )}
+                      <textarea
+                        name="content"
+                        placeholder={AGENCY_FIELD_CONFIG[newAgencyType].contentLabel}
+                        className="md:col-span-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
                       <textarea
                         name="support_outcome"
                         placeholder="連携をとおした具体的な支援内容"

@@ -439,14 +439,15 @@ export type SupportChildcareApplicationDetail = {
   child_name: string;
   form1_id: string;
   form1_recorded_on: string | null;
-  form1_class_size_3: number | null;
-  form1_class_size_4: number | null;
-  form1_class_size_5: number | null;
   form1_extra_staff_count_3: number | null;
   form1_extra_staff_count_4: number | null;
   form1_extra_staff_count_5: number | null;
-  form1_staff_count: number | null;
-  form1_notes: string | null;
+  form1_staff_count_3: number | null;
+  form1_staff_count_4: number | null;
+  form1_staff_count_5: number | null;
+  form1_notes_3: string | null;
+  form1_notes_4: string | null;
+  form1_notes_5: string | null;
   form1_policy_stance_item_id: string | null;
   form1_policy_target_month: string | null;
   form1_policy_no_extra_staff_reason: string | null;
@@ -454,6 +455,15 @@ export type SupportChildcareApplicationDetail = {
   form1_subsidy_expected_effect: string | null;
   form2_id: string;
   form2_annual_goal: string | null;
+};
+
+export type SupportChildcareChildHeaderInfo = {
+  full_name: string;
+  name_kana: string | null;
+  birth_date: string;
+  gender: string;
+  class_name: string | null;
+  age_group: string | null;
 };
 
 export type SupportChildcareCheckItem = {
@@ -480,7 +490,6 @@ export type SupportChildcareForm2Term = {
 export type SupportChildcareGuardianMeeting = {
   id: string;
   meeting_date: string;
-  meeting_type: "formal" | "pickup_dropoff_note";
   attendee: string | null;
   content: string | null;
   guardian_intention: string | null;
@@ -492,6 +501,7 @@ export type SupportChildcareAgencyLink = {
   contact_person: string | null;
   consultation_date: string | null;
   enrollment_start_date: string | null;
+  agency_name: string | null;
   frequency: string | null;
   content: string | null;
   support_outcome: string | null;
