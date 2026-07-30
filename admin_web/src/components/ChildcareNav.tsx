@@ -14,6 +14,7 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/parent-requests", label: "保護者申請" },
   { href: "/childcare/class-photos", label: "クラス写真" },
   { href: "/childcare/emergency-contacts", label: "緊急連絡先" },
+  { href: "/childcare/support-childcare", label: "支援保育" },
 ];
 
 export function ChildcareNav() {

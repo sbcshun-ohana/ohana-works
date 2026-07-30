@@ -398,3 +398,124 @@ export type StaffGroupMemberRow = {
   added_at: string;
   removed_at: string | null;
 };
+
+// ---- 支援保育事業(Phase 3) ----
+
+export type SupportChildcareApplicationStatus =
+  | "draft"
+  | "ai_draft"
+  | "in_review"
+  | "returned"
+  | "approved"
+  | "finalized"
+  | "released"
+  | "superseded"
+  | "archived";
+
+export type SupportChildcareCandidacyStatus = "candidate" | "under_review" | "submission_target" | "excluded";
+
+export type SupportChildcareApplicationRow = {
+  application_id: string | null;
+  child_id: string;
+  child_name: string;
+  candidacy_status: SupportChildcareCandidacyStatus;
+  status: SupportChildcareApplicationStatus | null;
+  author_name: string | null;
+  approver_name: string | null;
+  finalized_at: string | null;
+};
+
+export type SupportChildcareCandidatePoolRow = {
+  child_id: string;
+  child_name: string;
+  class_id: string | null;
+  class_name: string | null;
+  age_group: string | null;
+};
+
+export type SupportChildcareApplicationDetail = {
+  application_id: string;
+  status: SupportChildcareApplicationStatus;
+  child_name: string;
+  form1_id: string;
+  form1_recorded_on: string | null;
+  form1_class_size_3: number | null;
+  form1_class_size_4: number | null;
+  form1_class_size_5: number | null;
+  form1_extra_staff_count_3: number | null;
+  form1_extra_staff_count_4: number | null;
+  form1_extra_staff_count_5: number | null;
+  form1_staff_count: number | null;
+  form1_notes: string | null;
+  form1_policy_stance_item_id: string | null;
+  form1_policy_target_month: string | null;
+  form1_policy_no_extra_staff_reason: string | null;
+  form1_policy_no_application_reason: string | null;
+  form1_subsidy_expected_effect: string | null;
+  form2_id: string;
+  form2_annual_goal: string | null;
+};
+
+export type SupportChildcareCheckItem = {
+  id: string;
+  check_group: "policy_stance" | "subsidy_use" | "child_behavior";
+  category: string | null;
+  label: string;
+  is_other_option: boolean;
+  sort_order: number;
+};
+
+export type SupportChildcareForm2Term = {
+  id: string;
+  form2_id: string;
+  form1_id: string;
+  term_number: number;
+  term_goal: string | null;
+  child_behavior: string | null;
+  considered_factors: string | null;
+  support_measures: string | null;
+  evaluation: string | null;
+};
+
+export type SupportChildcareGuardianMeeting = {
+  id: string;
+  meeting_date: string;
+  meeting_type: "formal" | "pickup_dropoff_note";
+  attendee: string | null;
+  content: string | null;
+  guardian_intention: string | null;
+};
+
+export type SupportChildcareAgencyLink = {
+  id: string;
+  agency_type: "patrol_consultation" | "developmental_consultation" | "child_development_support_office" | "facility_visit_support";
+  contact_person: string | null;
+  consultation_date: string | null;
+  enrollment_start_date: string | null;
+  frequency: string | null;
+  content: string | null;
+  support_outcome: string | null;
+};
+
+export type SupportChildcareApplicationReview = {
+  id: string;
+  reviewer_id: string;
+  review_type: "chief_check" | "multi_person_confirm";
+  action: "approved" | "returned";
+  comment: string | null;
+  reviewed_at: string;
+};
+
+export type SupportChildcareSubmissionSummary = {
+  age_3_count: number;
+  age_4_count: number;
+  age_5_count: number;
+  total_count: number;
+};
+
+export type SupportChildcareAiDraftResult = {
+  ai_run_id: string;
+  output_text: string;
+  evidence_count: number;
+  low_evidence: boolean;
+};

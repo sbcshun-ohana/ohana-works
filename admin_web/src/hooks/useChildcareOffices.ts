@@ -8,8 +8,10 @@ import type { ChildcareOffice } from "@/lib/types";
 /**
  * 保育業務系ページ共通の施設選択。タブ(ページ)を切り替えても選択中の施設が
  * リセットされないよう、URLクエリパラメータ(?office=)で状態を引き継ぐ。
+ * rpcNameを指定すると、機能フラグが異なる施設一覧RPC(例: 支援保育専用の
+ * fetch_my_support_childcare_offices)に差し替えられる。
  */
-export function useChildcareOffices() {
+export function useChildcareOffices(rpcName: "fetch_my_childcare_offices" | "fetch_my_support_childcare_offices" = "fetch_my_childcare_offices") {
   const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
   const [officesError, setOfficesError] = useState<string | null>(null);
   const [selectedOffice, setSelectedOfficeState] = useState<string>("");
@@ -19,7 +21,7 @@ export function useChildcareOffices() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
+    supabase.rpc(rpcName).then(({ data, error }) => {
       if (error) {
         setOfficesError(error.message);
         return;
