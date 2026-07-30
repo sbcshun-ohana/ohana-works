@@ -513,6 +513,81 @@ class ChildcareService {
     await _client.rpc('reactivate_guardian_account', params: {'p_guardian_id': guardianId});
   }
 
+  // ------------------------------------------------------------------
+  // 園内記録(職員専用・保護者には一切表示しない)
+  // ------------------------------------------------------------------
+
+  Future<bool> isChildInternalNotesEnabledForOffice(String officeId) async {
+    final result = await _client.rpc(
+      'is_child_internal_notes_enabled_for_office',
+      params: {'p_office_id': officeId},
+    );
+    return result as bool? ?? false;
+  }
+
+  /// 表示制御のみに使う(編集・削除ボタンの出し分け)。実際の許可判定は必ずRPC側で行う。
+  Future<bool> isChildInternalNotesChief(String officeId) async {
+    final result = await _client.rpc(
+      'is_child_internal_notes_chief',
+      params: {'target_office_id': officeId},
+    );
+    return result as bool? ?? false;
+  }
+
+  /// 絞り込み・並び順はすべてRPC側の責務。フロントで再実装しない。
+  Future<List<ChildInternalNote>> fetchChildInternalNotes({
+    required String childId,
+    List<String>? categories,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final rows = await _client.rpc('fetch_child_internal_notes', params: {
+      'p_child_id': childId,
+      'p_categories': categories,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+    return (rows as List)
+        .map((row) => ChildInternalNote.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> createChildInternalNote({
+    required String childId,
+    required DateTime noteDate,
+    required String category,
+    required String body,
+    required bool aiExcluded,
+  }) async {
+    await _client.rpc('create_child_internal_note', params: {
+      'p_child_id': childId,
+      'p_note_date': dateOnly(noteDate),
+      'p_category': category,
+      'p_body': body,
+      'p_ai_excluded': aiExcluded,
+    });
+  }
+
+  Future<void> updateChildInternalNote({
+    required String noteId,
+    required String body,
+    required String category,
+    required bool aiExcluded,
+    required String noteDate,
+  }) async {
+    await _client.rpc('update_child_internal_note', params: {
+      'p_note_id': noteId,
+      'p_body': body,
+      'p_category': category,
+      'p_ai_excluded': aiExcluded,
+      'p_note_date': noteDate,
+    });
+  }
+
+  Future<void> softDeleteChildInternalNote(String noteId) async {
+    await _client.rpc('soft_delete_child_internal_note', params: {'p_note_id': noteId});
+  }
+
   /// 招待コードは発行時のみ取得できる(サーバーはtoken_hashのみ保持する)。
   Future<({String token, DateTime expiresAt})> createGuardianInvitationByStaff({
     required String childId,

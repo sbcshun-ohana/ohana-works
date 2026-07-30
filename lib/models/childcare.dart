@@ -251,3 +251,70 @@ String childcareStatusLabel(String? status) {
       return '未着手';
   }
 }
+
+/// 園内記録(職員専用・保護者には非表示)。
+class ChildInternalNote {
+  const ChildInternalNote({
+    required this.id,
+    required this.childId,
+    required this.officeId,
+    required this.noteDate,
+    required this.category,
+    required this.body,
+    required this.aiExcluded,
+    required this.authorEmployeeId,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory ChildInternalNote.fromJson(Map<String, dynamic> json) => ChildInternalNote(
+        id: json['id'] as String,
+        childId: json['child_id'] as String,
+        officeId: json['office_id'] as String,
+        noteDate: json['note_date'] as String,
+        category: json['category'] as String,
+        body: json['body'] as String,
+        aiExcluded: json['ai_excluded'] as bool? ?? false,
+        authorEmployeeId: json['author_employee_id'] as String,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
+      );
+
+  final String id;
+  final String childId;
+  final String officeId;
+  final String noteDate;
+  final String category;
+  final String body;
+  final bool aiExcluded;
+  final String authorEmployeeId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+}
+
+/// 園内記録の区分キー(表示順)。日本語表示名はここ1箇所に集約する
+/// (admin_web側の CHILD_INTERNAL_NOTE_CATEGORY_LABELS と同一の対応)。
+const List<String> kChildInternalNoteCategories = [
+  'handover',
+  'observation',
+  'guardian_contact',
+  'external_agency',
+  'other',
+];
+
+String childInternalNoteCategoryLabel(String category) {
+  switch (category) {
+    case 'handover':
+      return '申し送り';
+    case 'observation':
+      return '個人日誌';
+    case 'guardian_contact':
+      return '保護者との面談記録';
+    case 'external_agency':
+      return '療育等との連携記録';
+    case 'other':
+      return 'その他';
+    default:
+      return category;
+  }
+}

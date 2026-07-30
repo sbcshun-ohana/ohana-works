@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
-import '../family_daily_report_summary_view.dart';
+import '../children/child_detail_screen.dart';
 
 /// 保護者アプリ・後続保育機能 Phase A: デイリーボード(iPad中心)。
 /// 登降園は保護者アプリ・キオスク端末など複数端末から記録されるため、Realtimeで即時反映する。
@@ -52,25 +52,15 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     await _rowsFuture;
   }
 
-  Future<void> _showFamilyDailyReport(DailyBoardRow row) async {
-    final report = await widget.service.fetchFamilyDailyReportForStaff(row.childId, widget.businessDate);
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${row.nameLabel}の家庭連絡帳', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 16),
-              FamilyDailyReportSummaryView(report: report),
-            ],
-          ),
+  void _openChildDetail(DailyBoardRow row) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChildDetailScreen(
+          service: widget.service,
+          childId: row.childId,
+          childName: row.nameLabel,
+          officeId: widget.officeId,
+          businessDate: widget.businessDate,
         ),
       ),
     );
@@ -107,7 +97,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                     children: [
                       ListTile(
                         contentPadding: const EdgeInsets.all(16),
-                        onTap: () => _showFamilyDailyReport(row),
+                        onTap: () => _openChildDetail(row),
                         title: Text(row.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
                         subtitle: Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
                         trailing: Column(
