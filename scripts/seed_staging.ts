@@ -130,6 +130,11 @@ const CLASS_TEMPLATES: ClassSeed[] = [
   { className: "ひよこ組", ageGroup: "0-1歳" },
   { className: "うさぎ組", ageGroup: "2-3歳" },
   { className: "くま組", ageGroup: "4-5歳" },
+  // 支援保育事業(Phase3)の対象候補検証用。本番の実クラス名規則(「組名／N歳児」)に
+  // 合わせた単年齢クラスを追加し、3・4・5歳児の提出票集計テストにも使えるようにする。
+  { className: "たいよう組／3歳児", ageGroup: "3歳児" },
+  { className: "つばさ組／4歳児", ageGroup: "4歳児" },
+  { className: "ほし組／5歳児", ageGroup: "5歳児" },
 ];
 
 const SCHOOL_YEAR = 2026;
@@ -151,6 +156,20 @@ const CHILDREN: ChildSeed[] = [
   { no: 6, officeName: "Mahalo Station", className: "くま組", gender: "女", birthDate: "2022-01-25" },
   { no: 7, officeName: "Halelea", className: "ひよこ組", gender: "女", birthDate: "2025-04-12" },
   { no: 8, officeName: "Halelea", className: "うさぎ組", gender: "男", birthDate: "2023-03-30" },
+  // 支援保育事業(Phase3)の対象候補プール検証用。3・4・5歳児クラスに1名ずつ、
+  // まだどの申請候補にも登録されていない状態で投入する。
+  { no: 9, officeName: "大和オハナ保育園", className: "たいよう組／3歳児", gender: "男", birthDate: "2022-07-10" },
+  { no: 10, officeName: "大和オハナ保育園", className: "つばさ組／4歳児", gender: "女", birthDate: "2021-08-15" },
+  { no: 11, officeName: "大和オハナ保育園", className: "ほし組／5歳児", gender: "男", birthDate: "2020-09-20" },
+  { no: 12, officeName: "BABY MAHALO", className: "たいよう組／3歳児", gender: "女", birthDate: "2022-05-05" },
+  { no: 13, officeName: "BABY MAHALO", className: "つばさ組／4歳児", gender: "男", birthDate: "2021-06-18" },
+  { no: 14, officeName: "BABY MAHALO", className: "ほし組／5歳児", gender: "女", birthDate: "2020-10-01" },
+  { no: 15, officeName: "Mahalo Station", className: "たいよう組／3歳児", gender: "男", birthDate: "2022-11-22" },
+  { no: 16, officeName: "Mahalo Station", className: "つばさ組／4歳児", gender: "女", birthDate: "2021-12-03" },
+  { no: 17, officeName: "Mahalo Station", className: "ほし組／5歳児", gender: "男", birthDate: "2020-02-14" },
+  { no: 18, officeName: "Halelea", className: "たいよう組／3歳児", gender: "女", birthDate: "2022-03-08" },
+  { no: 19, officeName: "Halelea", className: "つばさ組／4歳児", gender: "男", birthDate: "2021-04-27" },
+  { no: 20, officeName: "Halelea", className: "ほし組／5歳児", gender: "女", birthDate: "2020-05-30" },
 ];
 
 // 「まず検索し、無ければ作成する」の順序にすることで、エラーメッセージの
