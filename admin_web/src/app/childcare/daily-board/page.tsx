@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
 import type { DailyBoardRow } from "@/lib/types";
@@ -17,6 +18,23 @@ function ChildcareDailyBoardPageContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
+  const [internalNotesChild, setInternalNotesChild] = useState<{ id: string; name: string } | null>(null);
+
+  // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
+  // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
+  useEffect(() => {
+    function loadFlag() {
+      if (!selectedOffice) {
+        setInternalNotesEnabled(false);
+        return;
+      }
+      createClient()
+        .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
+    }
+    loadFlag();
+  }, [selectedOffice]);
 
   useEffect(() => {
     function loadRows() {
@@ -120,19 +138,20 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">最終イベント</th>
                 <th className="px-4 py-3">家庭連絡帳</th>
                 <th className="px-4 py-3">お迎え変更</th>
+                {internalNotesEnabled && <th className="px-4 py-3">園内記録</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 7 : 6} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 7 : 6} className="px-4 py-6 text-center text-slate-400">
                     在籍園児がいません
                   </td>
                 </tr>
@@ -184,12 +203,36 @@ function ChildcareDailyBoardPageContent() {
                         </span>
                       )}
                     </td>
+                    {internalNotesEnabled && (
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() =>
+                            setInternalNotesChild({
+                              id: row.child_id,
+                              name: `${row.display_name}${row.honorific_suffix ?? ""}`,
+                            })
+                          }
+                          className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                        >
+                          🔒 園内記録
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
       </main>
+
+      {internalNotesChild && (
+        <ChildInternalNotesModal
+          childId={internalNotesChild.id}
+          childName={internalNotesChild.name}
+          officeId={selectedOffice}
+          onClose={() => setInternalNotesChild(null)}
+        />
+      )}
     </div>
   );
 }

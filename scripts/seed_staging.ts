@@ -426,6 +426,29 @@ async function main() {
   }
   console.log(`  ${(flags ?? []).length}フラグ OK`);
 
+  // 検証用の意図的な中間状態: BABY MAHALO は childcare_operations のみON、
+  // child_internal_notes_enabled はOFFのまま。これにより「保育業務は使えるが
+  // 園内記録フラグはOFF」の施設ができ、園内記録ボタンが非表示になることを
+  // STG-EMP-05(BABY MAHALOの管理者)で確認できる(大和のみ全ONだと再現不能なため)。
+  // child_internal_notes_enabled の行はここで作らない(=OFFを維持)。
+  console.log("--- 検証用フラグ(BABY MAHALO: childcare_operationsのみON) ---");
+  const babyMahaloOfficeId = officeIdByName.get("BABY MAHALO")!;
+  {
+    const { error: babyMahaloFlagError } = await admin
+      .from("feature_flag_office_overrides")
+      .upsert(
+        {
+          feature_key: "childcare_operations",
+          office_id: babyMahaloOfficeId,
+          enabled: true,
+          note: "ステージング検証用: 園内記録フラグOFFでボタン非表示を確認するため、childcare_operationsのみON(child_internal_notes_enabledはOFFのまま)",
+        },
+        { onConflict: "feature_key,office_id" },
+      );
+    if (babyMahaloFlagError) throw babyMahaloFlagError;
+  }
+  console.log("  BABY MAHALO childcare_operations ON(園内記録はOFF維持) OK");
+
   console.log("完了しました。");
 }
 

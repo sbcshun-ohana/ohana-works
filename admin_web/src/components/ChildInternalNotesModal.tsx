@@ -149,14 +149,23 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-lg">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-800">園内記録: {childName}</h2>
-          <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-600">
+      {/* 保護者非公開であることを枠線・ヘッダーの配色で明示(連絡帳=保護者公開の入力欄との誤記入防止)。 */}
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border-2 border-amber-400 bg-white shadow-lg">
+        {/* 琥珀色のヘッダー帯: この画面が職員専用・保護者非公開であることを常時明示する */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-amber-400 bg-amber-100 px-6 py-3">
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="text-base">🔒</span>
+            <div>
+              <h2 className="text-base font-bold text-amber-900">園内記録: {childName}</h2>
+              <p className="text-xs font-semibold text-amber-700">職員専用 / 保護者には表示されません</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-sm text-amber-700 hover:text-amber-900">
             閉じる
           </button>
         </div>
 
+        <div className="p-6">
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
           この記録は保護者には表示されません
         </p>
@@ -178,9 +187,9 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
           </div>
         </div>
 
-        {/* 新規追記 */}
-        <div className="mb-4 space-y-2 rounded-xl border border-sky-200 bg-sky-50 p-3">
-          <p className="text-xs font-semibold text-sky-700">新規追記</p>
+        {/* 新規追記(保護者非公開の記録。連絡帳の入力欄=保護者公開との取り違え防止のため琥珀色で統一) */}
+        <div className="mb-4 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-700">新規追記(園内記録・保護者非公開)</p>
           <div className="flex flex-wrap gap-2">
             <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
             <select
@@ -207,8 +216,8 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
             className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
           />
           {actionError && <p className="text-xs font-medium text-red-600">{actionError}</p>}
-          <button onClick={createNote} className="rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">
-            保存する
+          <button onClick={createNote} className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">
+            園内記録として保存
           </button>
         </div>
 
@@ -278,6 +287,7 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
               )}
             </div>
           ))}
+        </div>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
 import type { DailyContactRow, FamilyDailyReportSummary } from "@/lib/types";
@@ -56,8 +57,25 @@ function ChildcareContactsPageContent() {
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [familyDailyReport, setFamilyDailyReport] = useState<FamilyDailyReportSummary | null>(null);
+  const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
+  const [internalNotesOpen, setInternalNotesOpen] = useState(false);
 
   const selectedRow = rows.find((r) => r.child_id === selectedChildId) ?? null;
+
+  // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
+  // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
+  useEffect(() => {
+    function loadFlag() {
+      if (!selectedOffice) {
+        setInternalNotesEnabled(false);
+        return;
+      }
+      createClient()
+        .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
+    }
+    loadFlag();
+  }, [selectedOffice]);
 
   useEffect(() => {
     function loadRows() {
@@ -470,7 +488,17 @@ function ChildcareContactsPageContent() {
                     {selectedRow.child_display_name}
                     {selectedRow.child_honorific_suffix ?? ""}({selectedRow.class_name})
                   </h3>
-                  <span className="text-xs text-slate-500">担当: {selectedRow.assignee_name ?? "未割当"}</span>
+                  <div className="flex items-center gap-3">
+                    {internalNotesEnabled && (
+                      <button
+                        onClick={() => setInternalNotesOpen(true)}
+                        className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                      >
+                        🔒 園内記録(保護者非公開)
+                      </button>
+                    )}
+                    <span className="text-xs text-slate-500">担当: {selectedRow.assignee_name ?? "未割当"}</span>
+                  </div>
                 </div>
 
                 {selectedRow.rejected_reason && (
@@ -840,6 +868,15 @@ function ChildcareContactsPageContent() {
           </div>
         </div>
       </main>
+
+      {internalNotesOpen && selectedRow && (
+        <ChildInternalNotesModal
+          childId={selectedRow.child_id}
+          childName={`${selectedRow.child_display_name}${selectedRow.child_honorific_suffix ?? ""}`}
+          officeId={selectedOffice}
+          onClose={() => setInternalNotesOpen(false)}
+        />
+      )}
     </div>
   );
 }
