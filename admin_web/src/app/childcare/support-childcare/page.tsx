@@ -13,6 +13,8 @@ import type {
   SupportChildcareCandidatePoolRow,
   SupportChildcareCheckItem,
   SupportChildcareChildHeaderInfo,
+  SupportChildcareClassHeadcount,
+  SupportChildcareClassSetting,
   SupportChildcareForm2Term,
   SupportChildcareGuardianMeeting,
   SupportChildcareSubmissionSummary,
@@ -147,6 +149,12 @@ function SupportChildcarePageContent() {
   const [candidatePool, setCandidatePool] = useState<SupportChildcareCandidatePoolRow[] | null>(null);
   const [newAgencyType, setNewAgencyType] = useState<string>("patrol_consultation");
 
+  // クラス構成の設定(施設×年度期単位)。加配児童数・職員数・備考はここで一度だけ設定する
+  const [classSettings, setClassSettings] = useState<SupportChildcareClassSetting[]>([]);
+  const [classHeadcounts, setClassHeadcounts] = useState<SupportChildcareClassHeadcount[]>([]);
+  const [classSettingsModalOpen, setClassSettingsModalOpen] = useState(false);
+  const [classSettingsDraft, setClassSettingsDraft] = useState<Record<number, { extra_staff_count: string; staff_count: string; notes: string }>>({});
+
   // 施設の参加プログラム一覧(support_childcare_program_offices+programsを直接読み取り)
   useEffect(() => {
     if (!selectedOffice) return;
@@ -201,6 +209,41 @@ function SupportChildcarePageContent() {
     }
     load();
   }, [programOfficeId, reloadToken]);
+
+  // クラス構成の設定(施設×年度期単位)。加配児童数・職員数・備考+参考の提出対象候補数
+  useEffect(() => {
+    function load() {
+      if (!programOfficeId) {
+        setClassSettings([]);
+        return;
+      }
+      const supabase = createClient();
+      supabase.rpc("fetch_support_childcare_class_settings", { p_program_office_id: programOfficeId }).then(({ data, error }) => {
+        if (!error) setClassSettings((data ?? []) as SupportChildcareClassSetting[]);
+      });
+    }
+    load();
+  }, [programOfficeId, reloadToken]);
+
+  // 記入日(様式1)を基準日としたクラス在籍数。記入日を変更すると再集計される
+  useEffect(() => {
+    function load() {
+      if (!selectedOffice || !detail?.form1_recorded_on) {
+        setClassHeadcounts([]);
+        return;
+      }
+      const supabase = createClient();
+      supabase
+        .rpc("fetch_support_childcare_class_headcount_as_of", {
+          p_office_id: selectedOffice,
+          p_as_of_date: detail.form1_recorded_on,
+        })
+        .then(({ data, error }) => {
+          if (!error) setClassHeadcounts((data ?? []) as SupportChildcareClassHeadcount[]);
+        });
+    }
+    load();
+  }, [selectedOffice, detail?.form1_recorded_on]);
 
   // チェック項目マスタ(初回のみ)
   useEffect(() => {
@@ -401,20 +444,41 @@ function SupportChildcarePageContent() {
     const { error } = await supabase.rpc("update_support_childcare_form1", {
       p_application_id: detail.application_id,
       p_recorded_on: detail.form1_recorded_on,
-      p_extra_staff_count_3: detail.form1_extra_staff_count_3,
-      p_extra_staff_count_4: detail.form1_extra_staff_count_4,
-      p_extra_staff_count_5: detail.form1_extra_staff_count_5,
-      p_staff_count_3: detail.form1_staff_count_3,
-      p_staff_count_4: detail.form1_staff_count_4,
-      p_staff_count_5: detail.form1_staff_count_5,
-      p_notes_3: detail.form1_notes_3,
-      p_notes_4: detail.form1_notes_4,
-      p_notes_5: detail.form1_notes_5,
       p_policy_stance_item_id: detail.form1_policy_stance_item_id,
       p_policy_target_month: detail.form1_policy_target_month,
       p_policy_no_extra_staff_reason: detail.form1_policy_no_extra_staff_reason,
       p_policy_no_application_reason: detail.form1_policy_no_application_reason,
       p_subsidy_expected_effect: detail.form1_subsidy_expected_effect,
+    });
+    if (error) {
+      setActionError(error.message);
+      return;
+    }
+    reload();
+  }
+
+  function openClassSettingsModal() {
+    const draft: Record<number, { extra_staff_count: string; staff_count: string; notes: string }> = {};
+    for (const s of classSettings) {
+      draft[s.age] = {
+        extra_staff_count: s.extra_staff_count?.toString() ?? "",
+        staff_count: s.staff_count?.toString() ?? "",
+        notes: s.notes ?? "",
+      };
+    }
+    setClassSettingsDraft(draft);
+    setClassSettingsModalOpen(true);
+  }
+
+  async function saveClassSetting(age: number) {
+    const draft = classSettingsDraft[age];
+    const supabase = createClient();
+    const { error } = await supabase.rpc("upsert_support_childcare_class_setting", {
+      p_program_office_id: programOfficeId,
+      p_age: age,
+      p_extra_staff_count: draft?.extra_staff_count ? Number(draft.extra_staff_count) : null,
+      p_staff_count: draft?.staff_count ? Number(draft.staff_count) : null,
+      p_notes: draft?.notes || null,
     });
     if (error) {
       setActionError(error.message);
@@ -645,6 +709,15 @@ function SupportChildcarePageContent() {
           >
             対象候補を追加
           </button>
+          {isManager && (
+            <button
+              onClick={openClassSettingsModal}
+              disabled={!programOfficeId}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+            >
+              クラス構成の設定
+            </button>
+          )}
         </div>
 
         {officesError && <p className="text-sm text-red-600">{officesError}</p>}
@@ -804,56 +877,51 @@ function SupportChildcarePageContent() {
                     />
                   </div>
 
-                  {/* クラス編成・職員配置: 3・4・5歳児クラスごとに加配児童数・職員数・備考が別入力 */}
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
-                          <th className="px-2 py-1">クラス</th>
-                          <th className="px-2 py-1">加配児童数</th>
-                          <th className="px-2 py-1">職員数</th>
-                          <th className="px-2 py-1">備考</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(["3", "4", "5"] as const).map((age) => (
-                          <tr key={age} className="border-b border-slate-100 last:border-0">
-                            <td className="px-2 py-1 font-medium text-slate-700">{age}歳児クラス</td>
-                            <td className="px-2 py-1">
-                              <input
-                                type="number"
-                                disabled={!editable}
-                                value={detail[`form1_extra_staff_count_${age}` as keyof SupportChildcareApplicationDetail] as number | null ?? ""}
-                                onChange={(e) =>
-                                  setDetail({ ...detail, [`form1_extra_staff_count_${age}`]: e.target.value ? Number(e.target.value) : null })
-                                }
-                                className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                              />
-                            </td>
-                            <td className="px-2 py-1">
-                              <input
-                                type="number"
-                                disabled={!editable}
-                                value={detail[`form1_staff_count_${age}` as keyof SupportChildcareApplicationDetail] as number | null ?? ""}
-                                onChange={(e) =>
-                                  setDetail({ ...detail, [`form1_staff_count_${age}`]: e.target.value ? Number(e.target.value) : null })
-                                }
-                                className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                              />
-                            </td>
-                            <td className="px-2 py-1">
-                              <input
-                                type="text"
-                                disabled={!editable}
-                                value={(detail[`form1_notes_${age}` as keyof SupportChildcareApplicationDetail] as string | null) ?? ""}
-                                onChange={(e) => setDetail({ ...detail, [`form1_notes_${age}`]: e.target.value })}
-                                className="w-full min-w-[10rem] rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
-                              />
-                            </td>
+                  {/* クラス編成・職員配置: 施設×年度期単位で「クラス構成の設定」から設定した値を引用表示(編集不可)。
+                      在籍数のみ様式1の記入日を基準日として都度自動集計する(保存しない) */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">クラス編成・職員配置(施設×年度期で共通)</p>
+                      {isManager && (
+                        <button
+                          onClick={openClassSettingsModal}
+                          className="text-xs font-medium text-sky-600 hover:underline"
+                        >
+                          クラス構成の設定を編集
+                        </button>
+                      )}
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                            <th className="px-2 py-1">クラス</th>
+                            <th className="px-2 py-1">在籍数(記入日時点)</th>
+                            <th className="px-2 py-1">加配児童数</th>
+                            <th className="px-2 py-1">職員数</th>
+                            <th className="px-2 py-1">備考</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {[3, 4, 5].map((age) => {
+                            const setting = classSettings.find((s) => s.age === age);
+                            const headcount = classHeadcounts.find((h) => h.age === age);
+                            return (
+                              <tr key={age} className="border-b border-slate-100 last:border-0">
+                                <td className="px-2 py-1 font-medium text-slate-700">{age}歳児クラス</td>
+                                <td className="px-2 py-1 text-slate-600">{headcount ? headcount.headcount : "-"}</td>
+                                <td className="px-2 py-1 text-slate-600">{setting?.extra_staff_count ?? "-"}</td>
+                                <td className="px-2 py-1 text-slate-600">{setting?.staff_count ?? "-"}</td>
+                                <td className="px-2 py-1 text-slate-600">{setting?.notes ?? "-"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {!detail.form1_recorded_on && (
+                      <p className="mt-1 text-xs text-amber-600">記入日を入力すると、その時点の在籍数が表示されます。</p>
+                    )}
                   </div>
 
                   <div>
@@ -1228,6 +1296,72 @@ function SupportChildcarePageContent() {
                   </div>
                 ))}
                 {candidatePool.length === 0 && <p className="text-sm text-slate-400">追加可能な園児がいません</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {classSettingsModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-lg">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-800">クラス構成の設定(施設×年度期で共通)</h2>
+                <button onClick={() => setClassSettingsModalOpen(false)} className="text-sm text-slate-400 hover:text-slate-600">
+                  閉じる
+                </button>
+              </div>
+              <p className="mb-3 text-xs text-slate-500">
+                加配児童数・職員数・備考はこの施設・年度期の全申請で共通の値です。ここで設定した内容が様式1に引用表示されます。
+              </p>
+              <div className="space-y-4">
+                {[3, 4, 5].map((age) => {
+                  const draft = classSettingsDraft[age] ?? { extra_staff_count: "", staff_count: "", notes: "" };
+                  const setting = classSettings.find((s) => s.age === age);
+                  return (
+                    <div key={age} className="rounded-xl border border-slate-200 p-3">
+                      <p className="mb-2 text-sm font-semibold text-slate-700">{age}歳児クラス</p>
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500">
+                            加配児童数(参考: 提出対象候補 {setting?.submission_target_candidate_count ?? 0}名)
+                          </label>
+                          <input
+                            type="number"
+                            value={draft.extra_staff_count}
+                            onChange={(e) =>
+                              setClassSettingsDraft((prev) => ({ ...prev, [age]: { ...draft, extra_staff_count: e.target.value } }))
+                            }
+                            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500">職員数</label>
+                          <input
+                            type="number"
+                            value={draft.staff_count}
+                            onChange={(e) => setClassSettingsDraft((prev) => ({ ...prev, [age]: { ...draft, staff_count: e.target.value } }))}
+                            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500">備考</label>
+                          <input
+                            type="text"
+                            value={draft.notes}
+                            onChange={(e) => setClassSettingsDraft((prev) => ({ ...prev, [age]: { ...draft, notes: e.target.value } }))}
+                            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => saveClassSetting(age)}
+                        className="mt-2 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
+                      >
+                        {age}歳児クラスを保存
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -440,15 +440,6 @@ export type SupportChildcareApplicationDetail = {
   child_name: string;
   form1_id: string;
   form1_recorded_on: string | null;
-  form1_extra_staff_count_3: number | null;
-  form1_extra_staff_count_4: number | null;
-  form1_extra_staff_count_5: number | null;
-  form1_staff_count_3: number | null;
-  form1_staff_count_4: number | null;
-  form1_staff_count_5: number | null;
-  form1_notes_3: string | null;
-  form1_notes_4: string | null;
-  form1_notes_5: string | null;
   form1_policy_stance_item_id: string | null;
   form1_policy_target_month: string | null;
   form1_policy_no_extra_staff_reason: string | null;
@@ -456,6 +447,19 @@ export type SupportChildcareApplicationDetail = {
   form1_subsidy_expected_effect: string | null;
   form2_id: string;
   form2_annual_goal: string | null;
+};
+
+export type SupportChildcareClassSetting = {
+  age: number;
+  extra_staff_count: number | null;
+  staff_count: number | null;
+  notes: string | null;
+  submission_target_candidate_count: number;
+};
+
+export type SupportChildcareClassHeadcount = {
+  age: number;
+  headcount: number;
 };
 
 export type SupportChildcareChildHeaderInfo = {
