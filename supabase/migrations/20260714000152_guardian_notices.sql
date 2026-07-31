@@ -23,6 +23,10 @@ create table guardian_notices (
   approver_id uuid references employees(id),
   approved_at timestamptz,
   returned_reason text,
+  -- 誤送信の取り消し(承認=送信後にアプリ内一覧から消す。既送信プッシュは取り消せない)。
+  revoked_at timestamptz,
+  revoked_by uuid references employees(id),
+  revoke_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   sent_at timestamptz
@@ -75,6 +79,7 @@ alter table guardian_notices enable row level security;
 create policy guardian_notices_select_guardian on guardian_notices
   for select using (
     status = 'approved'
+    and revoked_at is null   -- 取り消し済みは保護者側から見せない
     and exists (select 1 from guardian_notice_recipients r
                 where r.notice_id = guardian_notices.id and r.guardian_id = my_guardian_id())
   );
@@ -278,6 +283,26 @@ begin
   if coalesce(trim(p_reason), '') = '' then raise exception 'reason is required'; end if;
   if not is_guardian_notice_approver(p_notice_id) then raise exception 'not authorized'; end if;
   update guardian_notices set status = 'returned', returned_reason = p_reason where id = p_notice_id;
+end;
+$$;
+
+-- 誤送信の取り消し(承認=送信済みのお知らせをアプリ内一覧から消す)。実行権限は承認者と同じ
+-- (director自施設/executive_director全施設/system_admin)。理由必須・監査記録。
+-- 既に配信済みのプッシュ通知は取り消せない(実行時の確認ダイアログで明示する=§6.5b・Phase C)。
+create or replace function revoke_guardian_notice(p_notice_id uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare v_status text; v_revoked timestamptz;
+begin
+  select status, revoked_at into v_status, v_revoked from guardian_notices where id = p_notice_id;
+  if v_status is null then raise exception 'not found'; end if;
+  if v_status <> 'approved' then raise exception 'only sent (approved) notices can be revoked'; end if;
+  if v_revoked is not null then raise exception 'already revoked'; end if;
+  if coalesce(trim(p_reason), '') = '' then raise exception 'reason is required'; end if;
+  if not is_guardian_notice_approver(p_notice_id) then raise exception 'not authorized to revoke'; end if;
+  update guardian_notices
+  set revoked_at = now(), revoked_by = my_employee_id(), revoke_reason = p_reason
+  where id = p_notice_id;
 end;
 $$;
 
