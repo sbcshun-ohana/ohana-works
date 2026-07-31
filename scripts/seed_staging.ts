@@ -520,6 +520,26 @@ async function main() {
   }
   console.log("  PINログイン登録端末 TEST-PIN-IPAD-BABY OK");
 
+  // お知らせ(保護者向け一斉配信)拒否側E2E用: 兄弟・複数保護者の3ケース。
+  // 既存の保護者/園児を追加リンクするだけ(新規auth作成不要)。冪等。
+  console.log("--- テスト用: 兄弟/複数保護者(お知らせE2E用) ---");
+  async function ensureGuardianChildLink(guardianName: string, childFullName: string) {
+    const { data: g } = await admin.from("guardians").select("id").eq("name", guardianName).maybeSingle();
+    const { data: c } = await admin.from("children").select("id").eq("full_name", childFullName).maybeSingle();
+    if (!g || !c) return;
+    const { data: existing } = await admin
+      .from("guardian_child_links").select("id").eq("guardian_id", g.id).eq("child_id", c.id).maybeSingle();
+    if (!existing) {
+      const { error } = await admin
+        .from("guardian_child_links").insert({ guardian_id: g.id, child_id: c.id, role: "additional" });
+      if (error) throw error;
+    }
+  }
+  await ensureGuardianChildLink("テスト保護者01", "テスト園児09"); // 同一施設内兄弟(大和)
+  await ensureGuardianChildLink("テスト保護者03", "テスト園児10"); // 別施設兄弟(BABY MAHALO + 大和)
+  await ensureGuardianChildLink("テスト保護者06", "テスト園児05"); // 1園児2保護者(園児05・共同親権相当)
+  console.log("  兄弟/複数保護者 3ケース OK");
+
   console.log("完了しました。");
 }
 
