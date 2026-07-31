@@ -502,6 +502,24 @@ async function main() {
   }
   console.log("  統括園長=STG-EMP-01 / 統括管理者=STG-EMP-05(Mahalo Station付与) / system_admin=STG-EMP-04 OK");
 
+  // 要件3(PIN簡易ログイン)の実機確認用: BABY MAHALO の登録端末(device_code でペアリング)。
+  // PIN自体は本人がアプリでメール+パスワードでログイン後 set_my_pin で設定する(seedでは設定しない)。
+  console.log("--- テスト用: PINログイン登録端末(BABY MAHALO) ---");
+  {
+    const babyId = officeIdByName.get("BABY MAHALO")!;
+    const { data: existingDevice, error: devSelErr } = await admin
+      .from("devices").select("id").eq("device_code", "TEST-PIN-IPAD-BABY").maybeSingle();
+    if (devSelErr) throw devSelErr;
+    if (!existingDevice) {
+      const { error } = await admin.from("devices").insert({
+        device_code: "TEST-PIN-IPAD-BABY", office_id: babyId, status: "enabled",
+        note: "要件3 PIN簡易ログインの実機確認用",
+      });
+      if (error) throw error;
+    }
+  }
+  console.log("  PINログイン登録端末 TEST-PIN-IPAD-BABY OK");
+
   console.log("完了しました。");
 }
 
