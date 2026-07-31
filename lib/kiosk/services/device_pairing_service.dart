@@ -1,6 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../services/secure_device_store.dart';
 import '../models/paired_device.dart';
 
 class DevicePairingException implements Exception {
@@ -11,27 +11,15 @@ class DevicePairingException implements Exception {
   String toString() => message;
 }
 
-const _kDeviceIdKey = 'kiosk_device_id';
-const _kOfficeIdKey = 'kiosk_office_id';
-const _kOfficeNameKey = 'kiosk_office_name';
-
 /// 9.1 端末マスタとのペアリング状態をローカル(端末内)に保持するサービス。
+/// 保管は SecureDeviceStore(iOS Keychain・ThisDeviceOnly。旧shared_preferencesからは自動移送)。
 class DevicePairingService {
   DevicePairingService(this._client);
 
   final SupabaseClient _client;
+  final _store = SecureDeviceStore();
 
-  Future<PairedDevice?> loadPairedDevice() async {
-    final prefs = await SharedPreferences.getInstance();
-    final deviceId = prefs.getString(_kDeviceIdKey);
-    final officeId = prefs.getString(_kOfficeIdKey);
-    if (deviceId == null || officeId == null) return null;
-    return PairedDevice(
-      deviceId: deviceId,
-      officeId: officeId,
-      officeName: prefs.getString(_kOfficeNameKey),
-    );
-  }
+  Future<PairedDevice?> loadPairedDevice() => _store.load();
 
   Future<PairedDevice> pairDevice(String deviceCode) async {
     final FunctionResponse response;
@@ -59,20 +47,9 @@ class DevicePairingService {
       officeName: data['office_name'] as String?,
     );
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kDeviceIdKey, device.deviceId);
-    await prefs.setString(_kOfficeIdKey, device.officeId);
-    if (device.officeName != null) {
-      await prefs.setString(_kOfficeNameKey, device.officeName!);
-    }
-
+    await _store.save(device);
     return device;
   }
 
-  Future<void> clearPairing() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kDeviceIdKey);
-    await prefs.remove(_kOfficeIdKey);
-    await prefs.remove(_kOfficeNameKey);
-  }
+  Future<void> clearPairing() => _store.clear();
 }

@@ -4,7 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.footer});
+
+  /// 保育業務アプリで「この端末を登録」「PINログインに戻る」等の追加導線を差し込む。
+  final Widget? footer;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -153,6 +156,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                   : const Text('ログイン'),
                             ),
+                            if (widget.footer != null) ...[
+                              const SizedBox(height: 8),
+                              widget.footer!,
+                            ],
                           ],
                         ),
                       ),

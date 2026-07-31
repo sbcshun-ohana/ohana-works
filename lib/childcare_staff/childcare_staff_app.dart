@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../kiosk/models/paired_device.dart';
+import '../kiosk/services/device_pairing_service.dart';
 import '../screens/childcare/childcare_menu_screen.dart';
+import '../screens/childcare/pin_login_screen.dart';
 import '../screens/login_screen.dart';
 import '../services/childcare_service.dart';
 import '../theme/app_theme.dart';
@@ -53,7 +56,90 @@ class _ChildcareStaffAuthGate extends StatelessWidget {
         if (session != null) {
           return ChildcareMenuScreen(service: ChildcareService(Supabase.instance.client));
         }
-        return const LoginScreen();
+        return const _ChildcareLoginRouter();
+      },
+    );
+  }
+}
+
+/// 未ログイン時のルーティング: 登録端末なら職員ピッカー+PIN、未登録端末は
+/// メール+パスワード(+この端末を登録)。「メール+パスワードでログイン」への切替も可能。
+class _ChildcareLoginRouter extends StatefulWidget {
+  const _ChildcareLoginRouter();
+
+  @override
+  State<_ChildcareLoginRouter> createState() => _ChildcareLoginRouterState();
+}
+
+class _ChildcareLoginRouterState extends State<_ChildcareLoginRouter> {
+  final _pairingService = DevicePairingService(Supabase.instance.client);
+  late Future<PairedDevice?> _deviceFuture;
+  bool _forceEmail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _deviceFuture = _pairingService.loadPairedDevice();
+  }
+
+  Future<void> _pairDevice() async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('この端末を保育業務端末として登録'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('管理者から受け取った端末コードを入力してください。', style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: '端末コード')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('キャンセル')),
+          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('登録')),
+        ],
+      ),
+    );
+    if (code == null || code.isEmpty) return;
+    try {
+      await _pairingService.pairDevice(code);
+      if (mounted) {
+        setState(() {
+          _deviceFuture = _pairingService.loadPairedDevice();
+          _forceEmail = false;
+        });
+      }
+    } on DevicePairingException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PairedDevice?>(
+      future: _deviceFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        final device = snapshot.data;
+        if (device != null && !_forceEmail) {
+          return PinLoginScreen(
+            device: device,
+            onUsePassword: () => setState(() => _forceEmail = true),
+          );
+        }
+        // メール+パスワード。未登録端末は「この端末を登録」、登録端末は「PINログインに戻る」を出す。
+        return LoginScreen(
+          footer: TextButton(
+            onPressed: device != null ? () => setState(() => _forceEmail = false) : _pairDevice,
+            child: Text(device != null ? '← PINログインに戻る' : 'この端末を保育業務端末として登録'),
+          ),
+        );
       },
     );
   }

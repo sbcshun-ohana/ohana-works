@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/childcare.dart';
 import '../../services/childcare_service.dart';
+import '../../services/pin_auth_service.dart';
 import '../../theme/app_theme.dart';
 import 'attendance/childcare_attendance_screen.dart';
 import 'class_activities/class_activity_list_screen.dart';
@@ -47,12 +48,74 @@ class _ChildcareMenuScreenState extends State<ChildcareMenuScreen> {
     await Supabase.instance.client.auth.signOut();
   }
 
+  /// 次回からのPIN簡易ログイン用に、本人の6桁PINを設定/変更する(要件3)。
+  Future<void> _setPin() async {
+    final controller = TextEditingController();
+    String? error;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('PIN(6桁)の設定'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('登録済みのiPadで、次回から氏名タップ+PINでログインできます。\n'
+                  '全桁同じ・連番(000000/123456等)は使えません。', style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                maxLength: 6,
+                decoration: const InputDecoration(labelText: '6桁のPIN', counterText: ''),
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(error!, style: const TextStyle(color: AppColors.punchClockOut, fontSize: 12)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () async {
+                final pin = controller.text.trim();
+                if (!RegExp(r'^[0-9]{6}$').hasMatch(pin)) {
+                  setDialog(() => error = 'PINは6桁の数字で入力してください');
+                  return;
+                }
+                try {
+                  await PinAuthService(Supabase.instance.client).setMyPin(pin);
+                  if (ctx.mounted) Navigator.of(ctx).pop(true);
+                } catch (e) {
+                  setDialog(() => error = e.toString().contains('推測') ? '推測されやすいPINは使えません' : '設定に失敗しました');
+                }
+              },
+              child: const Text('設定'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PINを設定しました')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('保育業務'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.pin_rounded),
+            tooltip: 'PIN設定',
+            onPressed: _setPin,
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'ログアウト',
