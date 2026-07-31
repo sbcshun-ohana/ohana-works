@@ -589,3 +589,81 @@ export type ChildInternalNote = {
   updated_at: string;
   deleted_at: string | null;
 };
+
+// ============================================================
+// お知らせ(保護者向け一斉配信)Phase C
+// ============================================================
+export type GuardianNoticeStatus = "draft" | "in_review" | "returned" | "approved";
+
+export const GUARDIAN_NOTICE_STATUS_LABELS: Record<GuardianNoticeStatus, string> = {
+  draft: "下書き",
+  in_review: "申請中",
+  returned: "差し戻し",
+  approved: "送信済み",
+};
+
+// fetch_guardian_notices_for_staff の1行
+export type GuardianNoticeRow = {
+  id: string;
+  title: string;
+  body: string;
+  status: GuardianNoticeStatus;
+  returned_reason: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+  created_at: string;
+  sent_at: string | null;
+  approved_at: string | null;
+  created_by_name: string;
+  approver_name: string | null;
+  target_labels: string[] | null;
+  total_guardians: number;
+  read_guardians: number;
+  can_edit: boolean;
+  can_approve: boolean;
+};
+
+// 宛先の種別(作成UI・fetch_guardian_notice_targets 共通)
+export type GuardianNoticeTargetType = "all" | "office" | "class" | "child";
+
+// fetch_guardian_notice_targets の1行
+export type GuardianNoticeTarget = {
+  target_type: GuardianNoticeTargetType;
+  office_id: string | null;
+  class_id: string | null;
+  child_id: string | null;
+  label: string | null;
+};
+
+// create_guardian_notice に渡す p_targets の1要素
+export type GuardianNoticeTargetInput = {
+  type: GuardianNoticeTargetType;
+  office_id?: string;
+  class_id?: string;
+  child_id?: string;
+};
+
+// preview_guardian_notice の戻り(1行)
+export type GuardianNoticePreview = {
+  office_names: string[] | null;
+  guardian_count: number;
+  child_count: number;
+};
+
+// fetch_guardian_notice_read_summary の戻り(1行)
+export type GuardianNoticeReadSummary = {
+  total_guardians: number;
+  read_guardians: number;
+  total_children: number;
+  unread_children: number;
+};
+
+// fetch_guardian_notice_unread_recipients の1行(未読世帯一覧)
+export type GuardianNoticeUnreadRecipient = {
+  kind: "child" | "guardian";
+  child_id: string | null;
+  child_name: string | null;
+  class_name: string | null;
+  guardian_id: string | null;
+  guardian_name: string | null;
+};
