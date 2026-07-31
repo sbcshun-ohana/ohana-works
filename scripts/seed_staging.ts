@@ -449,6 +449,59 @@ async function main() {
   }
   console.log("  BABY MAHALO childcare_operations ON(園内記録はOFF維持) OK");
 
+  // 統括園長・統括管理者(マイグレーション20260714000147)の拒否側E2E用テストアカウント。
+  //  - STG-EMP-01 = 統括園長(executive_director・全施設)。大原利奈の切替を模したテスト。
+  //  - STG-EMP-05 = 統括管理者(area_manager マーカー)＋ Mahalo Station への付与(管理者相当)。
+  //    自施設 BABY MAHALO は既存の office_manager、付与施設 Mahalo Station は付与テーブル、
+  //    付与外 Halelea は拒否、を検証できる。
+  //  - STG-EMP-04 = 拒否側E2E用の system_admin(grant/revoke は system_admin のみ可の検証用。
+  //    ステージングには他に system_admin が居ないため、本番とは無関係のテスト便宜として付与)。
+  // employee_roles の office_id=null 行は UNIQUE の NULL 非同一性のため upsert が効かないので存在確認で冪等化。
+  console.log("--- テスト用: 統括園長/統括管理者/system_admin(権限E2E用) ---");
+  async function ensureAllOfficeRole(employeeNumber: string, roleCode: string) {
+    const employeeId = employeeIdByNumber.get(employeeNumber)!;
+    const roleId = roleIdByCode.get(roleCode);
+    if (!roleId) throw new Error(`role code「${roleCode}」が見つかりません(マイグレーション未適用?)`);
+    const { data: existing, error: selErr } = await admin
+      .from("employee_roles")
+      .select("id")
+      .eq("employee_id", employeeId)
+      .eq("role_id", roleId)
+      .is("office_id", null)
+      .maybeSingle();
+    if (selErr) throw selErr;
+    if (!existing) {
+      const { error } = await admin
+        .from("employee_roles")
+        .insert({ employee_id: employeeId, role_id: roleId, office_id: null });
+      if (error) throw error;
+    }
+  }
+  await ensureAllOfficeRole("STG-EMP-01", "executive_director");
+  await ensureAllOfficeRole("STG-EMP-05", "area_manager");
+  await ensureAllOfficeRole("STG-EMP-04", "system_admin");
+
+  {
+    const granteeId = employeeIdByNumber.get("STG-EMP-05")!;
+    const mahaloStationId = officeIdByName.get("Mahalo Station")!;
+    const grantedById = employeeIdByNumber.get("STG-EMP-04")!;
+    const { data: existingGrant, error: grantSelErr } = await admin
+      .from("multi_office_authority_grants")
+      .select("id")
+      .eq("grantee_employee_id", granteeId)
+      .eq("office_id", mahaloStationId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (grantSelErr) throw grantSelErr;
+    if (!existingGrant) {
+      const { error } = await admin
+        .from("multi_office_authority_grants")
+        .insert({ grantee_employee_id: granteeId, office_id: mahaloStationId, granted_by: grantedById });
+      if (error) throw error;
+    }
+  }
+  console.log("  統括園長=STG-EMP-01 / 統括管理者=STG-EMP-05(Mahalo Station付与) / system_admin=STG-EMP-04 OK");
+
   console.log("完了しました。");
 }
 
