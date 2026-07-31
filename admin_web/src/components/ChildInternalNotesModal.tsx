@@ -170,24 +170,8 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
           この記録は保護者には表示されません
         </p>
 
-        {/* 絞り込み(区分・期間)。値はそのままRPCの引数として渡す */}
-        <div className="mb-4 space-y-2 rounded-xl bg-slate-50 p-3">
-          <div className="flex flex-wrap gap-2">
-            {CATEGORY_ENTRIES.map(([key, label]) => (
-              <label key={key} className="flex items-center gap-1 text-xs text-slate-600">
-                <input type="checkbox" checked={filterCategories.includes(key)} onChange={() => toggleFilterCategory(key)} />
-                {label}
-              </label>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" />
-            <span className="text-xs text-slate-400">〜</span>
-            <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" />
-          </div>
-        </div>
-
-        {/* 新規追記(保護者非公開の記録。連絡帳の入力欄=保護者公開との取り違え防止のため琥珀色で統一) */}
+        {/* 新規追記(=書く。日常操作の主。連絡帳=保護者公開との取り違え防止のため琥珀色で統一)。
+            絞り込み(=探す。従)より上に置く。 */}
         <div className="mb-4 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
           <p className="text-xs font-semibold text-amber-700">新規追記(園内記録・保護者非公開)</p>
           <div className="flex flex-wrap gap-2">
@@ -220,6 +204,28 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
             園内記録として保存
           </button>
         </div>
+
+        {/* 絞り込み(=保存済みの記録を探す。従)。記録が0件かつ絞り込み未使用のときは対象が無いので非表示。
+            絞り込みで0件になった場合は解除できるよう表示を維持。値はそのままRPCの引数として渡す。 */}
+        {(notes.length > 0 || filterCategories.length > 0 || filterFrom !== "" || filterTo !== "") && (
+          <div className="mb-4 space-y-2 rounded-xl bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-600">絞り込み</p>
+            <p className="text-[11px] text-slate-400">保存済みの記録を区分・期間で絞り込んで表示します(新規追記には影響しません)。</p>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORY_ENTRIES.map(([key, label]) => (
+                <label key={key} className="flex items-center gap-1 text-xs text-slate-600">
+                  <input type="checkbox" checked={filterCategories.includes(key)} onChange={() => toggleFilterCategory(key)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" />
+              <span className="text-xs text-slate-400">〜</span>
+              <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" />
+            </div>
+          </div>
+        )}
 
         {/* 一覧(新しい順) */}
         {listError && <p className="text-sm text-red-600">{listError}</p>}

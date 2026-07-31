@@ -8,7 +8,6 @@ import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
-import { StaffPinManagementModal } from "@/components/StaffPinManagementModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { currentDate } from "@/lib/datetime";
@@ -41,7 +40,6 @@ function ChildcareChildrenPageContent() {
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
-  const [pinMgmtOpen, setPinMgmtOpen] = useState(false);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -134,13 +132,6 @@ function ChildcareChildrenPageContent() {
               className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
             >
               翌年度への進級一括登録
-            </button>
-            <button
-              onClick={() => setPinMgmtOpen(true)}
-              disabled={!selectedOffice}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-            >
-              職員PIN管理
             </button>
           </div>
         </div>
@@ -350,9 +341,6 @@ function ChildcareChildrenPageContent() {
         />
       )}
 
-      {pinMgmtOpen && selectedOffice && (
-        <StaffPinManagementModal officeId={selectedOffice} onClose={() => setPinMgmtOpen(false)} />
-      )}
     </div>
   );
 }

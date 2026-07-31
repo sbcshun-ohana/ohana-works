@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { EditTaxWithholdingModal } from "@/components/EditTaxWithholdingModal";
 import { EmployeeFacilityPayPanel } from "@/components/EmployeeFacilityPayPanel";
+import { StaffPinManagementModal } from "@/components/StaffPinManagementModal";
 
 type EmployeeTaxStatus = {
   employee_id: string;
@@ -24,6 +25,7 @@ export default function EmployeesPage() {
   const [editingEmployee, setEditingEmployee] = useState<EmployeeTaxStatus | null>(null);
   const [payEmployee, setPayEmployee] = useState<EmployeeTaxStatus | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [pinMgmtOpen, setPinMgmtOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -68,7 +70,15 @@ export default function EmployeesPage() {
     <div className="flex flex-1 flex-col">
       <AppHeader />
       <main className="flex-1 space-y-6 p-6">
-        <h2 className="text-lg font-bold text-slate-800">職員マスタ(源泉徴収区分・扶養人数)</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-slate-800">職員マスタ(源泉徴収区分・扶養人数)</h2>
+          <button
+            onClick={() => setPinMgmtOpen(true)}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+          >
+            職員PIN管理
+          </button>
+        </div>
         <p className="text-xs text-slate-400">
           6.6章: 扶養控除等申告書の提出あり=甲欄・なし=乙欄。給与計算エンジンは未設定の職員を乙欄・扶養0人として扱います。
           扶養人数は①社会保険の扶養人数(自身の健康保険等の被扶養者数)と②所得税の扶養人数(源泉控除対象扶養親族数)を別々に管理し、
@@ -155,6 +165,8 @@ export default function EmployeesPage() {
           onClose={() => setPayEmployee(null)}
         />
       )}
+
+      {pinMgmtOpen && <StaffPinManagementModal onClose={() => setPinMgmtOpen(false)} />}
     </div>
   );
 }

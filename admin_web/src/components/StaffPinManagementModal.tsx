@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
-  officeId: string;
   onClose: () => void;
 };
 
@@ -15,15 +14,31 @@ type Row = {
   is_locked: boolean;
 };
 
-/// 要件3: 職員のPIN簡易ログインの管理(設定状況の確認・リセット)。
+type Office = { office_id: string; office_name: string };
+
+/// 要件3: 職員のPIN簡易ログインの管理(設定状況の確認・リセット)。職員マスタから開く。
+/// 施設は本モーダル内で選択する(保育業務にアクセスできる施設一覧)。
 /// 権限判定は reset_staff_pin / fetch_staff_pin_status RPC(manages_office)側に従う。
-export function StaffPinManagementModal({ officeId, onClose }: Props) {
+export function StaffPinManagementModal({ onClose }: Props) {
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [officeId, setOfficeId] = useState<string>("");
   const [rows, setRows] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
+    createClient()
+      .rpc("fetch_my_childcare_offices")
+      .then(({ data }) => {
+        const list = (data ?? []) as Office[];
+        setOffices(list);
+        if (list.length > 0) setOfficeId((prev) => prev || list[0].office_id);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!officeId) return;
     function load() {
       setIsLoading(true);
       setError(null);
@@ -75,6 +90,23 @@ export function StaffPinManagementModal({ officeId, onClose }: Props) {
             閉じる
           </button>
         </div>
+        {offices.length > 0 && (
+          <div className="mb-4">
+            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
+            <select
+              value={officeId}
+              onChange={(e) => setOfficeId(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              {offices.map((o) => (
+                <option key={o.office_id} value={o.office_id}>
+                  {o.office_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {offices.length === 0 && <p className="mb-3 text-sm text-slate-500">保育業務機能が有効な施設がありません。</p>}
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         {isLoading && <p className="text-sm text-slate-400">読み込み中…</p>}
         <table className="min-w-full text-sm">
