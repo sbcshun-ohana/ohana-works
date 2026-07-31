@@ -29,16 +29,22 @@ create trigger trg_staff_time_bands_updated_at before update on staff_time_bands
   for each row execute function set_updated_at();
 
 -- シード(冪等・office_code で解決。早番窓幅30分は仮値=Phase1本番分布で調整可)
+-- 中番は「導出帯」= 開始窓・終了窓が両方 NULL の実在行。判定は「他のどの帯にも該当しない
+-- シフトがある」(§6.1)。実在行にすることで target_type='band' なら band_id NOT NULL を張れる。
 insert into staff_time_bands (office_id, name, sort_order, start_from, start_until, end_from, end_until)
 select o.id, v.name, v.so, v.sf, v.su, v.ef, v.eu
 from (values
   ('O','早番',10,time '07:00',time '07:30',null::time,null::time),
+  ('O','中番',20,null::time,null::time,null::time,null::time),
   ('O','遅番',30,null::time,null::time,time '19:00',time '23:59'),
   ('M','早番',10,time '07:00',time '07:30',null::time,null::time),
+  ('M','中番',20,null::time,null::time,null::time,null::time),
   ('M','遅番',30,null::time,null::time,time '20:00',time '23:59'),
   ('H','早番',10,time '08:00',time '08:30',null::time,null::time),
+  ('H','中番',20,null::time,null::time,null::time,null::time),
   ('H','遅番',30,null::time,null::time,time '19:00',time '23:59'),
   ('S','早番',10,time '08:00',time '08:30',null::time,null::time),
+  ('S','中番',20,null::time,null::time,null::time,null::time),
   ('S','遅番',30,null::time,null::time,time '19:00',time '23:59')
 ) as v(office_code,name,so,sf,su,ef,eu)
 join offices o on o.office_code = v.office_code
@@ -80,9 +86,16 @@ create table staff_message_targets (
   -- 将来の区分追加はこの CHECK への値追加で対応する。
   target_type text not null check (target_type in ('individual', 'band', 'facility', 'class')),
   employee_id uuid references employees(id),  -- individual で必須
-  band_id uuid references staff_time_bands(id), -- band で使用。null=中番(系統定義)
+  band_id uuid references staff_time_bands(id), -- band で必須(中番も実在行=band_id NOT NULL)
   class_id uuid references childcare_classes(id), -- class で必須
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 種別ごとの必須項目を担保(中番も staff_time_bands 実在行のため band は band_id 必須)
+  constraint staff_message_targets_shape check (
+    (target_type = 'individual' and employee_id is not null and band_id is null and class_id is null) or
+    (target_type = 'band' and band_id is not null and employee_id is null and class_id is null) or
+    (target_type = 'facility' and employee_id is null and band_id is null and class_id is null) or
+    (target_type = 'class' and class_id is not null and employee_id is null and band_id is null)
+  )
 );
 create index idx_smt_message on staff_message_targets (message_id);
 
@@ -106,6 +119,34 @@ create table staff_message_comments (
 );
 
 -- ============================================================
+-- 施設の職員母集団(定義の二重化禁止・単一の正)
+--   office_assigned_employee_ids: 在籍職員(有効 employee_office_assignments)。園内連絡 facility の母集団。
+--   office_accessible_employee_ids: 在籍 + 管理ロール + 統括 + 付与。PINピッカーの母集団。
+--     在籍ロジックは office_assigned を土台にして二重化しない。pin-staff-picker はこの関数を呼ぶ形へ
+--     寄せる(Edge Function 再デプロイ=別作業。155適用後に移行)。
+-- ============================================================
+create or replace function office_assigned_employee_ids(p_office_id uuid)
+returns setof uuid language sql stable security definer set search_path = public
+as $$
+  select eoa.employee_id from employee_office_assignments eoa
+  where eoa.office_id = p_office_id
+    and eoa.start_date <= current_date and (eoa.end_date is null or eoa.end_date >= current_date);
+$$;
+
+create or replace function office_accessible_employee_ids(p_office_id uuid)
+returns setof uuid language sql stable security definer set search_path = public
+as $$
+  select t from office_assigned_employee_ids(p_office_id) t
+  union
+  select er.employee_id from employee_roles er join roles r on r.id = er.role_id
+  where r.code in ('system_admin', 'executive_director')
+     or (r.code in ('director', 'chief', 'office_manager') and (er.office_id is null or er.office_id = p_office_id))
+  union
+  select g.grantee_employee_id from multi_office_authority_grants g
+  where g.office_id = p_office_id and g.revoked_at is null;
+$$;
+
+-- ============================================================
 -- 6.1 宛先該当の判定(1関数に集約。band はシフト draft+confirmed から動的解決)
 -- ============================================================
 create or replace function is_staff_message_addressed_to(p_message_id uuid, p_employee_id uuid)
@@ -120,33 +161,25 @@ as $$
       and (
         -- individual
         (t.target_type = 'individual' and t.employee_id = p_employee_id)
-        -- facility: 当該施設の在籍職員(所属 or 当該施設アクセス)
-        or (t.target_type = 'facility' and exists (
-              select 1 from employee_office_assignments eoa
-              where eoa.employee_id = p_employee_id and eoa.office_id = m.office_id
-                and eoa.start_date <= current_date and (eoa.end_date is null or eoa.end_date >= current_date)))
+        -- facility: 当該施設の在籍職員(単一の正=office_assigned_employee_ids)
+        or (t.target_type = 'facility' and p_employee_id in (select office_assigned_employee_ids(m.office_id)))
         -- class: 当該クラスの担任(現任)
         or (t.target_type = 'class' and exists (
               select 1 from class_homeroom_assignments cha
               where cha.class_id = t.class_id and cha.employee_id = p_employee_id and cha.unassigned_at is null))
-        -- band: target_date のシフト(draft+confirmed)で判定。band_id 有=窓判定、null=中番
+        -- band: target_date のシフト(draft+confirmed)で判定。中番も実在行(両窓NULL=導出帯)
         or (t.target_type = 'band' and m.target_date is not null and exists (
-              select 1 from shifts s
+              select 1 from shifts s join staff_time_bands b on b.id = t.band_id
               where s.employee_id = p_employee_id and s.work_date = m.target_date
                 and s.office_id = m.office_id and s.status in ('draft', 'confirmed')
                 and (
                   case
-                    when t.band_id is null then  -- 中番: どの早番/遅番窓にも該当しないシフト
-                      not exists (
-                        select 1 from staff_time_bands b
-                        where b.office_id = m.office_id and (
-                          (b.start_from is not null and s.start_time between b.start_from and b.start_until) or
-                          (b.end_from is not null and s.end_time between b.end_from and b.end_until)))
-                    else exists (  -- 早番/遅番: 当該帯の窓に入る
-                      select 1 from staff_time_bands b
-                      where b.id = t.band_id and (
-                        (b.start_from is not null and s.start_time between b.start_from and b.start_until) or
-                        (b.end_from is not null and s.end_time between b.end_from and b.end_until)))
+                    when b.start_from is not null then s.start_time between b.start_from and b.start_until  -- 早番
+                    when b.end_from is not null then s.end_time between b.end_from and b.end_until          -- 遅番
+                    else not exists (  -- 中番(導出帯): どの早番/遅番窓にも該当しないシフト
+                      select 1 from staff_time_bands b2 where b2.office_id = m.office_id and (
+                        (b2.start_from is not null and s.start_time between b2.start_from and b2.start_until) or
+                        (b2.end_from is not null and s.end_time between b2.end_from and b2.end_until)))
                   end
                 )))
       )
