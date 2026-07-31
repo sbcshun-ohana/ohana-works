@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/role_display.dart';
+import '../services/secure_device_store.dart';
 import '../services/session_identity.dart';
 import '../theme/app_theme.dart';
 
@@ -19,6 +20,7 @@ class SessionBanner extends StatefulWidget {
 
 class _SessionBannerState extends State<SessionBanner> {
   SessionIdentity? _identity;
+  String? _officeName;
   StreamSubscription<AuthState>? _sub;
 
   @override
@@ -36,7 +38,14 @@ class _SessionBannerState extends State<SessionBanner> {
 
   Future<void> _load() async {
     final identity = await fetchMySessionIdentity();
-    if (mounted) setState(() => _identity = identity);
+    // 施設名: 登録端末(Ohana Kids)なら端末の施設、なければ(Ohana Staff等)所属施設。
+    final device = await SecureDeviceStore().load();
+    if (mounted) {
+      setState(() {
+        _identity = identity;
+        _officeName = device?.officeName ?? identity?.homeOfficeName;
+      });
+    }
   }
 
   Future<void> _signOut() async {
@@ -59,7 +68,8 @@ class _SessionBannerState extends State<SessionBanner> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'ログイン中: ${identity.name}(${roleDisplayName(identity.roleCode)})',
+                'ログイン中: ${identity.name}(${roleDisplayName(identity.roleCode)})'
+                '${_officeName != null ? ' / $_officeName' : ''}',
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                 overflow: TextOverflow.ellipsis,
               ),

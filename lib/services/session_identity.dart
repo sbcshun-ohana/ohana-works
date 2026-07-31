@@ -3,9 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// ログイン中の職員の氏名と最上位役職コード。役職コードの日本語表示は
 /// lib/constants/role_display.dart の roleDisplayName() で解決する。
 class SessionIdentity {
-  const SessionIdentity({required this.name, this.roleCode});
+  const SessionIdentity({required this.name, this.roleCode, this.homeOfficeName});
   final String name;
   final String? roleCode;
+  final String? homeOfficeName;
 }
 
 /// ログイン中職員の氏名＋最上位役職を取得する。
@@ -23,6 +24,7 @@ Future<SessionIdentity?> fetchMySessionIdentity() async {
     return SessionIdentity(
       name: (row['name'] as String?) ?? '',
       roleCode: row['role_code'] as String?,
+      homeOfficeName: row['home_office_name'] as String?,
     );
   } catch (_) {
     return _nameOnlyFallback(client, user.id);

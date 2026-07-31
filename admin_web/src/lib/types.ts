@@ -573,6 +573,7 @@ export type SessionIdentity = {
   employee_id: string;
   name: string;
   role_code: string | null;
+  home_office_name: string | null;
 };
 
 export type ChildInternalNote = {
