@@ -6,6 +6,7 @@ import 'config/supabase_config.dart';
 import 'kiosk/kiosk_app.dart';
 import 'theme/app_theme.dart';
 import 'widgets/auth_gate.dart';
+import 'widgets/session_banner.dart';
 
 /// ビルド時に `--dart-define=APP_MODE=kiosk` を指定すると受付iPadのキオスクアプリ、
 /// `--dart-define=APP_MODE=childcare` を指定すると保育業務専用iPadアプリとして起動する。
@@ -38,6 +39,14 @@ class MyApp extends StatelessWidget {
       title: 'Ohana Works',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      // 全画面共通の「ログイン中: 氏名(役職)」常時表示(職員個人スマホアプリ=Ohana Staff)。
+      // 自動ログアウトは共有iPad(Ohana Kids)側のみ。
+      builder: (context, child) => Column(
+        children: [
+          SafeArea(bottom: false, child: const SessionBanner()),
+          Expanded(child: child ?? const SizedBox.shrink()),
+        ],
+      ),
       home: const AuthGate(),
     );
   }

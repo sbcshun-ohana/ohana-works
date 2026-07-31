@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { roleDisplayName, type SessionIdentity } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/attendance", label: "施設別勤怠" },
@@ -20,12 +21,19 @@ export function AppHeader() {
   const pathname = usePathname();
   // 保育業務メニューは機能フラグが有効な施設が1つでもある場合のみ表示する(既定OFF)。
   const [showChildcare, setShowChildcare] = useState(false);
+  // ログイン中の氏名(役職)を常時表示する(共有端末での取り違え防止)。
+  const [identity, setIdentity] = useState<SessionIdentity | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
       if (!error && (data ?? []).length > 0) {
         setShowChildcare(true);
+      }
+    });
+    supabase.rpc("fetch_my_session_identity").then(({ data, error }) => {
+      if (!error && Array.isArray(data) && data.length > 0) {
+        setIdentity(data[0] as SessionIdentity);
       }
     });
   }, []);
@@ -64,12 +72,20 @@ export function AppHeader() {
           })}
         </nav>
       </div>
-      <button
-        onClick={handleLogout}
-        className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-      >
-        ログアウト
-      </button>
+      <div className="flex items-center gap-3">
+        {identity && (
+          <span className="text-sm text-slate-600">
+            ログイン中: <span className="font-semibold text-slate-800">{identity.name}</span>
+            <span className="text-slate-500">({roleDisplayName(identity.role_code)})</span>
+          </span>
+        )}
+        <button
+          onClick={handleLogout}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          ログアウト
+        </button>
+      </div>
     </header>
   );
 }

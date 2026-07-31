@@ -548,6 +548,33 @@ export const CHILD_INTERNAL_NOTE_CATEGORY_LABELS: Record<ChildInternalNoteCatego
   other: "その他",
 };
 
+// ---- 役職表示名(1箇所集約。マイグレーション147で executive_director/area_manager を追加) ----
+
+export const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  system_admin: "システム管理者",
+  labor_manager: "労務管理者",
+  executive_director: "統括園長",
+  director: "園長",
+  area_manager: "統括管理者",
+  chief: "主任",
+  office_manager: "管理者",
+  viewer: "閲覧者",
+  staff: "一般職員",
+};
+
+// 一般職員(staff)は役職行を持たずに運用されることがある(本番実測でstaff割当0名)。
+// role_code が null/未知の場合は「一般職員」を既定表示にする。
+export function roleDisplayName(roleCode: string | null | undefined): string {
+  if (!roleCode) return "一般職員";
+  return ROLE_DISPLAY_NAMES[roleCode] ?? "一般職員";
+}
+
+export type SessionIdentity = {
+  employee_id: string;
+  name: string;
+  role_code: string | null;
+};
+
 export type ChildInternalNote = {
   id: string;
   child_id: string;

@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
@@ -45,16 +49,86 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
   bool _isSaving = false;
   String? _saveError;
 
+  // 自動ログアウト等で入力途中の内容が消えないよう、書きかけを端末ローカルへ下書き保存する。
+  // キーに職員IDを含め、ログイン中本人の下書きのみ復元対象にする(他人の書きかけは見せない)。
+  Timer? _draftDebounce;
+  String? get _draftKey =>
+      _myEmployeeId == null ? null : 'cin_draft_${_myEmployeeId}_${widget.childId}';
+
   @override
   void initState() {
     super.initState();
+    _newBodyController.addListener(_scheduleDraftSave);
     _init();
   }
 
   @override
   void dispose() {
+    _draftDebounce?.cancel();
+    _newBodyController.removeListener(_scheduleDraftSave);
     _newBodyController.dispose();
     super.dispose();
+  }
+
+  void _scheduleDraftSave() {
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 600), _persistDraft);
+  }
+
+  Future<void> _persistDraft() async {
+    final key = _draftKey;
+    if (key == null) return;
+    final body = _newBodyController.text;
+    final prefs = await SharedPreferences.getInstance();
+    if (body.trim().isEmpty) {
+      await prefs.remove(key);
+      return;
+    }
+    await prefs.setString(
+      key,
+      jsonEncode({
+        'note_date': ChildcareService.dateOnly(_newDate),
+        'category': _newCategory,
+        'body': body,
+        'ai_excluded': _newAiExcluded,
+      }),
+    );
+  }
+
+  Future<void> _restoreDraft() async {
+    final key = _draftKey;
+    if (key == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(key);
+    if (raw == null) return;
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final body = data['body'] as String? ?? '';
+      if (body.trim().isEmpty) return;
+      _newBodyController.text = body;
+      final cat = data['category'] as String?;
+      final date = DateTime.tryParse(data['note_date'] as String? ?? '');
+      if (!mounted) return;
+      setState(() {
+        if (cat != null && kChildInternalNoteCategories.contains(cat)) _newCategory = cat;
+        if (date != null) _newDate = date;
+        _newAiExcluded = data['ai_excluded'] as bool? ?? false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('入力途中の下書きを復元しました')),
+        );
+      }
+    } catch (_) {
+      // 壊れた下書きは無視する。
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    final key = _draftKey;
+    if (key == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(key);
   }
 
   Future<void> _init() async {
@@ -70,6 +144,7 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
       _staffNames = {
         for (final staff in results[2] as List<ChildcareStaffMember>) staff.employeeId: staff.name,
       };
+      await _restoreDraft();
       await _loadFirstPage();
     } finally {
       if (mounted) setState(() => _isLoadingInitial = false);
@@ -122,7 +197,10 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
-    if (picked != null) setState(() => _newDate = picked);
+    if (picked != null) {
+      setState(() => _newDate = picked);
+      _persistDraft();
+    }
   }
 
   Future<void> _save() async {
@@ -144,6 +222,7 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
         aiExcluded: _newAiExcluded,
       );
       _newBodyController.clear();
+      await _clearDraft();
       setState(() {
         _newDate = DateTime.now();
         _newAiExcluded = false;
@@ -326,8 +405,14 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
           isSaving: _isSaving,
           errorMessage: _saveError,
           onPickDate: _pickNewDate,
-          onCategoryChanged: (v) => setState(() => _newCategory = v),
-          onAiExcludedChanged: (v) => setState(() => _newAiExcluded = v),
+          onCategoryChanged: (v) {
+            setState(() => _newCategory = v);
+            _persistDraft();
+          },
+          onAiExcludedChanged: (v) {
+            setState(() => _newAiExcluded = v);
+            _persistDraft();
+          },
           onSave: _save,
         ),
         const SizedBox(height: 24),
