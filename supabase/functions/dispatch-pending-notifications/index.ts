@@ -6,10 +6,11 @@
 // send-push-notification(1リクエスト=1人宛)は管理者Webからの単発テスト送信用に残し、
 // 業務イベント発火時の自動配信はすべてこちら(outbox一括処理)に統一する。
 //
-// guardian_notification_settingsの配信可否チェックは現時点では未実装。
-// このoutboxへ行を積んでいるのは現状すべて職員(target_employee_id)宛の通知のみ
-// (給与明細公開・申請結果・シフト変更・お知らせ)で、保護者(target_guardian_id)宛の行は
-// まだ生成されていないため。保護者向けイベントをoutbox経由に移行する際に追加すること。
+// 保護者(target_guardian_id)宛の行は、お知らせ一斉配信 Phase E(approve_guardian_notice)で
+// notification_type='guardian_notice' として生成される(payloadに notice_id/child_id を格納し、
+// 保護者アプリのプッシュtap→詳細到達で既読)。園児特定行のタイトルは生成時に「【〇〇ちゃん】」を付与済み。
+// 配信可否(guardian_notification_settings)は outbox 生成時に尊重(OFFの保護者は行を作らない)ため、
+// dispatcher 側では追加のチェックを行わない。職員宛(target_employee_id)は従来どおり。
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
