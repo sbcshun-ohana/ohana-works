@@ -374,6 +374,9 @@ function AnnouncementsPageContent() {
           {isManager && (
             <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
               <h3 className="text-sm font-bold text-slate-700">新規お知らせを作成</h3>
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                個別家庭の機微な案件(支払い・個別のトラブル等)は一斉お知らせに載せず、連絡帳・個別連絡をご利用ください。
+              </p>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">タイトル</label>
                 <input
