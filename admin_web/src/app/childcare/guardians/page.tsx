@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
+import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import type {
   ChildForAssignment,
   GuardianInvitationRow,
@@ -14,6 +16,7 @@ import { GUARDIAN_INVITATION_STATUS_LABELS } from "@/lib/types";
 
 function ChildcareGuardiansPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [guardians, setGuardians] = useState<GuardianRow[]>([]);
   const [invitations, setInvitations] = useState<GuardianInvitationRow[]>([]);
@@ -27,6 +30,11 @@ function ChildcareGuardiansPageContent() {
   const [isIssuing, setIsIssuing] = useState(false);
   const [issuedInvite, setIssuedInvite] = useState<{ token: string; expiresAt: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const classOrder = classOrderIndex(classes);
+  const filteredChildren = (selectedClassName === null ? children : children.filter((c) => c.class_name === selectedClassName))
+    .slice()
+    .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
 
   useEffect(() => {
     function loadRows() {
@@ -212,6 +220,24 @@ function ChildcareGuardiansPageContent() {
           <h3 className="text-base font-bold text-slate-800">新規招待</h3>
           <div className="flex flex-wrap items-end gap-4">
             <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
+              <select
+                value={selectedClass}
+                onChange={(e) => {
+                  setSelectedClass(e.target.value);
+                  setNewInviteChildId("");
+                }}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+              >
+                <option value="">全クラス</option>
+                {classes.map((c) => (
+                  <option key={c.class_id} value={c.class_id}>
+                    {c.class_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">園児</label>
               <select
                 value={newInviteChildId}
@@ -219,7 +245,7 @@ function ChildcareGuardiansPageContent() {
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
               >
                 <option value="">選択してください</option>
-                {children.map((c) => (
+                {filteredChildren.map((c) => (
                   <option key={c.child_id} value={c.child_id}>
                     {c.display_name}
                     {c.honorific_suffix ?? ""}

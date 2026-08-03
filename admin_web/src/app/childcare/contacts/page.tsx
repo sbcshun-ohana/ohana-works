@@ -6,6 +6,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
+import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
 import type { DailyContactRow, FamilyDailyReportSummary } from "@/lib/types";
 import { FAMILY_BOWEL_CONDITION_LABELS, FAMILY_MOOD_LABELS, MEAL_COMPLETION_OPTIONS, TOILETING_TYPES } from "@/lib/types";
@@ -33,6 +35,7 @@ const AI_ACTIONS: { key: string; label: string }[] = [
 
 function ChildcareContactsPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
   const [businessDate, setBusinessDate] = useState(currentDate());
@@ -61,6 +64,12 @@ function ChildcareContactsPageContent() {
   const [internalNotesOpen, setInternalNotesOpen] = useState(false);
 
   const selectedRow = rows.find((r) => r.child_id === selectedChildId) ?? null;
+  const classOrder = classOrderIndex(classes);
+  const filteredRows = (selectedClassName === null ? rows : rows.filter((r) => r.class_name === selectedClassName))
+    .slice()
+    .sort((a, b) =>
+      compareByClassThenName(classOrder, a.class_name, a.child_display_name, b.class_name, b.child_display_name),
+    );
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
   // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
@@ -411,6 +420,24 @@ function ChildcareContactsPageContent() {
             </select>
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => {
+                setSelectedClass(e.target.value);
+                setSelectedChildId(null);
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              <option value="">全クラス</option>
+              {classes.map((c) => (
+                <option key={c.class_id} value={c.class_id}>
+                  {c.class_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
             <input
               type="date"
@@ -445,7 +472,7 @@ function ChildcareContactsPageContent() {
                   </tr>
                 )}
                 {!isLoading &&
-                  rows.map((row) => (
+                  filteredRows.map((row) => (
                     <tr
                       key={row.child_id}
                       onClick={() => ensureAndSelect(row.child_id)}

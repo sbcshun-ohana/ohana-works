@@ -10,10 +10,10 @@ import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal"
 import { CreateChildModal } from "@/components/CreateChildModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
+import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareClass, ChildMasterRow } from "@/lib/types";
-
-const ALL_CLASSES_VALUE = "__all__";
+import type { ChildMasterRow } from "@/lib/types";
 
 function isCurrentlyRequired(row: ChildMasterRow, today: string): boolean {
   if (row.family_daily_report_required_from) {
@@ -27,13 +27,12 @@ function isCurrentlyRequired(row: ChildMasterRow, today: string): boolean {
 
 function ChildcareChildrenPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [rows, setRows] = useState<ChildMasterRow[]>([]);
-  const [classes, setClasses] = useState<ChildcareClass[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const [selectedClassName, setSelectedClassName] = useState<string>(ALL_CLASSES_VALUE);
   const [editingRow, setEditingRow] = useState<ChildMasterRow | null>(null);
   const [isPromoting, setIsPromoting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -76,16 +75,12 @@ function ChildcareChildrenPageContent() {
         }
         setRows((data ?? []) as ChildMasterRow[]);
       });
-    supabase.rpc("fetch_childcare_classes", { p_office_id: selectedOffice }).then(({ data, error }) => {
-      if (!error) setClasses((data ?? []) as ChildcareClass[]);
-    });
   }, [selectedOffice, reloadToken]);
 
-  const classNames = Array.from(
-    new Set(rows.map((r) => r.class_name).filter((v): v is string => v != null)),
-  );
-  const filteredRows =
-    selectedClassName === ALL_CLASSES_VALUE ? rows : rows.filter((r) => r.class_name === selectedClassName);
+  const classOrder = classOrderIndex(classes);
+  const filteredRows = (selectedClassName === null ? rows : rows.filter((r) => r.class_name === selectedClassName))
+    .slice()
+    .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
   const today = currentDate();
 
   if (officesError) {
@@ -141,10 +136,7 @@ function ChildcareChildrenPageContent() {
             <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
             <select
               value={selectedOffice}
-              onChange={(e) => {
-                setSelectedOffice(e.target.value);
-                setSelectedClassName(ALL_CLASSES_VALUE);
-              }}
+              onChange={(e) => setSelectedOffice(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             >
               {offices?.map((office) => (
@@ -157,14 +149,14 @@ function ChildcareChildrenPageContent() {
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
             <select
-              value={selectedClassName}
-              onChange={(e) => setSelectedClassName(e.target.value)}
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             >
-              <option value={ALL_CLASSES_VALUE}>全クラス</option>
-              {classNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+              <option value="">全クラス</option>
+              {classes.map((c) => (
+                <option key={c.class_id} value={c.class_id}>
+                  {c.class_name}
                 </option>
               ))}
             </select>

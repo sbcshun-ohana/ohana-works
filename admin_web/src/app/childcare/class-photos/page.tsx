@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { currentDate } from "@/lib/datetime";
 import { watermarkImage } from "@/lib/imageWatermark";
-import type { ChildcareClass, ClassDailyPhoto } from "@/lib/types";
+import type { ClassDailyPhoto } from "@/lib/types";
 
 const STATUS_LABELS: Record<ClassDailyPhoto["status"], string> = {
   draft: "未チェック",
@@ -18,9 +19,8 @@ const STATUS_LABELS: Record<ClassDailyPhoto["status"], string> = {
 function ChildcareClassPhotosPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
-
-  const [classes, setClasses] = useState<ChildcareClass[]>([]);
-  const [selectedClass, setSelectedClass] = useState<string>("");
+  // クラス単位のページ。?class= をタブ切替で引き継ぎつつ、無ければ先頭クラス既定。
+  const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice, { defaultToFirst: true });
   const [businessDate, setBusinessDate] = useState(currentDate());
 
   const [photos, setPhotos] = useState<ClassDailyPhoto[]>([]);
@@ -30,20 +30,6 @@ function ChildcareClassPhotosPageContent() {
   const [reloadToken, setReloadToken] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!selectedOffice) return;
-    const supabase = createClient();
-    supabase.rpc("fetch_childcare_classes", { p_office_id: selectedOffice }).then(({ data, error }) => {
-      if (error) {
-        setRowsError(error.message);
-        return;
-      }
-      const list = (data ?? []) as ChildcareClass[];
-      setClasses(list);
-      setSelectedClass(list.length > 0 ? list[0].class_id : "");
-    });
-  }, [selectedOffice]);
 
   useEffect(() => {
     function loadRows() {

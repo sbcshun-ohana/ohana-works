@@ -5,11 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
+import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
 import type { DailyContactRow } from "@/lib/types";
 
 function ChildcareContactsCopyPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<DailyContactRow[]>([]);
@@ -63,6 +66,13 @@ function ChildcareContactsCopyPageContent() {
     setReloadToken((t) => t + 1);
   }
 
+  const classOrder = classOrderIndex(classes);
+  const filteredRows = (selectedClassName === null ? rows : rows.filter((r) => r.class_name === selectedClassName))
+    .slice()
+    .sort((a, b) =>
+      compareByClassThenName(classOrder, a.class_name, a.child_display_name, b.class_name, b.child_display_name),
+    );
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -106,6 +116,21 @@ function ChildcareContactsCopyPageContent() {
             </select>
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              <option value="">全クラス</option>
+              {classes.map((c) => (
+                <option key={c.class_id} value={c.class_id}>
+                  {c.class_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
             <input
               type="date"
@@ -119,12 +144,12 @@ function ChildcareContactsCopyPageContent() {
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
 
         {isLoading && <p className="text-sm text-slate-400">読み込み中…</p>}
-        {!isLoading && rows.length === 0 && (
+        {!isLoading && filteredRows.length === 0 && (
           <p className="text-sm text-slate-400">承認済みの連絡帳はまだありません</p>
         )}
 
         <div className="space-y-4">
-          {rows.map((row) => (
+          {filteredRows.map((row) => (
             <div key={row.child_id} className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-base font-bold text-slate-800">

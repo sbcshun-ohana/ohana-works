@@ -21,9 +21,14 @@ const CHILDCARE_NAV_ITEMS = [
 export function ChildcareNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  // タブ切替後も選択中の施設(?office=)を引き継ぐ。
+  // タブ切替後も選択中の施設(?office=)とクラス(?class=)を引き継ぐ。
   const office = searchParams.get("office");
-  const suffix = office ? `?office=${office}` : "";
+  const cls = searchParams.get("class");
+  const params = new URLSearchParams();
+  if (office) params.set("office", office);
+  if (cls) params.set("class", cls);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
 
   return (
     <div className="border-b border-slate-200 bg-slate-50 px-6 py-2">

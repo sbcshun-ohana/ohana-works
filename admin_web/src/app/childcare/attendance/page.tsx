@@ -5,14 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { currentDate } from "@/lib/datetime";
-import type { ChildcareClass, ClassChild } from "@/lib/types";
+import type { ClassChild } from "@/lib/types";
 
 function ChildcareAttendancePageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
-
-  const [classes, setClasses] = useState<ChildcareClass[]>([]);
-  const [selectedClass, setSelectedClass] = useState<string>("");
+  // クラス必須のページ。?class= をタブ切替で引き継ぎつつ、無ければ先頭クラス既定。
+  const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice, { defaultToFirst: true });
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [children, setChildren] = useState<ClassChild[]>([]);
@@ -20,22 +20,6 @@ function ChildcareAttendancePageContent() {
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [savingChildId, setSavingChildId] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    if (!selectedOffice) return;
-    const supabase = createClient();
-    supabase
-      .rpc("fetch_childcare_classes", { p_office_id: selectedOffice })
-      .then(({ data, error }) => {
-        if (error) {
-          setRowsError(error.message);
-          return;
-        }
-        const list = (data ?? []) as ChildcareClass[];
-        setClasses(list);
-        setSelectedClass(list.length > 0 ? list[0].class_id : "");
-      });
-  }, [selectedOffice]);
 
   useEffect(() => {
     function loadChildren() {

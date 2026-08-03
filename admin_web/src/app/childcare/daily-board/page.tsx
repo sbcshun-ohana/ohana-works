@@ -6,12 +6,15 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
+import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
 import type { DailyBoardRow } from "@/lib/types";
 import { DAILY_BOARD_STATUS_LABELS } from "@/lib/types";
 
 function ChildcareDailyBoardPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<DailyBoardRow[]>([]);
@@ -76,6 +79,11 @@ function ChildcareDailyBoardPageContent() {
     };
   }, [selectedOffice, businessDate]);
 
+  const classOrder = classOrderIndex(classes);
+  const filteredRows = (selectedClassName === null ? rows : rows.filter((r) => r.class_name === selectedClassName))
+    .slice()
+    .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -116,6 +124,21 @@ function ChildcareDailyBoardPageContent() {
             </select>
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              <option value="">全クラス</option>
+              {classes.map((c) => (
+                <option key={c.class_id} value={c.class_id}>
+                  {c.class_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
             <input
               type="date"
@@ -149,7 +172,7 @@ function ChildcareDailyBoardPageContent() {
                   </td>
                 </tr>
               )}
-              {!isLoading && rows.length === 0 && (
+              {!isLoading && filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={internalNotesEnabled ? 7 : 6} className="px-4 py-6 text-center text-slate-400">
                     在籍園児がいません
@@ -157,7 +180,7 @@ function ChildcareDailyBoardPageContent() {
                 </tr>
               )}
               {!isLoading &&
-                rows.map((row) => (
+                filteredRows.map((row) => (
                   <tr key={row.child_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {row.display_name}

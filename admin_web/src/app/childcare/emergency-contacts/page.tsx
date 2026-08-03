@@ -5,10 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
+import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import type { ChildForAssignment, EmergencyContact } from "@/lib/types";
 
 function ChildcareEmergencyContactsPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [children, setChildren] = useState<ChildForAssignment[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string>("");
@@ -95,6 +98,22 @@ function ChildcareEmergencyContactsPageContent() {
     setReloadToken((t) => t + 1);
   }
 
+  const classOrder = classOrderIndex(classes);
+  const filteredChildren = (selectedClassName === null ? children : children.filter((c) => c.class_name === selectedClassName))
+    .slice()
+    .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
+
+  // クラス変更時: 絞り込み後の先頭園児へ選択を移す(選択中の園児が絞り込みで消えるため)。
+  function onClassChange(classId: string) {
+    setSelectedClass(classId);
+    const name = classes.find((c) => c.class_id === classId)?.class_name ?? null;
+    const next = name === null ? children : children.filter((c) => c.class_name === name);
+    const sorted = next
+      .slice()
+      .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
+    setSelectedChildId(sorted.length > 0 ? sorted[0].child_id : "");
+  }
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -138,13 +157,28 @@ function ChildcareEmergencyContactsPageContent() {
             </select>
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => onClassChange(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              <option value="">全クラス</option>
+              {classes.map((c) => (
+                <option key={c.class_id} value={c.class_id}>
+                  {c.class_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">園児</label>
             <select
               value={selectedChildId}
               onChange={(e) => setSelectedChildId(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             >
-              {children.map((c) => (
+              {filteredChildren.map((c) => (
                 <option key={c.child_id} value={c.child_id}>
                   {c.display_name}
                   {c.honorific_suffix ?? ""}
