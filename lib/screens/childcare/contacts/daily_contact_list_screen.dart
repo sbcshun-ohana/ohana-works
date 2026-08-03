@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 import 'daily_contact_detail_screen.dart';
 
 /// §10-13 連絡帳一覧(施設内の在籍園児の当日分)。
@@ -45,7 +46,11 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('連絡帳')),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const Text('連絡帳'),
+      ),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: FutureBuilder<List<DailyContact>>(

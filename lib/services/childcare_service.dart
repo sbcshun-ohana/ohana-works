@@ -49,6 +49,18 @@ class ChildcareService {
         .toList();
   }
 
+  /// Ohana Kids ホーム画面(childcare_home_enabled)が当該施設で有効か。
+  /// フラグ未定義/OFF/取得失敗は false=安全側(従来メニュー維持)。
+  Future<bool> isChildcareHomeEnabled(String officeId) async {
+    try {
+      final data = await _client.rpc('is_childcare_home_enabled_for_office', params: {'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+
   Future<List<ChildcareClass>> fetchChildcareClasses(String officeId) async {
     final rows = await _client.rpc('fetch_childcare_classes', params: {'p_office_id': officeId});
     return (rows as List)

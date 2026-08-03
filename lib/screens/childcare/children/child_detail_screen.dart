@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 import 'child_internal_notes_tab.dart';
 import '../family_daily_report_summary_view.dart';
 
@@ -44,7 +45,11 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return Scaffold(
-            appBar: AppBar(title: Text(widget.childName)),
+            appBar: AppBar(
+              leading: const OhanaLogoHomeButton(),
+              leadingWidth: 180,
+              title: Text(widget.childName),
+            ),
             body: const Center(child: CircularProgressIndicator()),
           );
         }
@@ -57,6 +62,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           length: tabs.length,
           child: Scaffold(
             appBar: AppBar(
+              leading: const OhanaLogoHomeButton(),
+              leadingWidth: 180,
               title: Text(widget.childName),
               bottom: tabs.length > 1 ? TabBar(tabs: tabs) : null,
             ),

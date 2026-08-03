@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 
 /// §13 承認済み文章のコピー(コドモン運用)。承認済みの連絡帳のみコピー可能。
 /// 基本は申請者、不在時は他職員・管理者が対応可能(誰でもコピー操作は行える)。
@@ -55,7 +56,11 @@ class _ContactCopyScreenState extends State<ContactCopyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('承認済み連絡帳のコピー')),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const Text('承認済み連絡帳のコピー'),
+      ),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: FutureBuilder<List<DailyContact>>(

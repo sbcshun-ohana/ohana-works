@@ -93,7 +93,7 @@ function ChildcareParentRequestsPageContent() {
       <AppHeader />
       <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
-        <h2 className="text-lg font-bold text-slate-800">保護者申請の承認</h2>
+        <h2 className="text-lg font-bold text-slate-800">保護者からの連絡の承認</h2>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
           <div>

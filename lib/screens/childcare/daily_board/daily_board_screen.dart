@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
 
 /// 保護者アプリ・後続保育機能 Phase A: デイリーボード(iPad中心)。
@@ -69,7 +70,11 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('デイリーボード')),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const Text('デイリーボード'),
+      ),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: FutureBuilder<List<DailyBoardRow>>(

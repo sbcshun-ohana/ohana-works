@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 import 'class_activity_detail_screen.dart';
 
 /// §8 クラス活動 入力・申請・承認の一覧(施設内の全クラスの当日分)。
@@ -46,7 +47,11 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('クラス活動')),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const Text('クラス活動'),
+      ),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: FutureBuilder<List<ClassActivity>>(

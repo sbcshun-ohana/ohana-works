@@ -1,0 +1,361 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../models/childcare.dart';
+import '../../services/childcare_service.dart';
+import '../../services/pin_auth_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/ohana_logo_home_button.dart';
+import 'attendance/childcare_attendance_screen.dart';
+import 'class_activities/class_activity_list_screen.dart';
+import 'contacts/contact_copy_screen.dart';
+import 'contacts/daily_contact_list_screen.dart';
+import 'daily_board/daily_board_screen.dart';
+
+/// Ohana Kids ホーム画面(childcare_home_enabled=ON時の初期画面)。
+/// doc §1.2 の7区分をポップなタイルで表示。未実装区分は「準備中」(disabled)で置き、
+/// 各実装フェーズ到達時に結線する。保護者管理はホームに置かない(admin_web側)。
+class ChildcareHomeScreen extends StatefulWidget {
+  const ChildcareHomeScreen({super.key, required this.service});
+
+  final ChildcareService service;
+
+  @override
+  State<ChildcareHomeScreen> createState() => _ChildcareHomeScreenState();
+}
+
+class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
+  late Future<List<ChildcareOffice>> _officesFuture;
+  ChildcareOffice? _selectedOffice;
+  DateTime _businessDate = DateTime.now();
+  bool _internalNotesEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _officesFuture = widget.service.fetchMyChildcareOffices();
+  }
+
+  Future<void> _loadInternalNotesFlag() async {
+    final office = _selectedOffice;
+    if (office == null) return;
+    final enabled = await widget.service.isChildInternalNotesEnabledForOffice(office.officeId);
+    if (mounted) setState(() => _internalNotesEnabled = enabled);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _businessDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+    );
+    if (picked != null) setState(() => _businessDate = picked);
+  }
+
+  Future<void> _signOut() async {
+    await Supabase.instance.client.auth.signOut();
+  }
+
+  void _comingSoon(String label) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label は準備中です')));
+  }
+
+  void _push(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const SizedBox.shrink(),
+        actions: [
+          IconButton(icon: const Icon(Icons.pin_rounded), tooltip: 'PIN設定', onPressed: _setPin),
+          IconButton(icon: const Icon(Icons.logout_rounded), tooltip: 'ログアウト', onPressed: _signOut),
+        ],
+      ),
+      body: FutureBuilder<List<ChildcareOffice>>(
+        future: _officesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final offices = snapshot.data ?? const [];
+          if (offices.isEmpty) {
+            return const Center(child: Text('保育業務機能が有効な施設がありません'));
+          }
+          if (_selectedOffice == null) {
+            _selectedOffice = offices.first;
+            WidgetsBinding.instance.addPostFrameCallback((_) => _loadInternalNotesFlag());
+          }
+          final office = _selectedOffice!;
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _selectorCard(offices),
+              const SizedBox(height: 16),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.15,
+                children: [
+                  _HomeTile(
+                    icon: Icons.dashboard_customize_rounded,
+                    color: AppColors.skyBlue,
+                    label: 'デイリーボード',
+                    onTap: () => _push(DailyBoardScreen(
+                      service: widget.service,
+                      officeId: office.officeId,
+                      businessDate: _businessDate,
+                    )),
+                  ),
+                  _HomeTile(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    color: AppColors.skyBlue,
+                    label: '連絡帳',
+                    onTap: () => _push(DailyContactListScreen(
+                      service: widget.service,
+                      officeId: office.officeId,
+                      businessDate: _businessDate,
+                      isManager: office.isManager,
+                    )),
+                  ),
+                  _HomeTile(
+                    icon: Icons.groups_rounded,
+                    color: AppColors.leafGreen,
+                    label: 'クラス活動',
+                    onTap: () => _push(ClassActivityListScreen(
+                      service: widget.service,
+                      officeId: office.officeId,
+                      businessDate: _businessDate,
+                      isManager: office.isManager,
+                    )),
+                  ),
+                  _HomeTile(
+                    icon: Icons.bedtime_rounded,
+                    color: AppColors.warmOrange,
+                    label: '午睡チェック',
+                    comingSoon: true,
+                    onTap: () => _comingSoon('午睡チェック'),
+                  ),
+                  _HomeTile(
+                    icon: Icons.mark_email_unread_rounded,
+                    color: AppColors.warmOrange,
+                    label: '保護者からの連絡',
+                    comingSoon: true,
+                    onTap: () => _comingSoon('保護者からの連絡'),
+                  ),
+                  // 園内記録: child_internal_notes_enabled がONの施設のみ表示。
+                  // 新規画面は作らず、園児詳細(デイリーボード→園児→園内記録タブ)の既存導線に乗せる。
+                  if (_internalNotesEnabled)
+                    _HomeTile(
+                      icon: Icons.edit_note_rounded,
+                      color: AppColors.leafGreen,
+                      label: '園内記録',
+                      onTap: () => _push(DailyBoardScreen(
+                        service: widget.service,
+                        officeId: office.officeId,
+                        businessDate: _businessDate,
+                      )),
+                    ),
+                  _HomeTile(
+                    icon: Icons.support_rounded,
+                    color: AppColors.skyBlue,
+                    label: '支援保育',
+                    comingSoon: true,
+                    onTap: () => _comingSoon('支援保育'),
+                  ),
+                  // 暫定タイル(Phase 2で構造再編: 欠席選択→デイリーボード集約 / コピー→連絡帳配下)
+                  _HomeTile(
+                    icon: Icons.event_busy_rounded,
+                    color: AppColors.warmOrange,
+                    label: '欠席選択',
+                    onTap: () => _push(ChildcareAttendanceScreen(
+                      service: widget.service,
+                      officeId: office.officeId,
+                      businessDate: _businessDate,
+                    )),
+                  ),
+                  _HomeTile(
+                    icon: Icons.copy_all_rounded,
+                    color: AppColors.skyBlue,
+                    label: 'コピー',
+                    onTap: () => _push(ContactCopyScreen(
+                      service: widget.service,
+                      officeId: office.officeId,
+                      businessDate: _businessDate,
+                    )),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _selectorCard(List<ChildcareOffice> offices) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('施設', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  DropdownButton<ChildcareOffice>(
+                    isExpanded: true,
+                    value: _selectedOffice,
+                    items: offices
+                        .map((office) => DropdownMenuItem(value: office, child: Text(office.officeName)))
+                        .toList(),
+                    onChanged: (office) {
+                      if (office == null) return;
+                      setState(() => _selectedOffice = office);
+                      _loadInternalNotesFlag();
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('対象日', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_today_rounded),
+                  label: Text('${_businessDate.year}/${_businessDate.month}/${_businessDate.day}'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 次回からのPIN簡易ログイン用に、本人の6桁PINを設定/変更する(要件3)。
+  Future<void> _setPin() async {
+    final controller = TextEditingController();
+    String? error;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('PIN(6桁)の設定'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('登録済みのiPadで、次回から氏名タップ+PINでログインできます。\n'
+                  '全桁同じ・連番(000000/123456等)は使えません。', style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                maxLength: 6,
+                decoration: const InputDecoration(labelText: '6桁のPIN', counterText: ''),
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(error!, style: const TextStyle(color: AppColors.punchClockOut, fontSize: 12)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () async {
+                final pin = controller.text.trim();
+                if (!RegExp(r'^[0-9]{6}$').hasMatch(pin)) {
+                  setDialog(() => error = 'PINは6桁の数字で入力してください');
+                  return;
+                }
+                try {
+                  await PinAuthService(Supabase.instance.client).setMyPin(pin);
+                  if (ctx.mounted) Navigator.of(ctx).pop(true);
+                } catch (e) {
+                  setDialog(() => error = e.toString().contains('推測') ? '推測されやすいPINは使えません' : '設定に失敗しました');
+                }
+              },
+              child: const Text('設定'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PINを設定しました')));
+    }
+  }
+}
+
+class _HomeTile extends StatelessWidget {
+  const _HomeTile({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+    this.comingSoon = false,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+  final bool comingSoon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: comingSoon ? 0.45 : 1,
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
+                  child: Icon(icon, color: color, size: 30),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                if (comingSoon)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text('準備中', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

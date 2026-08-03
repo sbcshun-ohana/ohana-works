@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 
 /// §7 当日の欠席選択。在籍園児一覧から欠席チェックする。
 /// 複数端末への即時反映(Realtime)はRLS越しにDB側で配信対象publicationに含まれている。
@@ -92,7 +93,11 @@ class _ChildcareAttendanceScreenState extends State<ChildcareAttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('当日の欠席選択')),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const Text('当日の欠席選択'),
+      ),
       body: FutureBuilder<List<ChildcareClass>>(
         future: _classesFuture,
         builder: (context, snapshot) {

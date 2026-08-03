@@ -4,6 +4,7 @@ import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 import '../family_daily_report_summary_view.dart';
 
 /// §10-13 連絡帳の入力・AI生成・申請(職員)と承認・差し戻し(管理者)。
@@ -212,7 +213,11 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.childNameLabel)),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: Text(widget.childNameLabel),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

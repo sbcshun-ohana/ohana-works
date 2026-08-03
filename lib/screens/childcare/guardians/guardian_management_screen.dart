@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/ohana_logo_home_button.dart';
 
 /// 保護者アプリ・後続保育機能 Phase A: 保護者管理・招待管理(職員側の閲覧・簡易操作)。
 class GuardianManagementScreen extends StatefulWidget {
@@ -178,7 +179,11 @@ class _GuardianManagementScreenState extends State<GuardianManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('保護者管理')),
+      appBar: AppBar(
+        leading: const OhanaLogoHomeButton(),
+        leadingWidth: 180,
+        title: const Text('保護者管理'),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isBusy ? null : _showNewInvitationDialog,
         icon: const Icon(Icons.person_add_alt_1_rounded),

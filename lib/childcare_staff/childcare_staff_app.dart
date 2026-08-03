@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../kiosk/models/paired_device.dart';
 import '../kiosk/services/device_pairing_service.dart';
+import '../screens/childcare/childcare_home_screen.dart';
 import '../screens/childcare/childcare_menu_screen.dart';
 import '../screens/childcare/pin_login_screen.dart';
 import '../screens/login_screen.dart';
@@ -54,9 +55,58 @@ class _ChildcareStaffAuthGate extends StatelessWidget {
       builder: (context, snapshot) {
         final session = snapshot.data?.session ?? auth.currentSession;
         if (session != null) {
-          return ChildcareMenuScreen(service: ChildcareService(Supabase.instance.client));
+          return _ChildcareRootRouter(service: ChildcareService(Supabase.instance.client));
         }
         return const _ChildcareLoginRouter();
+      },
+    );
+  }
+}
+
+/// ログイン後のルート分岐: childcare_home_enabled がいずれかの施設で有効ならホーム画面、
+/// そうでなければ従来の保育業務メニュー。取得失敗/フラグOFFは安全側=従来メニュー。
+class _ChildcareRootRouter extends StatefulWidget {
+  const _ChildcareRootRouter({required this.service});
+
+  final ChildcareService service;
+
+  @override
+  State<_ChildcareRootRouter> createState() => _ChildcareRootRouterState();
+}
+
+class _ChildcareRootRouterState extends State<_ChildcareRootRouter> {
+  late Future<bool> _homeEnabledFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _homeEnabledFuture = _resolveHomeEnabled();
+  }
+
+  Future<bool> _resolveHomeEnabled() async {
+    try {
+      final offices = await widget.service.fetchMyChildcareOffices();
+      for (final office in offices) {
+        if (await widget.service.isChildcareHomeEnabled(office.officeId)) return true;
+      }
+    } catch (_) {
+      // 取得失敗は安全側=従来メニュー。
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _homeEnabledFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.data == true) {
+          return ChildcareHomeScreen(service: widget.service);
+        }
+        return ChildcareMenuScreen(service: widget.service);
       },
     );
   }
