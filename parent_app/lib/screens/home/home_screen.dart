@@ -1,10 +1,15 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../models/guardian_broadcast_notice.dart';
 import '../../models/guardian_profile.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../announcements/broadcast_notice_detail_screen.dart';
 import '../announcements/broadcast_notice_list_screen.dart';
 import '../invitation/invitation_entry_screen.dart';
 import 'child_detail_screen.dart';
@@ -29,10 +34,73 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _broadcastEnabled = false;
   int _broadcastUnread = 0;
 
+  StreamSubscription<RemoteMessage>? _pushTapSub;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _wirePushTaps();
+  }
+
+  @override
+  void dispose() {
+    _pushTapSub?.cancel();
+    super.dispose();
+  }
+
+  /// お知らせプッシュ(type=guardian_notice)のタップ→詳細遷移を結線する。
+  /// アプリ終了状態からの起動(getInitialMessage)と、バックグラウンドからの復帰
+  /// (onMessageOpenedApp)の両方を扱う。詳細到達で既読(BroadcastNoticeDetailScreen)。
+  void _wirePushTaps() {
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      if (message != null) _handlePushTap(message.data);
+    });
+    _pushTapSub = FirebaseMessaging.onMessageOpenedApp.listen((message) => _handlePushTap(message.data));
+  }
+
+  Future<void> _handlePushTap(Map<String, dynamic> data) async {
+    if (data['type'] != 'guardian_notice') return;
+    final noticeId = data['notice_id'] as String?;
+    if (noticeId == null || noticeId.isEmpty) return;
+
+    final notices = await widget.guardianService.fetchBroadcastNotices(widget.profile.id);
+    GuardianBroadcastNotice? found;
+    for (final n in notices) {
+      if (n.id == noticeId) {
+        found = n;
+        break;
+      }
+    }
+    if (found == null || !mounted) return;
+    final notice = found;
+
+    // バッジ解決に園児一覧が要るが、初回起動直後は未ロードのことがあるため確保する。
+    final children = _children.isNotEmpty
+        ? _children
+        : await widget.guardianService.fetchLinkedChildren(guardianId: widget.profile.id);
+    if (!mounted) return;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => BroadcastNoticeDetailScreen(
+          guardianService: widget.guardianService,
+          notice: notice,
+          childLabels: _childLabelsFor(notice, children),
+        ),
+      ),
+    );
+    if (mounted) _reload();
+  }
+
+  /// notice の対象園児id → 「園児名(クラス)」ラベル(一覧画面と同じ規則)。
+  List<String> _childLabelsFor(GuardianBroadcastNotice notice, List<LinkedChild> children) {
+    final byId = {for (final c in children) c.childId: c};
+    return notice.childIds.map((id) {
+      final child = byId[id];
+      if (child == null) return '園児';
+      return child.className == null ? child.nameLabel : '${child.nameLabel}(${child.className})';
+    }).toList();
   }
 
   void _load() {
