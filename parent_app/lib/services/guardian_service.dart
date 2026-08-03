@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/class_photo.dart';
 import '../models/communication_book_entry.dart';
 import '../models/family_daily_report.dart';
+import '../models/guardian_broadcast_notice.dart';
 import '../models/guardian_profile.dart';
 import '../models/guardian_qr_token.dart';
 import '../models/linked_child.dart';
@@ -421,6 +422,87 @@ class GuardianService {
         .eq('confirmation_type', 'important_matter_ack')
         .maybeSingle();
     return row != null;
+  }
+
+  // ============================================================
+  // お知らせ(保護者向け一斉配信 = guardian_notices)。Phase D。
+  //   閲覧は RLS 依存(保護者は自分が recipient の approved・未取消のみ SELECT 可)。
+  //   宛先は自分の recipient 行から導出。既読は mark_guardian_notice_read RPC。
+  // ============================================================
+
+  /// お知らせ機能が「いずれかの園児の施設」で有効かを返す(ホームのカード出し分け用)。
+  /// フラグ parent_broadcast_notices が未定義/OFF なら false=安全側(非表示)。
+  Future<bool> isBroadcastNoticesEnabled(List<LinkedChild> children) async {
+    for (final child in children) {
+      final flags = await fetchGuardianFeatureFlags(child.childId);
+      if (flags.contains('parent_broadcast_notices')) return true;
+    }
+    return false;
+  }
+
+  /// 園児横断のお知らせ一覧(新しい順)。1通=1行に集約し、宛先園児idを束ねる。
+  Future<List<GuardianBroadcastNotice>> fetchBroadcastNotices(String guardianId) async {
+    // recipient(自分の行)経由で notice を内部結合。RLS で approved・未取消のみが返る。
+    final recips = await _client
+        .from('guardian_notice_recipients')
+        .select(
+          'notice_id, child_id, '
+          'guardian_notices!inner(id, title, body, sent_at, approved_at, created_at)',
+        )
+        .eq('guardian_id', guardianId);
+
+    final reads = await _client
+        .from('guardian_notice_reads')
+        .select('notice_id')
+        .eq('guardian_id', guardianId);
+    final readIds = (reads as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) => r['notice_id'] as String)
+        .toSet();
+
+    // notice_id ごとに集約。
+    final byNotice = <String, Map<String, dynamic>>{};
+    final wholeSchool = <String, bool>{};
+    final childIds = <String, Set<String>>{};
+    for (final row in (recips as List).cast<Map<String, dynamic>>()) {
+      final notice = row['guardian_notices'] as Map<String, dynamic>?;
+      if (notice == null) continue;
+      final id = notice['id'] as String;
+      byNotice[id] = notice;
+      final childId = row['child_id'] as String?;
+      if (childId == null) {
+        wholeSchool[id] = true;
+      } else {
+        (childIds[id] ??= <String>{}).add(childId);
+      }
+    }
+
+    final list = byNotice.entries.map((e) {
+      final n = e.value;
+      final ts = (n['sent_at'] ?? n['approved_at'] ?? n['created_at']) as String;
+      return GuardianBroadcastNotice(
+        id: e.key,
+        title: n['title'] as String? ?? '',
+        body: n['body'] as String? ?? '',
+        sentAt: DateTime.parse(ts),
+        isRead: readIds.contains(e.key),
+        isWholeSchool: wholeSchool[e.key] ?? false,
+        childIds: (childIds[e.key] ?? const <String>{}).toList(),
+      );
+    }).toList()
+      ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+    return list;
+  }
+
+  /// 未読件数(ホームのバッジ用)。
+  Future<int> fetchBroadcastUnreadCount(String guardianId) async {
+    final notices = await fetchBroadcastNotices(guardianId);
+    return notices.where((n) => !n.isRead).length;
+  }
+
+  /// 既読化(詳細到達時)。RPC 側で二重INSERTを防止済み。
+  Future<void> markBroadcastNoticeRead(String noticeId) async {
+    await _client.rpc('mark_guardian_notice_read', params: {'p_notice_id': noticeId});
   }
 
   /// 国基準・自治体・当該園の感染症マスタ(office_idがnull=共通、一致=園独自)。

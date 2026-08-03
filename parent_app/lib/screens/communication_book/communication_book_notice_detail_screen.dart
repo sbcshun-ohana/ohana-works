@@ -54,8 +54,8 @@ class _CommunicationBookNoticeDetailScreenState extends State<CommunicationBookN
     return Scaffold(
       appBar: AppBar(
         title: entry == null
-            ? const Text('お知らせ')
-            : Text('${entry.businessDate.year}/${entry.businessDate.month}/${entry.businessDate.day}のお知らせ'),
+            ? const Text('保育園からのお知らせ')
+            : Text('${entry.businessDate.year}/${entry.businessDate.month}/${entry.businessDate.day}の保育園からのお知らせ'),
       ),
       body: _isLoading || entry == null
           ? const Center(child: CircularProgressIndicator())
