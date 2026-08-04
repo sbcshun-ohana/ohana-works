@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
+import '../../../models/nap.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
@@ -38,6 +39,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   WeatherRecord? _weather;
   bool _weatherLoaded = false;
   List<DailyBoardRow> _allRows = const [];
+  List<NapMissing> _napMissing = const [];
 
   @override
   void initState() {
@@ -46,6 +48,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadClasses();
     _loadSummary();
     _loadWeather();
+    _loadNapMissing();
     _channel = widget.service.watchDailyChildStatus(widget.officeId, () {
       if (!mounted) return;
       setState(_load);
@@ -136,6 +139,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  // §3.4: 午睡チェックの記入漏れ警告バナー用。
+  Future<void> _loadNapMissing() async {
+    try {
+      final missing = await widget.service.fetchNapMissingSlots(widget.officeId, widget.businessDate);
+      if (mounted) setState(() => _napMissing = missing);
+    } catch (_) {
+      // 取得失敗時はバナー非表示(安全側)。
+    }
+  }
+
   Future<void> _reload() async {
     setState(_load);
     _loadSummary();
@@ -210,6 +223,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
             onChanged: _onClassChanged,
           ),
           _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
+          if (_napMissing.isNotEmpty) _NapMissingBanner(missing: _napMissing),
           _SummaryBar(summary: _summary),
           _ContactBulkBar(
             scopeLabel: _selectedClassId == null ? '施設一括' : 'クラス一括',
@@ -310,6 +324,46 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// §3.4 午睡チェック記入漏れの警告バナー(園児・漏れ件数)。
+class _NapMissingBanner extends StatelessWidget {
+  const _NapMissingBanner({required this.missing});
+
+  final List<NapMissing> missing;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = missing
+        .map((m) => '${m.displayName}(${m.className}・${m.missingCount})')
+        .take(6)
+        .join('、');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.punchClockOut.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.punchClockOut.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 20, color: AppColors.punchClockOut),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '午睡チェックの記入漏れがあります: $names',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.punchClockOut),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

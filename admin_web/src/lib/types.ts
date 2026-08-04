@@ -230,6 +230,46 @@ export type DailyBoardSummary = {
   present_now: number;
 };
 
+/** 午睡チェック(Phase 3)。 */
+export const NAP_BODY_POSITIONS: Record<string, string> = {
+  right: "右",
+  left: "左",
+  supine: "仰向け",
+  prone_corrected: "うつ伏せ直し",
+};
+
+export type NapCheck = {
+  slot_at: string;
+  body_position: string;
+  breathing: boolean;
+  complexion: boolean;
+  bedding: boolean;
+  source: string;
+};
+
+export type NapSessionRow = {
+  session_id: string;
+  child_id: string;
+  display_name: string;
+  honorific_suffix: string | null;
+  class_id: string;
+  class_name: string;
+  is_required: boolean;
+  sleep_start_at: string | null;
+  wake_up_at: string | null;
+  checks: NapCheck[];
+};
+
+export type NapMissing = {
+  session_id: string;
+  child_id: string;
+  display_name: string;
+  class_id: string;
+  class_name: string;
+  missing_count: number;
+  missing_slots: string[];
+};
+
 /** 天気記録(daily_weather_records の1行)。施設×日で1行。 */
 export type WeatherRecord = {
   weather: string;

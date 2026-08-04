@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/childcare.dart';
 import '../models/guardian_app.dart';
+import '../models/nap.dart';
 
 /// AI連絡帳生成の呼び出しに失敗した場合の例外。
 class ContactAiException implements Exception {
@@ -541,6 +542,90 @@ class ChildcareService {
   Future<void> cancelDailyContactsSchedule(List<String> contactIds) async {
     if (contactIds.isEmpty) return;
     await _client.rpc('cancel_child_daily_contacts_schedule', params: {'p_contact_ids': contactIds});
+  }
+
+  // ------------------------------------------------------------------
+  // 午睡チェック(Phase 3): migration 168〜170
+  // ------------------------------------------------------------------
+
+  Future<List<NapSessionRow>> fetchNapBoard(String officeId, DateTime date, {String? classId}) async {
+    final rows = await _client.rpc('fetch_nap_board', params: {
+      'p_office_id': officeId,
+      'p_class_id': classId,
+      'p_session_date': dateOnly(date),
+    });
+    return (rows as List).map((r) => NapSessionRow.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<NapMissing>> fetchNapMissingSlots(String officeId, DateTime date) async {
+    final rows = await _client.rpc('fetch_nap_missing_slots', params: {
+      'p_office_id': officeId,
+      'p_session_date': dateOnly(date),
+    });
+    return (rows as List).map((r) => NapMissing.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> startNapSession(String childId, DateTime sleepStartAt) async {
+    await _client.rpc('start_nap_session', params: {
+      'p_child_id': childId,
+      'p_sleep_start_at': sleepStartAt.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> startNapSessionsForClass(String classId, DateTime sleepStartAt) async {
+    await _client.rpc('start_nap_sessions_for_class', params: {
+      'p_class_id': classId,
+      'p_sleep_start_at': sleepStartAt.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> endNapSession(String sessionId, DateTime wakeUpAt) async {
+    await _client.rpc('end_nap_session', params: {
+      'p_session_id': sessionId,
+      'p_wake_up_at': wakeUpAt.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> endNapSessionsForClass(String classId, DateTime date, DateTime wakeUpAt) async {
+    await _client.rpc('end_nap_sessions_for_class', params: {
+      'p_class_id': classId,
+      'p_session_date': dateOnly(date),
+      'p_wake_up_at': wakeUpAt.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> recordNapCheck(
+    String sessionId,
+    DateTime slotAt, {
+    required String bodyPosition,
+    required bool breathing,
+    required bool complexion,
+    required bool bedding,
+  }) async {
+    await _client.rpc('record_nap_check', params: {
+      'p_session_id': sessionId,
+      'p_slot_at': slotAt.toUtc().toIso8601String(),
+      'p_body_position': bodyPosition,
+      'p_breathing': breathing,
+      'p_complexion': complexion,
+      'p_bedding': bedding,
+    });
+  }
+
+  Future<void> copyPreviousNapCheck(String sessionId, DateTime slotAt) async {
+    await _client.rpc('copy_previous_nap_check', params: {
+      'p_session_id': sessionId,
+      'p_slot_at': slotAt.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<int> copyPreviousNapChecksForClass(String classId, DateTime date, DateTime slotAt) async {
+    final r = await _client.rpc('copy_previous_nap_checks_for_class', params: {
+      'p_class_id': classId,
+      'p_session_date': dateOnly(date),
+      'p_slot_at': slotAt.toUtc().toIso8601String(),
+    });
+    return (r as int?) ?? 0;
   }
 
   /// 家庭連絡帳(保護者記入)の職員側閲覧。RLS(family_daily_reports_select)で

@@ -9,7 +9,7 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
-import type { DailyBoardRow, DailyBoardSummary, WeatherRecord } from "@/lib/types";
+import type { DailyBoardRow, DailyBoardSummary, WeatherRecord, NapMissing } from "@/lib/types";
 import { DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
 
 function ChildcareDailyBoardPageContent() {
@@ -21,6 +21,7 @@ function ChildcareDailyBoardPageContent() {
   const [summary, setSummary] = useState<DailyBoardSummary | null>(null);
   const [weather, setWeather] = useState<WeatherRecord | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [napMissing, setNapMissing] = useState<NapMissing[]>([]);
   const [proxyTarget, setProxyTarget] = useState<{ row: DailyBoardRow; eventType: "drop_off" | "pick_up" } | null>(
     null,
   );
@@ -87,6 +88,20 @@ function ChildcareDailyBoardPageContent() {
     }
     loadSummary();
   }, [selectedOffice, businessDate, selectedClass, reloadToken]);
+
+  // §3.4: 午睡チェックの記入漏れ警告バナー用。
+  useEffect(() => {
+    function loadNapMissing() {
+      if (!selectedOffice) {
+        setNapMissing([]);
+        return;
+      }
+      createClient()
+        .rpc("fetch_nap_missing_slots", { p_office_id: selectedOffice, p_session_date: businessDate })
+        .then(({ data }) => setNapMissing((data ?? []) as NapMissing[]));
+    }
+    loadNapMissing();
+  }, [selectedOffice, businessDate, reloadToken]);
 
   // 天気記録(施設×日で1行)。RLS(施設アクセス)で直接selectする。未入力なら null。
   useEffect(() => {
@@ -259,6 +274,16 @@ function ChildcareDailyBoardPageContent() {
             />
           </div>
         </div>
+
+        {napMissing.length > 0 && (
+          <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm font-medium text-red-700">
+            ⚠ 午睡チェックの記入漏れがあります:{" "}
+            {napMissing
+              .slice(0, 8)
+              .map((m) => `${m.display_name}(${m.class_name}・${m.missing_count})`)
+              .join("、")}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {(
