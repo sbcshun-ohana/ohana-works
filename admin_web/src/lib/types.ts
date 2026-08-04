@@ -171,6 +171,9 @@ export type DailyBoardRow = {
   contact_status: string | null;
   contact_scheduled_publish_at: string | null;
   contact_published_at: string | null;
+  on_therapy_outing: boolean;
+  therapy_out_at: string | null;
+  therapy_provider_name: string | null;
 };
 
 /**

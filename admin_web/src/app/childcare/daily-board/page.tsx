@@ -390,6 +390,14 @@ function ChildcareDailyBoardPageContent() {
                       >
                         {DAILY_BOARD_STATUS_LABELS[row.status]}
                       </span>
+                      {row.on_therapy_outing && (
+                        <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                          療育外出中
+                          {row.therapy_out_at
+                            ? `(${new Date(row.therapy_out_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })})`
+                            : ""}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {row.last_event_at

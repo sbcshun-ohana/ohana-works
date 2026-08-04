@@ -24,6 +24,9 @@ class DailyBoardRow {
     this.contactStatus,
     this.contactScheduledPublishAt,
     this.contactPublishedAt,
+    this.onTherapyOuting = false,
+    this.therapyOutAt,
+    this.therapyProviderName,
   });
 
   factory DailyBoardRow.fromJson(Map<String, dynamic> json) => DailyBoardRow(
@@ -51,6 +54,10 @@ class DailyBoardRow {
         contactPublishedAt: json['contact_published_at'] != null
             ? DateTime.parse(json['contact_published_at'] as String)
             : null,
+        onTherapyOuting: json['on_therapy_outing'] as bool? ?? false,
+        therapyOutAt:
+            json['therapy_out_at'] != null ? DateTime.parse(json['therapy_out_at'] as String) : null,
+        therapyProviderName: json['therapy_provider_name'] as String?,
       );
 
   final String childId;
@@ -72,6 +79,9 @@ class DailyBoardRow {
   final String? contactStatus;
   final DateTime? contactScheduledPublishAt;
   final DateTime? contactPublishedAt;
+  final bool onTherapyOuting;
+  final DateTime? therapyOutAt;
+  final String? therapyProviderName;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
 

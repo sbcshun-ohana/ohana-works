@@ -306,6 +306,31 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                   ],
                                 ),
                               ),
+                            if (row.onTherapyOuting)
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF9B7EDE).withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.directions_walk_rounded, size: 18, color: Color(0xFF7A5FC0)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '療育外出中'
+                                        '${row.therapyOutAt != null ? '(${row.therapyOutAt!.toLocal().hour.toString().padLeft(2, '0')}:${row.therapyOutAt!.toLocal().minute.toString().padLeft(2, '0')})' : ''}'
+                                        '${row.therapyProviderName != null ? ' ${row.therapyProviderName}' : ''}',
+                                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF7A5FC0)),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             _ProxyAttendanceButton(row: row, onTap: _recordProxyAttendance),
                             _ContactPublishRow(
                               row: row,
