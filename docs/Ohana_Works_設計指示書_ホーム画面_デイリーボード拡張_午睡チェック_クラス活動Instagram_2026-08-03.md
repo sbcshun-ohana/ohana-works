@@ -166,6 +166,8 @@
 - 事後記入・修正はすべて「誰が・いつ・何を」の監査ログを残す(記録実時刻と対象スロット時刻を区別して保存)。
 - admin_webに午睡チェックの閲覧・編集画面を新設する(監査対応: 日付・施設・クラスで絞り込み、漏れの有無が一目で分かる一覧+セル編集)。
 
+> 既知の挙動(2026-08-04): admin_webの区間編集(set_nap_interval)の権限判定は起床優先(coalesce(新起床,新入眠))のため、起床をnow付近で書きつつ古い入眠を同時修正すると入眠側の時刻は権限判定に使われない。当日内限定・監査ログありのため許容する。
+
 ### 3.6 テーブル案
 
 - `nap_sessions`: id, child_id, office_id, class_id, session_date, sleep_start_at, wake_up_at, is_required(必須対象か任意追加か), added_by, created_at
