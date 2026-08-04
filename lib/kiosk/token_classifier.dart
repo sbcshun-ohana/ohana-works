@@ -3,9 +3,12 @@ import 'dart:convert';
 /// 読み取ったQRトークンが職員用(issue-qr-token)か保護者用(issue-guardian-qr-token)かを
 /// クライアント側で判定する。署名検証は行わず、JWTのペイロード部分(2番目のセグメント)を
 /// デコードして中身を覗くだけ(検証自体は各resolve系Edge Functionがサーバー側で行う)。
-enum QrTokenKind { staff, guardian, unknown }
+enum QrTokenKind { staff, guardian, therapy, unknown }
 
 QrTokenKind classifyQrToken(String token) {
+  // 療育QRは固定トークンで payload が "therapy:" + token(JWTではない)。先頭で判別する。
+  if (token.startsWith('therapy:')) return QrTokenKind.therapy;
+
   final parts = token.split('.');
   if (parts.length != 3) return QrTokenKind.unknown;
 

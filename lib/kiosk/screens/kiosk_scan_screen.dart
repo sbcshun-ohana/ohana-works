@@ -8,11 +8,13 @@ import '../../theme/app_theme.dart';
 import '../models/paired_device.dart';
 import '../services/guardian_qr_service.dart';
 import '../services/kiosk_punch_service.dart';
+import '../services/therapy_qr_service.dart';
 import '../time_format.dart';
 import '../token_classifier.dart';
 import 'guardian_checkin_result_screen.dart';
 import 'proxy_punch_screen.dart';
 import 'punch_confirm_screen.dart';
+import 'therapy_result_screen.dart';
 
 /// 10章/保護者アプリPhase A: QR読取(アイドル画面)。
 /// 職員QR(出退勤)と保護者QR(登降園)の両方をこの1画面で受け付ける。
@@ -32,6 +34,7 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
   final _controller = MobileScannerController();
   final _punchService = KioskPunchService(Supabase.instance.client);
   final _guardianQrService = GuardianQrService(Supabase.instance.client);
+  final _therapyQrService = TherapyQrService(Supabase.instance.client);
 
   bool _isProcessing = false;
   String? _statusMessage;
@@ -71,6 +74,8 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
           await _handleStaffToken(token);
         case QrTokenKind.guardian:
           await _handleGuardianToken(token);
+        case QrTokenKind.therapy:
+          await _handleTherapyToken(token);
         case QrTokenKind.unknown:
           setState(() => _statusMessage = 'QRコードを認識できませんでした。もう一度お試しください');
       }
@@ -116,6 +121,21 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
         ),
       );
     } on GuardianQrException catch (e) {
+      setState(() => _statusMessage = e.message);
+    }
+  }
+
+  Future<void> _handleTherapyToken(String token) async {
+    try {
+      final resolution = await _therapyQrService.resolveTherapyQr(
+        token: token,
+        deviceId: widget.device.deviceId,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => TherapyResultScreen(resolution: resolution)),
+      );
+    } on TherapyQrException catch (e) {
       setState(() => _statusMessage = e.message);
     }
   }
