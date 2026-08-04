@@ -224,7 +224,7 @@ String dailyBoardStatusLabel(String status) {
     case 'not_arrived':
       return '未登園';
     case 'present':
-      return '在園中';
+      return '登園中';
     case 'picked_up':
       return '降園済み';
     case 'absent':

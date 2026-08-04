@@ -316,7 +316,7 @@ export const WEATHER_OPTIONS = ["晴れ", "曇り", "雨", "雪", "その他"] a
 
 export const DAILY_BOARD_STATUS_LABELS: Record<DailyBoardRow["status"], string> = {
   not_arrived: "未登園",
-  present: "在園中",
+  present: "登園中",
   picked_up: "降園済み",
   absent: "欠席",
 };
