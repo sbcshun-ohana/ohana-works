@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { TherapyProvidersModal } from "@/components/TherapyProvidersModal";
 import type { TherapyRecordRow } from "@/lib/types";
 
 type Pair = {
@@ -94,6 +95,7 @@ function ChildcareTherapyRecordsContent() {
   const [records, setRecords] = useState<TherapyRecordRow[]>([]);
   const [reload, setReload] = useState(0);
   const [adding, setAdding] = useState(false);
+  const [managingProviders, setManagingProviders] = useState(false);
 
   useEffect(() => {
     function loadFlag() {
@@ -210,9 +212,14 @@ function ChildcareTherapyRecordsContent() {
           </div>
           <div className="ml-auto flex gap-2">
             {enabled && (
-              <button onClick={() => setAdding(true)} className="rounded-lg border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">
-                手動追加・修正
-              </button>
+              <>
+                <button onClick={() => setManagingProviders(true)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                  事業者マスタ
+                </button>
+                <button onClick={() => setAdding(true)} className="rounded-lg border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">
+                  手動追加・修正
+                </button>
+              </>
             )}
             <button onClick={downloadCsv} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">CSV</button>
             <button onClick={downloadPdf} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">PDF</button>
@@ -257,6 +264,8 @@ function ChildcareTherapyRecordsContent() {
           </table>
         </div>
       </main>
+
+      {managingProviders && <TherapyProvidersModal onClose={() => setManagingProviders(false)} />}
 
       {adding && (
         <TherapyManualAddModal
