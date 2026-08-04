@@ -31,6 +31,15 @@ type DeliveryHistoryRow = {
   recipient_household_count: number;
 };
 
+// 履歴の日時は端末TZに依存させず必ずJST(Asia/Tokyo)で表示する。
+function formatJst(iso: string): string {
+  return new Date(iso).toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
 type ClassOption = { class_id: string; class_name: string };
 type ChildOption = { child_id: string; display_name: string; class_name: string | null; enrollment_status: string };
 
@@ -143,7 +152,15 @@ function AnnouncementsPageContent() {
       }
       createClient()
         .rpc("fetch_guardian_notice_delivery_history", { p_office_id: selectedOffice })
-        .then(({ data }) => setHistory((data ?? []) as DeliveryHistoryRow[]));
+        .then(({ data, error }) => {
+          if (error) {
+            // 握り潰すと履歴が黙って空表示になるため、失敗はエラー表示で明示する。
+            setHistory([]);
+            setActionError(`配信履歴の取得に失敗しました: ${error.message}`);
+          } else {
+            setHistory((data ?? []) as DeliveryHistoryRow[]);
+          }
+        });
     }
     load();
   }, [selectedOffice, reloadToken]);
@@ -632,10 +649,10 @@ function AnnouncementsPageContent() {
                           </td>
                           <td className="px-3 py-2 text-slate-500">
                             {h.sent_at
-                              ? new Date(h.sent_at).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" })
+                              ? formatJst(h.sent_at)
                               : h.scheduled_send_at
-                                ? `予定 ${new Date(h.scheduled_send_at).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" })}`
-                                : "—"}
+                                ? `予約: ${formatJst(h.scheduled_send_at)}`
+                                : "未配信"}
                           </td>
                           <td className="px-3 py-2 text-slate-500">{h.target_summary}</td>
                           <td className="px-3 py-2 text-slate-600">{h.recipient_household_count}</td>
