@@ -307,7 +307,7 @@ function AnnouncementsPageContent() {
     if (error) setActionError(error.message);
     else {
       setRevokeDialog(null);
-      setActionMessage("お知らせを取り消しました。");
+      setActionMessage("一斉配信を取り消しました。");
       reload();
     }
   }
@@ -335,9 +335,9 @@ function AnnouncementsPageContent() {
       <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">お知らせ(保護者向け・一斉配信)</h2>
+          <h2 className="text-lg font-bold text-slate-800">一斉配信(保護者向け)</h2>
           <p className="mt-1 text-xs text-slate-500">
-            保護者アプリへ一斉配信するお知らせです。職員向けの連絡は上部メニューの「お知らせ(職員向け)」を使用してください。
+            保護者アプリへ一斉配信します。職員向けの連絡は上部メニューの「お知らせ(職員向け)」を使用してください。
           </p>
         </div>
 
@@ -373,9 +373,9 @@ function AnnouncementsPageContent() {
           {/* 作成フォーム(主任以上=is_manager) */}
           {isManager && (
             <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-700">新規お知らせを作成</h3>
+              <h3 className="text-sm font-bold text-slate-700">新規の一斉配信を作成</h3>
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                個別家庭の機微な案件(支払い・個別のトラブル等)は一斉お知らせに載せず、連絡帳・個別連絡をご利用ください。
+                個別家庭の機微な案件(支払い・個別のトラブル等)は一斉配信に載せず、連絡帳・個別連絡をご利用ください。
               </p>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">タイトル</label>
@@ -506,10 +506,10 @@ function AnnouncementsPageContent() {
 
           {/* 一覧 */}
           <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-700">この施設のお知らせ</h3>
+            <h3 className="text-sm font-bold text-slate-700">この施設の一斉配信</h3>
             {isLoading && <p className="text-sm text-slate-400">読み込み中…</p>}
             {listError && <p className="text-sm text-rose-500">{listError}</p>}
-            {!isLoading && notices.length === 0 && <p className="text-sm text-slate-400">お知らせはまだありません。</p>}
+            {!isLoading && notices.length === 0 && <p className="text-sm text-slate-400">一斉配信はまだありません。</p>}
             <ul className="space-y-2">
               {notices.map((n) => (
                 <li key={n.id}>
@@ -720,7 +720,7 @@ function AnnouncementsPageContent() {
       {revokeDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-base font-bold text-slate-800">お知らせの取り消し</h3>
+            <h3 className="text-base font-bold text-slate-800">一斉配信の取り消し</h3>
             <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
               ⚠ アプリ内の一覧からは消えますが、既に配信済みのプッシュ通知は取り消せません。
             </div>

@@ -26,6 +26,12 @@ function ChildcareDailyBoardPageContent() {
     null,
   );
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast((cur) => (cur === message ? null : cur)), 3500);
+  }
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -158,25 +164,56 @@ function ChildcareDailyBoardPageContent() {
 
   // 連絡帳の公開操作(§2.4)。対象は approved かつ未公開の contact_id 群。
   // scheduled_at は対象日 + 時刻(既定17:00)を JST(+09:00)で組み立てる。
+  // 実行結果は必ずトーストで返す(対象0件・成功件数・エラー理由)。
+  const NO_TARGET = "対象の連絡帳がありません(承認済み・未公開のみ対象)";
+
   async function scheduleContacts(contactIds: string[], time: string) {
-    if (contactIds.length === 0) return;
+    if (contactIds.length === 0) {
+      showToast(NO_TARGET);
+      return;
+    }
     const scheduledAt = `${businessDate}T${time}:00+09:00`;
-    await createClient().rpc("schedule_child_daily_contacts", {
+    const { data, error } = await createClient().rpc("schedule_child_daily_contacts", {
       p_contact_ids: contactIds,
       p_scheduled_at: scheduledAt,
     });
+    if (error) {
+      showToast("公開予約に失敗しました(主任以上のみ操作できます)");
+      return;
+    }
+    const n = typeof data === "number" ? data : contactIds.length;
+    const hhmm = time.slice(0, 5);
+    showToast(n === 0 ? NO_TARGET : `${n}件を${hhmm}に公開予約しました`);
     setReloadToken((t) => t + 1);
   }
 
   async function publishContactsNow(contactIds: string[]) {
-    if (contactIds.length === 0) return;
-    await createClient().rpc("publish_child_daily_contacts_now", { p_contact_ids: contactIds });
+    if (contactIds.length === 0) {
+      showToast(NO_TARGET);
+      return;
+    }
+    const { data, error } = await createClient().rpc("publish_child_daily_contacts_now", { p_contact_ids: contactIds });
+    if (error) {
+      showToast("公開に失敗しました(主任以上のみ操作できます)");
+      return;
+    }
+    const n = typeof data === "number" ? data : contactIds.length;
+    showToast(n === 0 ? NO_TARGET : `${n}件を公開しました`);
     setReloadToken((t) => t + 1);
   }
 
   async function cancelContactSchedule(contactIds: string[]) {
-    if (contactIds.length === 0) return;
-    await createClient().rpc("cancel_child_daily_contacts_schedule", { p_contact_ids: contactIds });
+    if (contactIds.length === 0) {
+      showToast(NO_TARGET);
+      return;
+    }
+    const { data, error } = await createClient().rpc("cancel_child_daily_contacts_schedule", { p_contact_ids: contactIds });
+    if (error) {
+      showToast("予約取消に失敗しました(主任以上のみ操作できます)");
+      return;
+    }
+    const n = typeof data === "number" ? data : contactIds.length;
+    showToast(n === 0 ? NO_TARGET : `${n}件の公開予約を取消しました`);
     setReloadToken((t) => t + 1);
   }
 
@@ -505,6 +542,12 @@ function ChildcareDailyBoardPageContent() {
             setScheduleTarget(null);
           }}
         />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          {toast}
+        </div>
       )}
     </div>
   );

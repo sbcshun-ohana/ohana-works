@@ -11,7 +11,7 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/class-activities", label: "クラス活動" },
   { href: "/childcare/contacts", label: "連絡帳" },
   { href: "/childcare/contacts/copy", label: "コピー" },
-  { href: "/childcare/announcements", label: "お知らせ(保護者向け)" },
+  { href: "/childcare/announcements", label: "一斉配信" },
   { href: "/childcare/guardians", label: "保護者管理" },
   { href: "/childcare/parent-requests", label: "保護者からの連絡" },
   { href: "/childcare/class-photos", label: "クラス写真" },
