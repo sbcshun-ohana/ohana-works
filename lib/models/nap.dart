@@ -36,6 +36,21 @@ class NapCheck {
   final String source;
 }
 
+/// 午睡区間(nap_intervals)。1セッションに複数(複数回午睡)。
+class NapInterval {
+  const NapInterval({required this.seq, required this.sleepStartAt, this.wakeUpAt});
+
+  factory NapInterval.fromJson(Map<String, dynamic> json) => NapInterval(
+        seq: json['seq'] as int,
+        sleepStartAt: DateTime.parse(json['sleep_start_at'] as String),
+        wakeUpAt: json['wake_up_at'] != null ? DateTime.parse(json['wake_up_at'] as String) : null,
+      );
+
+  final int seq;
+  final DateTime sleepStartAt;
+  final DateTime? wakeUpAt;
+}
+
 class NapSessionRow {
   const NapSessionRow({
     required this.sessionId,
@@ -47,6 +62,7 @@ class NapSessionRow {
     required this.isRequired,
     this.sleepStartAt,
     this.wakeUpAt,
+    required this.intervals,
     required this.checks,
   });
 
@@ -61,6 +77,9 @@ class NapSessionRow {
         sleepStartAt:
             json['sleep_start_at'] != null ? DateTime.parse(json['sleep_start_at'] as String) : null,
         wakeUpAt: json['wake_up_at'] != null ? DateTime.parse(json['wake_up_at'] as String) : null,
+        intervals: ((json['intervals'] as List?) ?? const [])
+            .map((e) => NapInterval.fromJson(e as Map<String, dynamic>))
+            .toList(),
         checks: ((json['checks'] as List?) ?? const [])
             .map((e) => NapCheck.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -75,9 +94,13 @@ class NapSessionRow {
   final bool isRequired;
   final DateTime? sleepStartAt;
   final DateTime? wakeUpAt;
+  final List<NapInterval> intervals;
   final List<NapCheck> checks;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
+
+  /// 起床済み(未起床の区間が無い=再入眠できる状態)。区間が1つ以上あり全て閉じている。
+  bool get isAllWoken => intervals.isNotEmpty && intervals.every((i) => i.wakeUpAt != null);
 
   NapCheck? checkAt(DateTime slot) {
     for (final c in checks) {

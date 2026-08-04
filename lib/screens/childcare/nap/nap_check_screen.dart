@@ -59,19 +59,30 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     return DateTime.utc(u.year, u.month, u.day, u.hour, u.minute - (u.minute % 5));
   }
 
-  // 入眠〜min(起床, now) の5分スロット列(切り上げ初回)。
+  // 各睡眠区間 [入眠, min(起床, now)] の5分スロットを連結(覚醒中の隙間は含めない・切り上げ初回)。
   List<DateTime> _slotsFor(NapSessionRow s) {
-    final start = s.sleepStartAt;
-    if (start == null) return const [];
-    var first = _floor5(start);
-    if (first.isBefore(start.toUtc())) first = first.add(const Duration(minutes: 5));
     final now = DateTime.now().toUtc();
-    final upper = s.wakeUpAt != null && s.wakeUpAt!.toUtc().isBefore(now) ? s.wakeUpAt!.toUtc() : now;
     final slots = <DateTime>[];
-    for (var t = first; !t.isAfter(upper); t = t.add(const Duration(minutes: 5))) {
-      slots.add(t);
+    // 区間が無い(旧データ等)は overall にフォールバック。
+    final ranges = s.intervals.isNotEmpty
+        ? s.intervals.map((i) => (i.sleepStartAt, i.wakeUpAt)).toList()
+        : (s.sleepStartAt != null ? [(s.sleepStartAt!, s.wakeUpAt)] : const <(DateTime, DateTime?)>[]);
+    for (final (start, wake) in ranges) {
+      var first = _floor5(start);
+      if (first.isBefore(start.toUtc())) first = first.add(const Duration(minutes: 5));
+      final upper = wake != null && wake.toUtc().isBefore(now) ? wake.toUtc() : now;
+      for (var t = first; !t.isAfter(upper); t = t.add(const Duration(minutes: 5))) {
+        slots.add(t);
+      }
     }
     return slots;
+  }
+
+  // 再入眠(起床済みの子に新しい区間を追加)。
+  Future<void> _reSleep(NapSessionRow s) async {
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null) return;
+    await _guard(() => widget.service.startNapSession(s.childId, _combine(t)));
   }
 
   DateTime _combine(TimeOfDay t) => DateTime(
@@ -249,6 +260,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
                       slots: _slotsFor(rows[i]),
                       onCellTap: (slot) => _openCell(rows[i], slot),
                       onEnd: rows[i].wakeUpAt == null ? () => _endSession(rows[i]) : null,
+                      onReSleep: rows[i].isAllWoken ? () => _reSleep(rows[i]) : null,
                     ),
                   );
                 },
@@ -262,16 +274,29 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
 }
 
 class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.row, required this.slots, required this.onCellTap, this.onEnd});
+  const _SessionCard({required this.row, required this.slots, required this.onCellTap, this.onEnd, this.onReSleep});
 
   final NapSessionRow row;
   final List<DateTime> slots;
   final void Function(DateTime slot) onCellTap;
   final VoidCallback? onEnd;
+  final VoidCallback? onReSleep;
 
   String _hm(DateTime t) {
     final l = t.toLocal();
     return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  // 区間ラベル(複数回午睡): 「入眠HH:MM-起床HH:MM / 入眠HH:MM-…」
+  String _intervalsLabel() {
+    if (row.intervals.isEmpty) {
+      return '${row.sleepStartAt != null ? '  入眠 ${_hm(row.sleepStartAt!)}' : ''}'
+          '${row.wakeUpAt != null ? '  起床 ${_hm(row.wakeUpAt!)}' : ''}';
+    }
+    final parts = row.intervals
+        .map((i) => '${_hm(i.sleepStartAt)}-${i.wakeUpAt != null ? _hm(i.wakeUpAt!) : '就寝中'}')
+        .join(' / ');
+    return '  $parts';
   }
 
   @override
@@ -287,12 +312,12 @@ class _SessionCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${row.nameLabel}  ${row.className}'
-                    '${row.sleepStartAt != null ? '  入眠 ${_hm(row.sleepStartAt!)}' : ''}'
-                    '${row.wakeUpAt != null ? '  起床 ${_hm(row.wakeUpAt!)}' : ''}',
+                    '${row.nameLabel}  ${row.className}${_intervalsLabel()}',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
+                if (onReSleep != null)
+                  TextButton(onPressed: onReSleep, child: const Text('再入眠')),
                 if (onEnd != null)
                   TextButton(onPressed: onEnd, child: const Text('起床')),
               ],

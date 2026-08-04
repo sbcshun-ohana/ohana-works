@@ -222,6 +222,32 @@ function ChildcareContactsPageContent() {
     setReloadToken((t) => t + 1);
   }
 
+  // 午睡チェックの記録(nap_intervals)を nap_periods へ取り込む。テキスト欄は不可侵。再取込は確認。
+  async function importNapTimes() {
+    if (!selectedRow) return;
+    if (napPeriods.length > 0 && !window.confirm("午睡チェックの記録で午睡時間を上書きします。現在の入力は置き換えられます。よろしいですか?")) {
+      return;
+    }
+    const supabase = createClient();
+    const { error } = await supabase.rpc("import_nap_times_to_contact", {
+      p_child_id: selectedRow.child_id,
+      p_business_date: businessDate,
+    });
+    if (error) {
+      setActionError("午睡チェックの取り込みに失敗しました。");
+      return;
+    }
+    setActionError(null);
+    const { data } = await supabase
+      .from("child_daily_contacts")
+      .select("nap_periods")
+      .eq("child_id", selectedRow.child_id)
+      .eq("business_date", businessDate)
+      .maybeSingle();
+    setNapPeriods(((data?.nap_periods ?? []) as { start: string; end: string }[]));
+    if (!selectedRow.contact_id) setReloadToken((t) => t + 1); // 新規作成時は contact_id を取得
+  }
+
   function addNapPeriod() {
     setNapPeriods((prev) => [...prev, { start: "13:00", end: "14:30" }]);
   }
@@ -659,12 +685,20 @@ function ChildcareContactsPageContent() {
                       </div>
                     ))}
                     {canEditInput && (
-                      <button
-                        onClick={addNapPeriod}
-                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                      >
-                        + 時間帯を追加
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={addNapPeriod}
+                          className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                        >
+                          + 時間帯を追加
+                        </button>
+                        <button
+                          onClick={importNapTimes}
+                          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100"
+                        >
+                          午睡チェックから取り込む
+                        </button>
+                      </div>
                     )}
                   </div>
 
