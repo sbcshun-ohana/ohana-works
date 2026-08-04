@@ -20,6 +20,17 @@ import {
 // 実体の認可はRPC(is_guardian_notice_approver)で担保。
 const APPROVER_ROLES = new Set(["director", "executive_director", "system_admin"]);
 
+type DeliveryHistoryRow = {
+  notice_id: string;
+  title: string;
+  status: string;
+  scheduled_send_at: string | null;
+  sent_at: string | null;
+  revoked_at: string | null;
+  target_summary: string;
+  recipient_household_count: number;
+};
+
 type ClassOption = { class_id: string; class_name: string };
 type ChildOption = { child_id: string; display_name: string; class_name: string | null; enrollment_status: string };
 
@@ -62,6 +73,9 @@ function AnnouncementsPageContent() {
 
   // ダイアログ
   const [approveDialog, setApproveDialog] = useState<{ noticeId: string; preview: GuardianNoticePreview | null; loading: boolean; error: string | null } | null>(null);
+  // 配信予定日時(datetime-local。空=承認時に即時配信)。
+  const [approveScheduledAt, setApproveScheduledAt] = useState("");
+  const [history, setHistory] = useState<DeliveryHistoryRow[]>([]);
   const [returnDialog, setReturnDialog] = useState<{ noticeId: string; reason: string } | null>(null);
   const [revokeDialog, setRevokeDialog] = useState<{ noticeId: string; reason: string } | null>(null);
 
@@ -118,6 +132,20 @@ function AnnouncementsPageContent() {
         }
         setIsLoading(false);
       });
+  }, [selectedOffice, reloadToken]);
+
+  // 配信履歴(D-2)+ 予約中の予定変更/取消(D-1)用。scheduled_send_at/sent_at/宛先/世帯数を持つ。
+  useEffect(() => {
+    function load() {
+      if (!selectedOffice) {
+        setHistory([]);
+        return;
+      }
+      createClient()
+        .rpc("fetch_guardian_notice_delivery_history", { p_office_id: selectedOffice })
+        .then(({ data }) => setHistory((data ?? []) as DeliveryHistoryRow[]));
+    }
+    load();
   }, [selectedOffice, reloadToken]);
 
   // 選択中お知らせが承認済みなら既読集計・未読世帯を取得
@@ -256,15 +284,46 @@ function AnnouncementsPageContent() {
   async function confirmApprove() {
     if (!approveDialog) return;
     setIsBusy(true);
-    const { error } = await createClient().rpc("approve_guardian_notice", { p_notice_id: approveDialog.noticeId });
+    // 予定日時が未来なら予約、空/過去なら即時配信(RPC側でも同判定)。
+    const scheduled = approveScheduledAt ? `${approveScheduledAt}:00+09:00` : null;
+    const { error } = await createClient().rpc("approve_guardian_notice", {
+      p_notice_id: approveDialog.noticeId,
+      p_scheduled_send_at: scheduled,
+    });
     setIsBusy(false);
     if (error) {
       setApproveDialog({ ...approveDialog, error: error.message });
       return;
     }
     setApproveDialog(null);
-    setActionMessage("承認して送信しました。");
+    setApproveScheduledAt("");
+    setActionMessage(scheduled ? "配信を予約しました。" : "承認して送信しました。");
     reload();
+  }
+
+  async function handleReschedule(noticeId: string) {
+    const input = window.prompt("新しい配信予定日時(YYYY-MM-DD HH:MM)");
+    if (!input) return;
+    const iso = input.trim().replace(" ", "T");
+    const { error } = await createClient().rpc("reschedule_guardian_notice", {
+      p_notice_id: noticeId,
+      p_scheduled_send_at: `${iso}:00+09:00`,
+    });
+    if (error) setActionError("予定変更に失敗しました(未配信の予約のみ変更できます)");
+    else {
+      setActionMessage("配信予定を変更しました。");
+      reload();
+    }
+  }
+
+  async function handleCancelSchedule(noticeId: string) {
+    if (!window.confirm("この予約配信を取り消して下書きに戻します。よろしいですか?")) return;
+    const { error } = await createClient().rpc("cancel_scheduled_guardian_notice", { p_notice_id: noticeId });
+    if (error) setActionError("取消に失敗しました(未配信の予約のみ取り消せます)");
+    else {
+      setActionMessage("予約配信を取り消し、下書きに戻しました。");
+      reload();
+    }
   }
 
   async function handleSubmitExisting(noticeId: string) {
@@ -536,6 +595,70 @@ function AnnouncementsPageContent() {
               ))}
             </ul>
           </section>
+
+          {/* 配信履歴(いつ・何時に・誰に・何世帯)+ 予約の予定変更/取消 */}
+          <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-700">配信履歴</h3>
+            {history.length === 0 && <p className="text-sm text-slate-400">履歴はまだありません。</p>}
+            {history.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                      <th className="px-3 py-2">タイトル</th>
+                      <th className="px-3 py-2">状態</th>
+                      <th className="px-3 py-2">配信日時 / 予定</th>
+                      <th className="px-3 py-2">宛先</th>
+                      <th className="px-3 py-2">世帯</th>
+                      <th className="px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h) => {
+                      const scheduledUnsent = h.status === "approved" && !h.sent_at && !!h.scheduled_send_at && !h.revoked_at;
+                      return (
+                        <tr key={h.notice_id} className="border-b border-slate-100 last:border-0">
+                          <td className="px-3 py-2 font-medium text-slate-800">{h.title}</td>
+                          <td className="px-3 py-2">
+                            {h.revoked_at ? (
+                              <span className="text-rose-600">取消済み</span>
+                            ) : h.sent_at ? (
+                              <span className="text-emerald-700">配信済み</span>
+                            ) : scheduledUnsent ? (
+                              <span className="text-amber-700">配信予約</span>
+                            ) : (
+                              <span className="text-slate-500">{GUARDIAN_NOTICE_STATUS_LABELS[h.status as keyof typeof GUARDIAN_NOTICE_STATUS_LABELS] ?? h.status}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {h.sent_at
+                              ? new Date(h.sent_at).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" })
+                              : h.scheduled_send_at
+                                ? `予定 ${new Date(h.scheduled_send_at).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" })}`
+                                : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">{h.target_summary}</td>
+                          <td className="px-3 py-2 text-slate-600">{h.recipient_household_count}</td>
+                          <td className="px-3 py-2 text-right">
+                            {scheduledUnsent && (
+                              <div className="flex justify-end gap-1">
+                                <button onClick={() => handleReschedule(h.notice_id)} className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50">
+                                  予定変更
+                                </button>
+                                <button onClick={() => handleCancelSchedule(h.notice_id)} className="rounded border border-rose-300 px-2 py-0.5 text-xs text-rose-600 hover:bg-rose-50">
+                                  取消
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
 
         {/* 詳細 */}
@@ -661,12 +784,25 @@ function AnnouncementsPageContent() {
                 </div>
               </div>
             )}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">配信予定日時(空欄=承認と同時に即時配信)</label>
+              <input
+                type="datetime-local"
+                value={approveScheduledAt}
+                onChange={(e) => setApproveScheduledAt(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-slate-400">未来を指定すると予約になり、その日時に自動配信されます(承認後も予定変更・取消が可能)。</p>
+            </div>
             <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-              ⚠ この操作は取り消せません。既に配信済みのプッシュ通知は取り消せません。
+              ⚠ 即時配信・配信済みのプッシュ通知は取り消せません(予約は配信前なら取消可能)。
             </div>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setApproveDialog(null)}
+                onClick={() => {
+                  setApproveDialog(null);
+                  setApproveScheduledAt("");
+                }}
                 disabled={isBusy}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
@@ -677,7 +813,7 @@ function AnnouncementsPageContent() {
                 disabled={isBusy || approveDialog.loading || !approveDialog.preview}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                送信する
+                {approveScheduledAt ? "予約する" : "送信する"}
               </button>
             </div>
           </div>
