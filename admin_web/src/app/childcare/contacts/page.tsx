@@ -59,6 +59,12 @@ function ChildcareContactsPageContent() {
   const [checkedNoticeIds, setCheckedNoticeIds] = useState<Set<string>>(new Set());
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(m: string) {
+    setToast(m);
+    window.setTimeout(() => setToast((c) => (c === m ? null : c)), 3500);
+  }
   const [familyDailyReport, setFamilyDailyReport] = useState<FamilyDailyReportSummary | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [internalNotesOpen, setInternalNotesOpen] = useState(false);
@@ -229,13 +235,25 @@ function ChildcareContactsPageContent() {
       return;
     }
     const supabase = createClient();
-    const { error } = await supabase.rpc("import_nap_times_to_contact", {
+    const { data: count, error } = await supabase.rpc("import_nap_times_to_contact", {
       p_child_id: selectedRow.child_id,
       p_business_date: businessDate,
     });
     if (error) {
-      setActionError("午睡チェックの取り込みに失敗しました。");
+      const m = error.message ?? "";
+      showToast(
+        m.includes("published")
+          ? "公開済みの連絡帳への取り込みは主任以上のみ可能です"
+          : m.includes("not authorized")
+            ? "取り込みの権限がありません"
+            : "午睡チェックの取り込みに失敗しました",
+      );
       return;
+    }
+    const n = typeof count === "number" ? count : 0;
+    if (n === 0) {
+      showToast("この日の午睡記録がありません");
+      return; // 0件は連絡帳を作らない=フォームも変更しない
     }
     setActionError(null);
     const { data } = await supabase
@@ -246,6 +264,7 @@ function ChildcareContactsPageContent() {
       .maybeSingle();
     setNapPeriods(((data?.nap_periods ?? []) as { start: string; end: string }[]));
     if (!selectedRow.contact_id) setReloadToken((t) => t + 1); // 新規作成時は contact_id を取得
+    showToast(`午睡${n}件を取り込みました`);
   }
 
   function addNapPeriod() {
@@ -937,6 +956,12 @@ function ChildcareContactsPageContent() {
           officeId={selectedOffice}
           onClose={() => setInternalNotesOpen(false)}
         />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          {toast}
+        </div>
       )}
     </div>
   );

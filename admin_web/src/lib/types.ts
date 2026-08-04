@@ -250,6 +250,13 @@ export type NapCheck = {
   source: string;
 };
 
+export type NapInterval = {
+  id: string;
+  seq: number;
+  sleep_start_at: string;
+  wake_up_at: string | null;
+};
+
 export type NapSessionRow = {
   session_id: string;
   child_id: string;
@@ -260,6 +267,7 @@ export type NapSessionRow = {
   is_required: boolean;
   sleep_start_at: string | null;
   wake_up_at: string | null;
+  intervals: NapInterval[];
   checks: NapCheck[];
 };
 
