@@ -155,6 +155,7 @@ export type DailyBoardRow = {
   child_id: string;
   display_name: string;
   honorific_suffix: string | null;
+  class_id: string;
   class_name: string;
   status: "not_arrived" | "present" | "picked_up" | "absent";
   last_event_type: string | null;
@@ -199,6 +200,24 @@ export type FamilyDailyReportSummary = {
   pickup_time_from: string | null;
   pickup_time_to: string | null;
 };
+
+/** 在籍登園状況サマリー(fetch_daily_board_summary_for_office の1行)。 */
+export type DailyBoardSummary = {
+  enrolled: number;
+  expected: number;
+  attended: number;
+  absent: number;
+  present_now: number;
+};
+
+/** 天気記録(daily_weather_records の1行)。施設×日で1行。 */
+export type WeatherRecord = {
+  weather: string;
+  temperature: number | null;
+  humidity: number | null;
+};
+
+export const WEATHER_OPTIONS = ["晴れ", "曇り", "雨", "雪", "その他"] as const;
 
 export const DAILY_BOARD_STATUS_LABELS: Record<DailyBoardRow["status"], string> = {
   not_arrived: "未登園",

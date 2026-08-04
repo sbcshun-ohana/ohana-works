@@ -459,6 +459,70 @@ class ChildcareService {
     return (rows as List).map((row) => DailyBoardRow.fromJson(row as Map<String, dynamic>)).toList();
   }
 
+  /// 在籍登園状況サマリー。classId=null で施設全体、指定でそのクラス単位。
+  /// 集計はRPC側に一任し、admin_web/Ohana Kidsで数字を一致させる。
+  Future<DailyBoardSummary> fetchDailyBoardSummary(
+    String officeId,
+    DateTime businessDate, {
+    String? classId,
+  }) async {
+    final rows = await _client.rpc('fetch_daily_board_summary_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+      'p_class_id': classId,
+    });
+    final list = rows as List;
+    if (list.isEmpty) {
+      return const DailyBoardSummary(enrolled: 0, expected: 0, attended: 0, absent: 0, presentNow: 0);
+    }
+    return DailyBoardSummary.fromJson(list.first as Map<String, dynamic>);
+  }
+
+  /// 天気記録(施設×日で1行)。RLS(施設アクセス)で直接select。未入力なら null。
+  Future<WeatherRecord?> fetchDailyWeather(String officeId, DateTime businessDate) async {
+    final row = await _client
+        .from('daily_weather_records')
+        .select('weather, temperature, humidity')
+        .eq('office_id', officeId)
+        .eq('record_date', dateOnly(businessDate))
+        .maybeSingle();
+    if (row == null) return null;
+    return WeatherRecord.fromJson(row);
+  }
+
+  /// 天気の記録(upsert)。当日は誰でも、過去日/未来日は主任以上(RPC側でガード)。
+  Future<void> upsertDailyWeather(
+    String officeId,
+    DateTime businessDate, {
+    required String weather,
+    double? temperature,
+    double? humidity,
+  }) async {
+    await _client.rpc('upsert_daily_weather_record', params: {
+      'p_office_id': officeId,
+      'p_record_date': dateOnly(businessDate),
+      'p_weather': weather,
+      'p_temperature': temperature,
+      'p_humidity': humidity,
+    });
+  }
+
+  /// 代理登降園の登録(主任以上)。QRと区別して proxy_* で記録し、通知ON時は保護者へプッシュ。
+  /// occurredAt は対象日+手入力時刻の実時刻(timestamptz)を渡す。
+  Future<void> recordStaffManualAttendance({
+    required String childId,
+    required String eventType, // 'drop_off' | 'pick_up'
+    required DateTime occurredAt,
+    required bool notifyGuardian,
+  }) async {
+    await _client.rpc('record_staff_manual_attendance', params: {
+      'p_child_id': childId,
+      'p_event_type': eventType,
+      'p_occurred_at': occurredAt.toUtc().toIso8601String(),
+      'p_notify_guardian': notifyGuardian,
+    });
+  }
+
   /// 家庭連絡帳(保護者記入)の職員側閲覧。RLS(family_daily_reports_select)で
   /// staff_has_guardian_data_access(child_id)により保護のため直接SELECTでよい。
   Future<FamilyDailyReportSummary?> fetchFamilyDailyReportForStaff(

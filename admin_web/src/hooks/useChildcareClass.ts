@@ -13,7 +13,7 @@ export const ALL_CLASSES = "";
  * クラス一覧を fetch_childcare_classes で取得し、選択中クラス(class_id)を URL の ?class= で
  * 引き継ぐ(?office= と同様にタブ切替で保持)。既定は全クラス。
  * 施設が変わると ?class= はその施設のクラスに属す時のみ維持し、属さなければ全クラスへリセット
- * (class_id は施設固有のため)。並び順は fetch_childcare_classes の返却順(=クラス名順)を正とする。
+ * (class_id は施設固有のため)。並び順は fetch_childcare_classes の返却順(=年齢区分順: age_group→class_name)を正とする。
  *
  * options.defaultToFirst=true: 全クラス(絞り込みなし)を持たず、クラス必須のページ
  * (欠席選択/クラス写真等)向け。有効な ?class= が無ければ先頭クラスを選び、その値を ?class= に

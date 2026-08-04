@@ -8,6 +8,7 @@ class DailyBoardRow {
     required this.childId,
     required this.displayName,
     this.honorificSuffix,
+    required this.classId,
     required this.className,
     required this.status,
     this.lastEventType,
@@ -25,6 +26,7 @@ class DailyBoardRow {
         childId: json['child_id'] as String,
         displayName: json['display_name'] as String,
         honorificSuffix: json['honorific_suffix'] as String?,
+        classId: json['class_id'] as String,
         className: json['class_name'] as String,
         status: json['status'] as String,
         lastEventType: json['last_event_type'] as String?,
@@ -42,6 +44,7 @@ class DailyBoardRow {
   final String childId;
   final String displayName;
   final String? honorificSuffix;
+  final String classId;
   final String className;
   final String status;
   final String? lastEventType;
@@ -56,6 +59,49 @@ class DailyBoardRow {
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
 }
+
+/// 在籍登園状況サマリー(fetch_daily_board_summary_for_office の1行)。
+/// 数字はRPC側集計を正とし、クライアントで再集計しない(admin_webと一致させるため)。
+class DailyBoardSummary {
+  const DailyBoardSummary({
+    required this.enrolled,
+    required this.expected,
+    required this.attended,
+    required this.absent,
+    required this.presentNow,
+  });
+
+  factory DailyBoardSummary.fromJson(Map<String, dynamic> json) => DailyBoardSummary(
+        enrolled: json['enrolled'] as int? ?? 0,
+        expected: json['expected'] as int? ?? 0,
+        attended: json['attended'] as int? ?? 0,
+        absent: json['absent'] as int? ?? 0,
+        presentNow: json['present_now'] as int? ?? 0,
+      );
+
+  final int enrolled;
+  final int expected;
+  final int attended;
+  final int absent;
+  final int presentNow;
+}
+
+/// 天気記録(daily_weather_records の1行)。施設×日で1行。
+class WeatherRecord {
+  const WeatherRecord({required this.weather, this.temperature, this.humidity});
+
+  factory WeatherRecord.fromJson(Map<String, dynamic> json) => WeatherRecord(
+        weather: json['weather'] as String,
+        temperature: json['temperature'] == null ? null : double.parse(json['temperature'].toString()),
+        humidity: json['humidity'] == null ? null : double.parse(json['humidity'].toString()),
+      );
+
+  final String weather;
+  final double? temperature;
+  final double? humidity;
+}
+
+const weatherOptions = ['晴れ', '曇り', '雨', '雪', 'その他'];
 
 const familyMoodLabels = {'good': '良い', 'normal': '普通', 'bad': '悪い'};
 const familyBowelConditionLabels = {'normal': '普通', 'soft': '軟便', 'hard': '硬便', 'small': '少量便'};
