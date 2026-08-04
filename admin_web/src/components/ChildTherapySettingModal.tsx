@@ -6,6 +6,7 @@ import type { ChildMasterRow, ChildTherapySetting, TherapyProvider } from "@/lib
 
 type Props = {
   row: ChildMasterRow;
+  officeName: string;
   onClose: () => void;
 };
 
@@ -13,9 +14,10 @@ type Props = {
  * 療育設定モーダル(§5.1)。対象園児×事業所×適用期間を複数行で管理(主任以上)。
  * 事業者マスタの最小限の登録手段(＋事業者を追加=統括園長以上)も同居させる。
  */
-export function ChildTherapySettingModal({ row, onClose }: Props) {
+export function ChildTherapySettingModal({ row, officeName, onClose }: Props) {
   const [providers, setProviders] = useState<TherapyProvider[]>([]);
   const [settings, setSettings] = useState<ChildTherapySetting[]>([]);
+  const [activeQrs, setActiveQrs] = useState<{ id: string; provider_id: string }[]>([]);
   const [providerId, setProviderId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -38,9 +40,59 @@ export function ChildTherapySettingModal({ row, onClose }: Props) {
         .eq("child_id", row.child_id)
         .order("start_date", { ascending: false })
         .then(({ data }) => setSettings((data ?? []) as unknown as ChildTherapySetting[]));
+      supabase
+        .from("therapy_outing_qr_codes")
+        .select("id, provider_id")
+        .eq("child_id", row.child_id)
+        .is("revoked_at", null)
+        .then(({ data }) => setActiveQrs((data ?? []) as { id: string; provider_id: string }[]));
     }
     load();
   }, [row.child_id, reload]);
+
+  const childName = `${row.display_name}${row.honorific_suffix ?? ""}`;
+
+  // QR発行/再発行: issue_therapy_qr(既存有効QRを自動revoke→新規)→ 生tokenでPDFカードを生成。
+  async function issueAndPrint(providerId: string, providerName: string) {
+    setError(null);
+    const { data, error: e } = await createClient().rpc("issue_therapy_qr", {
+      p_child_id: row.child_id,
+      p_provider_id: providerId,
+    });
+    const token = Array.isArray(data) ? (data[0]?.token as string | undefined) : undefined;
+    if (e || !token) {
+      setError("QR発行に失敗しました(権限=主任以上をご確認ください)");
+      return;
+    }
+    const res = await fetch("/api/childcare/therapy-qr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token,
+        childName,
+        providerName,
+        officeName,
+        issueDate: new Date().toLocaleDateString("ja-JP"),
+      }),
+    });
+    if (!res.ok) {
+      setError("PDF生成に失敗しました");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setReload((t) => t + 1);
+  }
+
+  async function revokeQr(qrId: string) {
+    const { error: e } = await createClient().rpc("revoke_therapy_qr", { p_qr_id: qrId });
+    if (e) {
+      setError("無効化に失敗しました(権限=主任以上をご確認ください)");
+      return;
+    }
+    setReload((t) => t + 1);
+  }
 
   async function addSetting() {
     setError(null);
@@ -101,19 +153,43 @@ export function ChildTherapySettingModal({ row, onClose }: Props) {
           <h4 className="text-sm font-semibold text-slate-600">設定済み</h4>
           {settings.length === 0 && <p className="mt-1 text-xs text-slate-400">設定はありません。</p>}
           <ul className="mt-2 space-y-1">
-            {settings.map((s) => (
-              <li key={s.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                <span>
-                  {s.therapy_providers?.name ?? "—"} : {s.start_date} 〜 {s.end_date ?? "無期限"}
-                </span>
-                <button
-                  onClick={() => deleteSetting(s.id)}
-                  className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
-                >
-                  削除
-                </button>
-              </li>
-            ))}
+            {settings.map((s) => {
+              const activeQr = activeQrs.find((q) => q.provider_id === s.provider_id);
+              return (
+                <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                  <span>
+                    {s.therapy_providers?.name ?? "—"} : {s.start_date} 〜 {s.end_date ?? "無期限"}
+                    {activeQr ? (
+                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">QR有効</span>
+                    ) : (
+                      <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-500">QR未発行</span>
+                    )}
+                  </span>
+                  <span className="flex gap-1">
+                    <button
+                      onClick={() => issueAndPrint(s.provider_id, s.therapy_providers?.name ?? "")}
+                      className="rounded border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50"
+                    >
+                      {activeQr ? "再発行・印刷" : "QR発行・印刷"}
+                    </button>
+                    {activeQr && (
+                      <button
+                        onClick={() => revokeQr(activeQr.id)}
+                        className="rounded border border-amber-300 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-50"
+                      >
+                        無効化
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteSetting(s.id)}
+                      className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+                    >
+                      削除
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
 

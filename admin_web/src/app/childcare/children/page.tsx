@@ -292,7 +292,13 @@ function ChildcareChildrenPageContent() {
         </div>
       </main>
 
-      {therapyRow && <ChildTherapySettingModal row={therapyRow} onClose={() => setTherapyRow(null)} />}
+      {therapyRow && (
+        <ChildTherapySettingModal
+          row={therapyRow}
+          officeName={offices?.find((o) => o.office_id === selectedOffice)?.office_name ?? ""}
+          onClose={() => setTherapyRow(null)}
+        />
+      )}
 
       {editingRow && (
         <ChildRequiredPeriodModal
