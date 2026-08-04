@@ -6,6 +6,9 @@ import { AppHeader } from "@/components/AppHeader";
 import { EditTaxWithholdingModal } from "@/components/EditTaxWithholdingModal";
 import { EmployeeFacilityPayPanel } from "@/components/EmployeeFacilityPayPanel";
 import { StaffPinManagementModal } from "@/components/StaffPinManagementModal";
+import { EmployeeBasicEditModal } from "@/components/EmployeeBasicEditModal";
+import { EmployeeRolesModal } from "@/components/EmployeeRolesModal";
+import { ClassHomeroomModal } from "@/components/ClassHomeroomModal";
 
 type EmployeeTaxStatus = {
   employee_id: string;
@@ -18,7 +21,14 @@ type EmployeeTaxStatus = {
   effective_start_year_month: string | null;
 };
 
-type DirectoryRow = { employee_number: string; name: string; home_office_id: string | null };
+type DirectoryRow = {
+  employee_id: string;
+  employee_number: string;
+  name: string;
+  name_kana: string | null;
+  email: string | null;
+  home_office_id: string | null;
+};
 
 export default function EmployeesPage() {
   // 労務(労務管理者以上)と 基本情報のみ(統括園長)を分けて出し分ける(第1段)。
@@ -27,6 +37,12 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<EmployeeTaxStatus[]>([]);
   const [directory, setDirectory] = useState<DirectoryRow[]>([]);
   const [officeNames, setOfficeNames] = useState<Record<string, string>>({});
+  const [officeList, setOfficeList] = useState<{ id: string; name: string }[]>([]);
+  const [myEmployeeId, setMyEmployeeId] = useState<string | null>(null);
+  const [myMinSort, setMyMinSort] = useState<number>(999);
+  const [editRow, setEditRow] = useState<DirectoryRow | null>(null);
+  const [rolesRow, setRolesRow] = useState<DirectoryRow | null>(null);
+  const [homeroomOpen, setHomeroomOpen] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeTaxStatus | null>(null);
   const [payEmployee, setPayEmployee] = useState<EmployeeTaxStatus | null>(null);
@@ -69,7 +85,10 @@ export default function EmployeesPage() {
       for (const o of (data ?? []) as { office_id: string; office_name: string }[]) map[o.office_id] = o.office_name;
       setOfficeNames(map);
     });
-  }, [isLabor, isExec]);
+    supabase.from("offices").select("id, name").order("name").then(({ data }) => setOfficeList((data ?? []) as { id: string; name: string }[]));
+    supabase.rpc("my_employee_id").then(({ data }) => setMyEmployeeId((data as string | null) ?? null));
+    supabase.rpc("my_min_role_sort_order").then(({ data }) => setMyMinSort(typeof data === "number" ? data : 999));
+  }, [isLabor, isExec, reloadToken]);
 
   if (isLabor === null || isExec === null) {
     return (
@@ -99,12 +118,20 @@ export default function EmployeesPage() {
         <main className="flex-1 space-y-6 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-slate-800">職員マスタ(基本情報)</h2>
-            <button
-              onClick={() => setPinMgmtOpen(true)}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              職員PIN管理
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setHomeroomOpen(true)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                担任管理
+              </button>
+              <button
+                onClick={() => setPinMgmtOpen(true)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                職員PIN管理
+              </button>
+            </div>
           </div>
           <p className="text-xs text-slate-400">統括園長は基本情報(職員名簿)とPIN管理を利用できます。労務情報(源泉徴収・給与等)は労務管理者以上のみです。</p>
           {listError && <p className="text-sm font-medium text-red-500">{listError}</p>}
@@ -115,19 +142,41 @@ export default function EmployeesPage() {
                   <th className="px-4 py-3">職員番号</th>
                   <th className="px-4 py-3">氏名</th>
                   <th className="px-4 py-3">所属</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {directory.map((d) => (
-                  <tr key={d.employee_number} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-500">{d.employee_number}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{d.name}</td>
-                    <td className="px-4 py-3 text-slate-500">{d.home_office_id ? officeNames[d.home_office_id] ?? "—" : "—"}</td>
-                  </tr>
-                ))}
+                {directory.map((d) => {
+                  const isSelf = myEmployeeId != null && d.employee_id === myEmployeeId;
+                  return (
+                    <tr key={d.employee_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-500">{d.employee_number}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{d.name}</td>
+                      <td className="px-4 py-3 text-slate-500">{d.home_office_id ? officeNames[d.home_office_id] ?? d.home_office_id : "—"}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditRow(d)}
+                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                          >
+                            編集
+                          </button>
+                          <button
+                            onClick={() => setRolesRow(d)}
+                            disabled={isSelf}
+                            title={isSelf ? "自分の役職は変更できません" : ""}
+                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                          >
+                            役職
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {directory.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400">在籍中の職員はいません</td>
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">在籍中の職員はいません</td>
                   </tr>
                 )}
               </tbody>
@@ -135,6 +184,27 @@ export default function EmployeesPage() {
           </div>
         </main>
         {pinMgmtOpen && <StaffPinManagementModal onClose={() => setPinMgmtOpen(false)} />}
+        {editRow && (
+          <EmployeeBasicEditModal
+            row={editRow}
+            offices={officeList}
+            onClose={() => setEditRow(null)}
+            onSaved={() => {
+              setEditRow(null);
+              setReloadToken((t) => t + 1);
+            }}
+          />
+        )}
+        {rolesRow && (
+          <EmployeeRolesModal
+            employeeId={rolesRow.employee_id}
+            employeeName={rolesRow.name}
+            offices={officeList}
+            minSortOrder={myMinSort}
+            onClose={() => setRolesRow(null)}
+          />
+        )}
+        {homeroomOpen && <ClassHomeroomModal onClose={() => setHomeroomOpen(false)} />}
       </div>
     );
   }
