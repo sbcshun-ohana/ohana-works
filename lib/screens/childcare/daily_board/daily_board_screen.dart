@@ -37,6 +37,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   DailyBoardSummary? _summary;
   WeatherRecord? _weather;
   bool _weatherLoaded = false;
+  List<DailyBoardRow> _allRows = const [];
 
   @override
   void initState() {
@@ -59,7 +60,56 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   void _load() {
-    _rowsFuture = widget.service.fetchDailyBoardForOffice(widget.officeId, widget.businessDate);
+    _rowsFuture = widget.service.fetchDailyBoardForOffice(widget.officeId, widget.businessDate).then((rows) {
+      _allRows = rows; // 一括操作の対象抽出用に保持
+      return rows;
+    });
+  }
+
+  // 一括対象: 表示中(絞り込み後)の approved かつ未公開の contact_id。
+  List<String> _bulkEligibleContactIds() => _allRows
+      .where((r) =>
+          (_selectedClassId == null || r.classId == _selectedClassId) &&
+          r.contactStatus == 'approved' &&
+          r.contactPublishedAt == null &&
+          r.contactId != null)
+      .map((r) => r.contactId!)
+      .toList();
+
+  // 対象日 + 時刻(JST壁時計)を UTC 実時刻へ変換(端末TZ非依存)。
+  DateTime _businessDateAt(int hour, int minute) => DateTime.utc(
+        widget.businessDate.year,
+        widget.businessDate.month,
+        widget.businessDate.day,
+        hour,
+        minute,
+      ).subtract(const Duration(hours: 9));
+
+  Future<void> _afterContactChange() async {
+    if (!mounted) return;
+    setState(_load);
+    _loadSummary();
+    await _rowsFuture;
+  }
+
+  Future<void> _scheduleContacts(List<String> ids, {required int hour, required int minute}) async {
+    await widget.service.scheduleDailyContacts(ids, _businessDateAt(hour, minute));
+    await _afterContactChange();
+  }
+
+  Future<void> _publishContactsNow(List<String> ids) async {
+    await widget.service.publishDailyContactsNow(ids);
+    await _afterContactChange();
+  }
+
+  Future<void> _cancelContacts(List<String> ids) async {
+    await widget.service.cancelDailyContactsSchedule(ids);
+    await _afterContactChange();
+  }
+
+  Future<void> _pickAndSchedule(List<String> ids) async {
+    final picked = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 17, minute: 0));
+    if (picked != null) await _scheduleContacts(ids, hour: picked.hour, minute: picked.minute);
   }
 
   Future<void> _loadClasses() async {
@@ -161,6 +211,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           ),
           _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
           _SummaryBar(summary: _summary),
+          _ContactBulkBar(
+            scopeLabel: _selectedClassId == null ? '施設一括' : 'クラス一括',
+            onSchedule17: () => _scheduleContacts(_bulkEligibleContactIds(), hour: 17, minute: 0),
+            onPublishNow: () => _publishContactsNow(_bulkEligibleContactIds()),
+            onCancel: () => _cancelContacts(_bulkEligibleContactIds()),
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _reload,
@@ -237,6 +293,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                 ),
                               ),
                             _ProxyAttendanceButton(row: row, onTap: _recordProxyAttendance),
+                            _ContactPublishRow(
+                              row: row,
+                              onSchedule17: () => _scheduleContacts([row.contactId!], hour: 17, minute: 0),
+                              onPickTime: () => _pickAndSchedule([row.contactId!]),
+                              onPublishNow: () => _publishContactsNow([row.contactId!]),
+                              onCancel: () => _cancelContacts([row.contactId!]),
+                            ),
                           ],
                         ),
                       );
@@ -248,6 +311,95 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 連絡帳公開の一括バー(表示中=クラス選択中ならクラス一括、全クラスなら施設一括)。
+class _ContactBulkBar extends StatelessWidget {
+  const _ContactBulkBar({
+    required this.scopeLabel,
+    required this.onSchedule17,
+    required this.onPublishNow,
+    required this.onCancel,
+  });
+
+  final String scopeLabel;
+  final VoidCallback onSchedule17;
+  final VoidCallback onPublishNow;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        children: [
+          Text('連絡帳 $scopeLabel',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+          const Spacer(),
+          TextButton(onPressed: onSchedule17, child: const Text('17時予約')),
+          TextButton(onPressed: onPublishNow, child: const Text('今すぐ公開')),
+          TextButton(onPressed: onCancel, child: const Text('取消')),
+        ],
+      ),
+    );
+  }
+}
+
+/// カード内の連絡帳公開状態バッジ+操作(承認済み・未公開のみ操作可)。
+class _ContactPublishRow extends StatelessWidget {
+  const _ContactPublishRow({
+    required this.row,
+    required this.onSchedule17,
+    required this.onPickTime,
+    required this.onPublishNow,
+    required this.onCancel,
+  });
+
+  final DailyBoardRow row;
+  final VoidCallback onSchedule17;
+  final VoidCallback onPickTime;
+  final VoidCallback onPublishNow;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = row.contactBadge;
+    if (badge == 'none') return const SizedBox.shrink();
+
+    Widget chip(String text, Color color) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+          child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+        );
+
+    final List<Widget> children;
+    switch (badge) {
+      case 'draft':
+        children = [chip('連絡帳: 下書き', AppColors.textSecondary)];
+      case 'published':
+        children = [chip('連絡帳: 公開済', AppColors.leafGreen)];
+      case 'scheduled':
+        final at = row.contactScheduledPublishAt!.toLocal();
+        final t = '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+        children = [
+          chip('公開予約済 $t', AppColors.warmOrange),
+          TextButton(onPressed: onPickTime, child: const Text('時刻変更')),
+          TextButton(onPressed: onPublishNow, child: const Text('今すぐ公開')),
+          TextButton(onPressed: onCancel, child: const Text('取消')),
+        ];
+      default: // unscheduled(承認済み・予約なし=取消後)
+        children = [
+          chip('連絡帳: 非公開', AppColors.textSecondary),
+          TextButton(onPressed: onSchedule17, child: const Text('17時予約')),
+          TextButton(onPressed: onPickTime, child: const Text('時刻指定')),
+          TextButton(onPressed: onPublishNow, child: const Text('今すぐ公開')),
+        ];
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: children),
     );
   }
 }

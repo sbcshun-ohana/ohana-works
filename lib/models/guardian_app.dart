@@ -20,6 +20,10 @@ class DailyBoardRow {
     this.pickupPersonRelationship,
     this.pickupTimeFrom,
     this.pickupTimeTo,
+    this.contactId,
+    this.contactStatus,
+    this.contactScheduledPublishAt,
+    this.contactPublishedAt,
   });
 
   factory DailyBoardRow.fromJson(Map<String, dynamic> json) => DailyBoardRow(
@@ -39,6 +43,14 @@ class DailyBoardRow {
         pickupPersonRelationship: json['pickup_person_relationship'] as String?,
         pickupTimeFrom: json['pickup_time_from'] as String?,
         pickupTimeTo: json['pickup_time_to'] as String?,
+        contactId: json['contact_id'] as String?,
+        contactStatus: json['contact_status'] as String?,
+        contactScheduledPublishAt: json['contact_scheduled_publish_at'] != null
+            ? DateTime.parse(json['contact_scheduled_publish_at'] as String)
+            : null,
+        contactPublishedAt: json['contact_published_at'] != null
+            ? DateTime.parse(json['contact_published_at'] as String)
+            : null,
       );
 
   final String childId;
@@ -56,8 +68,22 @@ class DailyBoardRow {
   final String? pickupPersonRelationship;
   final String? pickupTimeFrom;
   final String? pickupTimeTo;
+  final String? contactId;
+  final String? contactStatus;
+  final DateTime? contactScheduledPublishAt;
+  final DateTime? contactPublishedAt;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
+
+  /// 連絡帳(職員→保護者)の公開状態バッジ。
+  /// none: 未作成 / draft: 未承認 / scheduled: 予約済 / published: 公開済 / unscheduled: 承認済み予約なし(取消後)
+  String get contactBadge {
+    if (contactId == null) return 'none';
+    if (contactStatus != 'approved') return 'draft';
+    if (contactPublishedAt != null) return 'published';
+    if (contactScheduledPublishAt != null) return 'scheduled';
+    return 'unscheduled';
+  }
 }
 
 /// 在籍登園状況サマリー(fetch_daily_board_summary_for_office の1行)。

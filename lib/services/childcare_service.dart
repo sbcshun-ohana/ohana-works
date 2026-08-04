@@ -523,6 +523,26 @@ class ChildcareService {
     });
   }
 
+  /// 連絡帳(職員→保護者)の公開予約(既定17:00)。対象は approved かつ未公開の contact_id 群。
+  /// scheduledAt は対象日+時刻(JST壁時計)を UTC 実時刻へ変換して渡す(端末TZ非依存)。
+  Future<void> scheduleDailyContacts(List<String> contactIds, DateTime scheduledAt) async {
+    if (contactIds.isEmpty) return;
+    await _client.rpc('schedule_child_daily_contacts', params: {
+      'p_contact_ids': contactIds,
+      'p_scheduled_at': scheduledAt.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> publishDailyContactsNow(List<String> contactIds) async {
+    if (contactIds.isEmpty) return;
+    await _client.rpc('publish_child_daily_contacts_now', params: {'p_contact_ids': contactIds});
+  }
+
+  Future<void> cancelDailyContactsSchedule(List<String> contactIds) async {
+    if (contactIds.isEmpty) return;
+    await _client.rpc('cancel_child_daily_contacts_schedule', params: {'p_contact_ids': contactIds});
+  }
+
   /// 家庭連絡帳(保護者記入)の職員側閲覧。RLS(family_daily_reports_select)で
   /// staff_has_guardian_data_access(child_id)により保護のため直接SELECTでよい。
   Future<FamilyDailyReportSummary?> fetchFamilyDailyReportForStaff(

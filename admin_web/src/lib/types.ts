@@ -167,7 +167,27 @@ export type DailyBoardRow = {
   pickup_person_relationship: string | null;
   pickup_time_from: string | null;
   pickup_time_to: string | null;
+  contact_id: string | null;
+  contact_status: string | null;
+  contact_scheduled_publish_at: string | null;
+  contact_published_at: string | null;
 };
+
+/**
+ * 連絡帳(職員→保護者)の公開状態バッジ。列値から導出する。
+ * - none: 連絡帳未作成 / draft: 未承認(下書き・提出・差戻し)
+ * - scheduled: 承認済み+予約あり+未公開 / published: 公開済み
+ * - unscheduled: 承認済みだが予約なし+未公開(予約取消後)=再予約が必要
+ */
+export type ContactPublishBadge = "none" | "draft" | "scheduled" | "published" | "unscheduled";
+
+export function deriveContactBadge(row: DailyBoardRow): ContactPublishBadge {
+  if (!row.contact_id) return "none";
+  if (row.contact_status !== "approved") return "draft";
+  if (row.contact_published_at != null) return "published";
+  if (row.contact_scheduled_publish_at != null) return "scheduled";
+  return "unscheduled";
+}
 
 export const FAMILY_MOOD_LABELS: Record<string, string> = { good: "良い", normal: "普通", bad: "悪い" };
 export const FAMILY_BOWEL_CONDITION_LABELS: Record<string, string> = {

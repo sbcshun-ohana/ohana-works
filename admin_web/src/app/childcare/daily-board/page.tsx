@@ -10,7 +10,7 @@ import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
 import type { DailyBoardRow, DailyBoardSummary, WeatherRecord } from "@/lib/types";
-import { DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS } from "@/lib/types";
+import { DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
 
 function ChildcareDailyBoardPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
@@ -24,6 +24,7 @@ function ChildcareDailyBoardPageContent() {
   const [proxyTarget, setProxyTarget] = useState<{ row: DailyBoardRow; eventType: "drop_off" | "pick_up" } | null>(
     null,
   );
+  const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -140,6 +141,37 @@ function ChildcareDailyBoardPageContent() {
     return true;
   }
 
+  // 連絡帳の公開操作(§2.4)。対象は approved かつ未公開の contact_id 群。
+  // scheduled_at は対象日 + 時刻(既定17:00)を JST(+09:00)で組み立てる。
+  async function scheduleContacts(contactIds: string[], time: string) {
+    if (contactIds.length === 0) return;
+    const scheduledAt = `${businessDate}T${time}:00+09:00`;
+    await createClient().rpc("schedule_child_daily_contacts", {
+      p_contact_ids: contactIds,
+      p_scheduled_at: scheduledAt,
+    });
+    setReloadToken((t) => t + 1);
+  }
+
+  async function publishContactsNow(contactIds: string[]) {
+    if (contactIds.length === 0) return;
+    await createClient().rpc("publish_child_daily_contacts_now", { p_contact_ids: contactIds });
+    setReloadToken((t) => t + 1);
+  }
+
+  async function cancelContactSchedule(contactIds: string[]) {
+    if (contactIds.length === 0) return;
+    await createClient().rpc("cancel_child_daily_contacts_schedule", { p_contact_ids: contactIds });
+    setReloadToken((t) => t + 1);
+  }
+
+  // 一括操作の対象: 表示中(絞り込み後)の行のうち approved かつ未公開の contact_id。
+  // クラス選択中なら「クラス一括」、全クラスなら「施設一括」に相当する。
+  const bulkEligibleContactIds = () =>
+    filteredRows
+      .filter((r) => r.contact_status === "approved" && r.contact_published_at == null && r.contact_id)
+      .map((r) => r.contact_id as string);
+
   // 登降園の記録は複数端末(保護者アプリ・キオスク端末)から行われるため、
   // daily_child_statusの変更をRealtimeで購読し即時反映する。
   useEffect(() => {
@@ -247,6 +279,38 @@ function ChildcareDailyBoardPageContent() {
 
         <WeatherBar weather={weather} onSave={saveWeather} error={weatherError} />
 
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-4 shadow-sm">
+          <span className="text-sm font-semibold text-slate-700">
+            連絡帳 {selectedClass === "" ? "施設一括" : "クラス一括"}
+          </span>
+          <span className="text-xs text-slate-400">(承認済み・未公開が対象)</span>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() =>
+                setScheduleTarget({
+                  contactIds: bulkEligibleContactIds(),
+                  label: selectedClass === "" ? "施設一括" : "クラス一括",
+                })
+              }
+              className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+            >
+              17時公開予約
+            </button>
+            <button
+              onClick={() => publishContactsNow(bulkEligibleContactIds())}
+              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              今すぐ公開
+            </button>
+            <button
+              onClick={() => cancelContactSchedule(bulkEligibleContactIds())}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              予約取消
+            </button>
+          </div>
+        </div>
+
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
 
         <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
@@ -260,20 +324,21 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">家庭連絡帳</th>
                 <th className="px-4 py-3">お迎え変更</th>
                 <th className="px-4 py-3">代理登録</th>
+                <th className="px-4 py-3">連絡帳公開</th>
                 {internalNotesEnabled && <th className="px-4 py-3">園内記録</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 8 : 7} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 8 : 7} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
                     在籍園児がいません
                   </td>
                 </tr>
@@ -344,6 +409,21 @@ function ChildcareDailyBoardPageContent() {
                         <span className="text-xs text-slate-300">—</span>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      <ContactPublishCell
+                        row={row}
+                        onSchedule17={() => row.contact_id && scheduleContacts([row.contact_id], "17:00")}
+                        onPickTime={() =>
+                          row.contact_id &&
+                          setScheduleTarget({
+                            contactIds: [row.contact_id],
+                            label: `${row.display_name}${row.honorific_suffix ?? ""}`,
+                          })
+                        }
+                        onPublishNow={() => row.contact_id && publishContactsNow([row.contact_id])}
+                        onCancel={() => row.contact_id && cancelContactSchedule([row.contact_id])}
+                      />
+                    </td>
                     {internalNotesEnabled && (
                       <td className="px-4 py-3">
                         <button
@@ -382,6 +462,129 @@ function ChildcareDailyBoardPageContent() {
           onSubmit={recordProxyAttendance}
         />
       )}
+
+      {scheduleTarget && (
+        <ContactScheduleModal
+          label={scheduleTarget.label}
+          onClose={() => setScheduleTarget(null)}
+          onSubmit={async (time) => {
+            await scheduleContacts(scheduleTarget.contactIds, time);
+            setScheduleTarget(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 連絡帳公開の状態バッジ+操作(承認済み・未公開のみ操作可)。 */
+function ContactPublishCell({
+  row,
+  onSchedule17,
+  onPickTime,
+  onPublishNow,
+  onCancel,
+}: {
+  row: DailyBoardRow;
+  onSchedule17: () => void;
+  onPickTime: () => void;
+  onPublishNow: () => void;
+  onCancel: () => void;
+}) {
+  const badge = deriveContactBadge(row);
+  if (badge === "none") return <span className="text-xs text-slate-300">—</span>;
+  if (badge === "draft") {
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">下書き</span>;
+  }
+  if (badge === "published") {
+    return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">公開済</span>;
+  }
+  if (badge === "unscheduled") {
+    // 承認済みだが予約なし(取消後)。再予約/即時公開を提供する。
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-center text-xs font-semibold text-slate-500">
+          非公開
+        </span>
+        <div className="flex flex-wrap gap-1">
+          <button onClick={onSchedule17} className="rounded border border-sky-300 px-2 py-0.5 text-[11px] text-sky-700 hover:bg-sky-50">
+            17時予約
+          </button>
+          <button onClick={onPickTime} className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">
+            時刻指定
+          </button>
+          <button onClick={onPublishNow} className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50">
+            今すぐ公開
+          </button>
+        </div>
+      </div>
+    );
+  }
+  // scheduled
+  const scheduledTime = row.contact_scheduled_publish_at
+    ? new Date(row.contact_scheduled_publish_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })
+    : "";
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-center text-xs font-semibold text-amber-700">
+        公開予約済 {scheduledTime}
+      </span>
+      <div className="flex flex-wrap gap-1">
+        <button onClick={onPickTime} className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">
+          時刻変更
+        </button>
+        <button onClick={onPublishNow} className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50">
+          今すぐ公開
+        </button>
+        <button onClick={onCancel} className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">
+          取消
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 公開予約の時刻ピッカー(既定17:00)。 */
+function ContactScheduleModal({
+  label,
+  onClose,
+  onSubmit,
+}: {
+  label: string;
+  onClose: () => void;
+  onSubmit: (time: string) => void;
+}) {
+  const [time, setTime] = useState("17:00");
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <h3 className="text-base font-bold text-slate-800">{label} の公開予約</h3>
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-medium text-slate-500">公開時刻</label>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+          />
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+            キャンセル
+          </button>
+          <button
+            onClick={async () => {
+              setSaving(true);
+              await onSubmit(time);
+            }}
+            disabled={saving}
+            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+          >
+            {saving ? "設定中…" : "予約"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
