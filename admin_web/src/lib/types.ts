@@ -273,6 +273,30 @@ export type NapMissing = {
   missing_slots: string[];
 };
 
+/** 療育外出(§5)。 */
+export type TherapyProvider = { id: string; name: string; is_active: boolean };
+
+export type ChildTherapySetting = {
+  id: string;
+  provider_id: string;
+  start_date: string;
+  end_date: string | null;
+  therapy_providers: { name: string } | null;
+};
+
+export type TherapyRecordRow = {
+  event_id: string;
+  child_id: string;
+  display_name: string;
+  honorific_suffix: string | null;
+  provider_id: string;
+  provider_name: string;
+  event_type: string;
+  occurred_at: string;
+  source: string;
+  correction_note: string | null;
+};
+
 /** 天気記録(daily_weather_records の1行)。施設×日で1行。 */
 export type WeatherRecord = {
   weather: string;

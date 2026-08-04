@@ -7,6 +7,7 @@ import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal"
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
+import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
@@ -39,6 +40,8 @@ function ChildcareChildrenPageContent() {
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
+  const [therapyRow, setTherapyRow] = useState<ChildMasterRow | null>(null);
+  const [therapyEnabled, setTherapyEnabled] = useState(false);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -51,6 +54,9 @@ function ChildcareChildrenPageContent() {
       supabase
         .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
         .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
+      supabase
+        .rpc("is_therapy_outing_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setTherapyEnabled(Boolean(data)));
     }
     load();
   }, [selectedOffice]);
@@ -260,6 +266,14 @@ function ChildcareChildrenPageContent() {
                               期間設定
                             </button>
                           )}
+                          {therapyEnabled && (
+                            <button
+                              onClick={() => setTherapyRow(row)}
+                              className="rounded-lg border border-violet-300 px-3 py-1 text-xs font-medium text-violet-600 hover:bg-violet-50"
+                            >
+                              療育設定
+                            </button>
+                          )}
                           {!isWithdrawn && (
                             <button
                               onClick={() => setWithdrawingRow(row)}
@@ -277,6 +291,8 @@ function ChildcareChildrenPageContent() {
           </table>
         </div>
       </main>
+
+      {therapyRow && <ChildTherapySettingModal row={therapyRow} onClose={() => setTherapyRow(null)} />}
 
       {editingRow && (
         <ChildRequiredPeriodModal
