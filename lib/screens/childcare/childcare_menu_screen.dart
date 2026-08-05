@@ -5,7 +5,6 @@ import '../../models/childcare.dart';
 import '../../services/childcare_service.dart';
 import '../../services/pin_auth_service.dart';
 import '../../theme/app_theme.dart';
-import 'attendance/childcare_attendance_screen.dart';
 import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
@@ -182,22 +181,6 @@ class _ChildcareMenuScreenState extends State<ChildcareMenuScreen> {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => DailyBoardScreen(
-                      service: widget.service,
-                      officeId: _selectedOffice!.officeId,
-                      businessDate: _businessDate,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _ChildcareMenuCard(
-                icon: Icons.event_busy_rounded,
-                color: AppColors.warmOrange,
-                title: '当日の欠席選択',
-                subtitle: '在籍園児から欠席をチェックします',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ChildcareAttendanceScreen(
                       service: widget.service,
                       officeId: _selectedOffice!.officeId,
                       businessDate: _businessDate,

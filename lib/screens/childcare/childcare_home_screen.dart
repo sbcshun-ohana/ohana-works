@@ -6,7 +6,6 @@ import '../../services/childcare_service.dart';
 import '../../services/pin_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ohana_logo_home_button.dart';
-import 'attendance/childcare_attendance_screen.dart';
 import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
@@ -157,17 +156,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               comingSoon: true,
               onTap: () => _comingSoon('支援保育'),
             ),
-            // 暫定タイル(Phase 2で構造再編: 欠席選択→デイリーボード集約[K5] / コピー→連絡帳配下)
-            _HomeTile(
-              icon: Icons.event_busy_rounded,
-              color: AppColors.warmOrange,
-              label: '欠席選択',
-              onTap: () => _push(ChildcareAttendanceScreen(
-                service: widget.service,
-                officeId: office.officeId,
-                businessDate: _businessDate,
-              )),
-            ),
+            // 欠席選択(K5でデイリーボード行の欠席トグルへ集約・廃止)。コピーは連絡帳配下へ再編予定。
             _HomeTile(
               icon: Icons.copy_all_rounded,
               color: AppColors.skyBlue,

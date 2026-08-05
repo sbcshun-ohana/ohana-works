@@ -158,6 +158,43 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     await _rowsFuture;
   }
 
+  // K5(i): デイリーボード行から欠席登録/取消(簡易)。種別/メモ付きの本格編集は後続の出欠モーダル(K7)で。
+  Future<void> _toggleAbsence(DailyBoardRow row) async {
+    final makeAbsent = row.status != 'absent';
+    if (makeAbsent) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text('${row.nameLabel} を欠席にしますか?'),
+          content: const Text('欠席にすると当日の連絡帳作成対象から外れます(出席に戻せます)。'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('欠席にする')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      await widget.service.setChildDailyAttendance(
+        childId: row.childId,
+        businessDate: _businessDate,
+        isAbsent: makeAbsent,
+        absenceReason: null,
+      );
+      if (mounted) {
+        setState(_load);
+        _loadSummary();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(makeAbsent ? '欠席にしました' : '出席に戻しました')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('操作に失敗しました')));
+      }
+    }
+  }
+
   Future<void> _recordProxyAttendance(DailyBoardRow row, String eventType) async {
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -291,7 +328,39 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                               contentPadding: const EdgeInsets.all(16),
                               onTap: () => _openChildDetail(row),
                               title: Text(row.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
-                              subtitle: Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
+                                  const SizedBox(height: 4),
+                                  InkWell(
+                                    onTap: () => _toggleAbsence(row),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            row.status == 'absent' ? Icons.undo_rounded : Icons.event_busy_rounded,
+                                            size: 15,
+                                            color: row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            row.status == 'absent' ? '出席に戻す' : '欠席にする',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                               trailing: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.end,
