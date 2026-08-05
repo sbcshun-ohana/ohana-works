@@ -215,7 +215,8 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
+        leadingWidth: 148,
+        toolbarHeight: 48,
         title: Text(widget.childNameLabel),
       ),
       body: _isLoading

@@ -71,7 +71,8 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
+        leadingWidth: 148,
+        toolbarHeight: 48,
         title: const SizedBox.shrink(),
         actions: [
           IconButton(icon: const Icon(Icons.pin_rounded), tooltip: 'PIN設定', onPressed: _setPin),
@@ -94,113 +95,129 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
           }
           final office = _selectedOffice!;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _selectorCard(offices),
-              const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: 3,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.15,
-                children: [
-                  _HomeTile(
-                    icon: Icons.dashboard_customize_rounded,
-                    color: AppColors.skyBlue,
-                    label: 'デイリーボード',
-                    onTap: () => _push(DailyBoardScreen(
-                      service: widget.service,
-                      officeId: office.officeId,
-                      businessDate: _businessDate,
-                    )),
-                  ),
-                  _HomeTile(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    color: AppColors.skyBlue,
-                    label: '連絡帳',
-                    onTap: () => _push(DailyContactListScreen(
-                      service: widget.service,
-                      officeId: office.officeId,
-                      businessDate: _businessDate,
-                      isManager: office.isManager,
-                    )),
-                  ),
-                  _HomeTile(
-                    icon: Icons.groups_rounded,
-                    color: AppColors.leafGreen,
-                    label: 'クラス活動',
-                    onTap: () => _push(ClassActivityListScreen(
-                      service: widget.service,
-                      officeId: office.officeId,
-                      businessDate: _businessDate,
-                      isManager: office.isManager,
-                    )),
-                  ),
-                  _HomeTile(
-                    icon: Icons.bedtime_rounded,
-                    color: AppColors.warmOrange,
-                    label: '午睡チェック',
-                    onTap: () => _push(NapCheckScreen(
-                      service: widget.service,
-                      officeId: office.officeId,
-                      businessDate: _businessDate,
-                      isManager: office.isManager,
-                    )),
-                  ),
-                  _HomeTile(
-                    icon: Icons.mark_email_unread_rounded,
-                    color: AppColors.warmOrange,
-                    label: '保護者からの連絡',
-                    comingSoon: true,
-                    onTap: () => _comingSoon('保護者からの連絡'),
-                  ),
-                  // 園内記録: child_internal_notes_enabled がONの施設のみ表示。
-                  // 新規画面は作らず、園児詳細(デイリーボード→園児→園内記録タブ)の既存導線に乗せる。
-                  if (_internalNotesEnabled)
-                    _HomeTile(
-                      icon: Icons.edit_note_rounded,
-                      color: AppColors.leafGreen,
-                      label: '園内記録',
-                      onTap: () => _push(DailyBoardScreen(
-                        service: widget.service,
-                        officeId: office.officeId,
-                        businessDate: _businessDate,
-                      )),
-                    ),
-                  _HomeTile(
-                    icon: Icons.support_rounded,
-                    color: AppColors.skyBlue,
-                    label: '支援保育',
-                    comingSoon: true,
-                    onTap: () => _comingSoon('支援保育'),
-                  ),
-                  // 暫定タイル(Phase 2で構造再編: 欠席選択→デイリーボード集約 / コピー→連絡帳配下)
-                  _HomeTile(
-                    icon: Icons.event_busy_rounded,
-                    color: AppColors.warmOrange,
-                    label: '欠席選択',
-                    onTap: () => _push(ChildcareAttendanceScreen(
-                      service: widget.service,
-                      officeId: office.officeId,
-                      businessDate: _businessDate,
-                    )),
-                  ),
-                  _HomeTile(
-                    icon: Icons.copy_all_rounded,
-                    color: AppColors.skyBlue,
-                    label: 'コピー',
-                    onTap: () => _push(ContactCopyScreen(
-                      service: widget.service,
-                      officeId: office.officeId,
-                      businessDate: _businessDate,
-                    )),
-                  ),
-                ],
+          // タイルは可変(園内記録は施設フラグ依存)。1画面に収めるため列数と縦横比を実寸から算出。
+          final tiles = <Widget>[
+            _HomeTile(
+              icon: Icons.dashboard_customize_rounded,
+              color: AppColors.skyBlue,
+              label: 'デイリーボード',
+              onTap: () => _push(DailyBoardScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+              )),
+            ),
+            _HomeTile(
+              icon: Icons.chat_bubble_outline_rounded,
+              color: AppColors.skyBlue,
+              label: '連絡帳',
+              onTap: () => _push(DailyContactListScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+                isManager: office.isManager,
+              )),
+            ),
+            _HomeTile(
+              icon: Icons.groups_rounded,
+              color: AppColors.leafGreen,
+              label: 'クラス活動',
+              onTap: () => _push(ClassActivityListScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+                isManager: office.isManager,
+              )),
+            ),
+            _HomeTile(
+              icon: Icons.bedtime_rounded,
+              color: AppColors.warmOrange,
+              label: '午睡チェック',
+              onTap: () => _push(NapCheckScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+                isManager: office.isManager,
+              )),
+            ),
+            _HomeTile(
+              icon: Icons.mark_email_unread_rounded,
+              color: AppColors.warmOrange,
+              label: '保護者からの連絡',
+              comingSoon: true,
+              onTap: () => _comingSoon('保護者からの連絡'),
+            ),
+            // 園内記録: child_internal_notes_enabled がONの施設のみ表示。
+            // 新規画面は作らず、園児詳細(デイリーボード→園児→園内記録タブ)の既存導線に乗せる。
+            if (_internalNotesEnabled)
+              _HomeTile(
+                icon: Icons.edit_note_rounded,
+                color: AppColors.leafGreen,
+                label: '園内記録',
+                onTap: () => _push(DailyBoardScreen(
+                  service: widget.service,
+                  officeId: office.officeId,
+                  businessDate: _businessDate,
+                )),
               ),
-            ],
+            _HomeTile(
+              icon: Icons.support_rounded,
+              color: AppColors.skyBlue,
+              label: '支援保育',
+              comingSoon: true,
+              onTap: () => _comingSoon('支援保育'),
+            ),
+            // 暫定タイル(Phase 2で構造再編: 欠席選択→デイリーボード集約[K5] / コピー→連絡帳配下)
+            _HomeTile(
+              icon: Icons.event_busy_rounded,
+              color: AppColors.warmOrange,
+              label: '欠席選択',
+              onTap: () => _push(ChildcareAttendanceScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+              )),
+            ),
+            _HomeTile(
+              icon: Icons.copy_all_rounded,
+              color: AppColors.skyBlue,
+              label: 'コピー',
+              onTap: () => _push(ContactCopyScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+              )),
+            ),
+          ];
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              children: [
+                _selectorCard(offices),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // iPad横持ちは4列、縦持ち等の狭幅は3列。行数から縦横比を出して縦スクロールを消す。
+                      const spacing = 12.0;
+                      final cols = constraints.maxWidth >= 720 ? 4 : 3;
+                      final rows = (tiles.length / cols).ceil();
+                      final tileW = (constraints.maxWidth - (cols - 1) * spacing) / cols;
+                      final tileH = (constraints.maxHeight - (rows - 1) * spacing) / rows;
+                      return GridView.count(
+                        crossAxisCount: cols,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: spacing,
+                        crossAxisSpacing: spacing,
+                        childAspectRatio: tileH > 0 ? tileW / tileH : 1.1,
+                        children: tiles,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

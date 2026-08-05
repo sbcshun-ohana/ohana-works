@@ -181,7 +181,8 @@ class _GuardianManagementScreenState extends State<GuardianManagementScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
+        leadingWidth: 148,
+        toolbarHeight: 48,
         title: const Text('保護者管理'),
       ),
       floatingActionButton: FloatingActionButton.extended(

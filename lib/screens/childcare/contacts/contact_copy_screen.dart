@@ -58,7 +58,8 @@ class _ContactCopyScreenState extends State<ContactCopyScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
+        leadingWidth: 148,
+        toolbarHeight: 48,
         title: const Text('承認済み連絡帳のコピー'),
       ),
       body: RefreshIndicator(

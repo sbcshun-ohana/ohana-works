@@ -165,7 +165,8 @@ class _ClassActivityDetailScreenState extends State<ClassActivityDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
+        leadingWidth: 148,
+        toolbarHeight: 48,
         title: Text(widget.className),
       ),
       body: _isLoading

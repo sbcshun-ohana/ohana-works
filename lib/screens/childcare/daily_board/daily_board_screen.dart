@@ -212,17 +212,31 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
-        title: const Text('デイリーボード'),
+        leadingWidth: 148,
+        toolbarHeight: 48,
+        titleSpacing: 0,
+        title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ),
       body: Column(
         children: [
-          _ClassFilterBar(
-            classes: _classes,
-            selectedClassId: _selectedClassId,
-            onChanged: _onClassChanged,
+          // クラス絞り込みと天気を1行に集約(縦の占有を減らし園児リスト領域を広げる)。
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 200,
+                  child: _ClassFilterBar(
+                    classes: _classes,
+                    selectedClassId: _selectedClassId,
+                    onChanged: _onClassChanged,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather)),
+              ],
+            ),
           ),
-          _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
           if (_napMissing.isNotEmpty) _NapMissingBanner(missing: _napMissing),
           _SummaryBar(summary: _summary),
           _ContactBulkBar(
@@ -637,31 +651,20 @@ class _ClassFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Row(
-        children: [
-          const Icon(Icons.filter_list_rounded, size: 20, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: DropdownButtonFormField<String?>(
-              initialValue: selectedClassId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'クラス',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('全クラス')),
-                for (final c in classes)
-                  DropdownMenuItem<String?>(value: c.classId, child: Text(c.className)),
-              ],
-              onChanged: onChanged,
-            ),
-          ),
-        ],
+    return DropdownButtonFormField<String?>(
+      initialValue: selectedClassId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'クラス',
+        isDense: true,
+        border: OutlineInputBorder(),
       ),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('全クラス')),
+        for (final c in classes)
+          DropdownMenuItem<String?>(value: c.classId, child: Text(c.className)),
+      ],
+      onChanged: onChanged,
     );
   }
 }
@@ -684,35 +687,32 @@ class _WeatherBar extends StatelessWidget {
             : '天気: ${w.weather}'
                 '${w.temperature != null ? ' / ${w.temperature}℃' : ''}'
                 '${w.humidity != null ? ' / ${w.humidity}%' : ''}';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.skyBlue.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.wb_sunny_rounded, size: 18, color: AppColors.warmOrange),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: w == null ? AppColors.textSecondary : AppColors.textPrimary,
-                  ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.skyBlue.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.wb_sunny_rounded, size: 18, color: AppColors.warmOrange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: w == null ? AppColors.textSecondary : AppColors.textPrimary,
                 ),
               ),
-              const Icon(Icons.edit_rounded, size: 16, color: AppColors.textSecondary),
-            ],
-          ),
+            ),
+            const Icon(Icons.edit_rounded, size: 16, color: AppColors.textSecondary),
+          ],
         ),
       ),
     );
@@ -840,7 +840,7 @@ class _SummaryBar extends StatelessWidget {
       _SummaryItem('欠席', s?.absent, AppColors.punchClockOut),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Row(
         children: [
           for (final item in items)
@@ -848,14 +848,14 @@ class _SummaryBar extends StatelessWidget {
               child: Card(
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Column(
                     children: [
-                      Text(item.label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                      const SizedBox(height: 2),
+                      Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                      const SizedBox(height: 1),
                       Text(
                         item.value?.toString() ?? '—',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: item.color),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: item.color),
                       ),
                     ],
                   ),

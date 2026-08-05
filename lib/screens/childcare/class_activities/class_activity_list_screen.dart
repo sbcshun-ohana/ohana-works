@@ -49,7 +49,8 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
+        leadingWidth: 148,
+        toolbarHeight: 48,
         title: const Text('クラス活動'),
       ),
       body: RefreshIndicator(
