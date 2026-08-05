@@ -180,9 +180,17 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      // iPad横持ちは4列、縦持ち等の狭幅は3列。行数から縦横比を出して縦スクロールを消す。
+                      // 画面幅に応じて列数を切替(スマホ=3 / iPad=6目安)。幅ベースのブレークポイントで判定し、
+                      // 行数から縦横比を算出して縦スクロールを消す(いずれの幅でも1画面に収める)。
                       const spacing = 12.0;
-                      final cols = constraints.maxWidth >= 720 ? 4 : 3;
+                      final w = constraints.maxWidth;
+                      final cols = w >= 1000
+                          ? 6
+                          : w >= 820
+                              ? 5
+                              : w >= 620
+                                  ? 4
+                                  : 3;
                       final rows = (tiles.length / cols).ceil();
                       final tileW = (constraints.maxWidth - (cols - 1) * spacing) / cols;
                       final tileH = (constraints.maxHeight - (rows - 1) * spacing) / rows;
