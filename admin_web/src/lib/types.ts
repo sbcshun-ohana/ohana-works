@@ -241,6 +241,14 @@ export const NAP_BODY_POSITIONS: Record<string, string> = {
   prone_corrected: "うつ伏せ直し",
 };
 
+// グリッドセル内の短縮表記(セル幅を記録内容に依らず固定にするため)。正式名は NAP_BODY_POSITIONS。
+export const NAP_BODY_POSITIONS_SHORT: Record<string, string> = {
+  right: "右",
+  left: "左",
+  supine: "仰",
+  prone_corrected: "伏直",
+};
+
 export type NapCheck = {
   slot_at: string;
   body_position: string;

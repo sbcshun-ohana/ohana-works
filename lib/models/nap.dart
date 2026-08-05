@@ -1,12 +1,21 @@
 /// 午睡チェック(Phase 3)のモデル群。バックエンドは migration 168〜170。
 library;
 
-/// 身体の向き(§3.2)。
+/// 身体の向き(§3.2)。正式名(入力シート・凡例で使用)。
 const napBodyPositions = <String, String>{
   'right': '右',
   'left': '左',
   'supine': '仰向け',
   'prone_corrected': 'うつ伏せ直し',
+};
+
+/// グリッドセル内の短縮表記。セル幅を記録内容に依らず固定にするため、
+/// 長い「うつ伏せ直し」は「伏直」に略す(正式名はタップ時のシート・凡例で表示)。
+const napBodyPositionsShort = <String, String>{
+  'right': '右',
+  'left': '左',
+  'supine': '仰向',
+  'prone_corrected': '伏直',
 };
 
 class NapCheck {

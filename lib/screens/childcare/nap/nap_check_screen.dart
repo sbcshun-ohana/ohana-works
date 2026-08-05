@@ -392,6 +392,17 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
               ],
             ),
           ),
+          // 略記の凡例(セルは固定幅のため短縮表記。正式名はタップ時のシートにも表示)。
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '凡例: 仰=仰向け / 右 / 左 / 伏直=うつ伏せ直し / 未=未記録',
+                style: TextStyle(fontSize: 10, color: AppColors.textSecondary.withValues(alpha: 0.9)),
+              ),
+            ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -507,7 +518,8 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     final String body;
     if (check != null) {
       bg = AppColors.leafGreen.withValues(alpha: 0.22);
-      body = napBodyPositions[check.bodyPosition] ?? check.bodyPosition;
+      // セル内は短縮表記(格子を崩さない)。正式名はタップ時のシート・凡例で表示。
+      body = napBodyPositionsShort[check.bodyPosition] ?? check.bodyPosition;
     } else if (slot.isBefore(nowUtc)) {
       bg = AppColors.punchClockOut.withValues(alpha: 0.20);
       body = '未';
@@ -522,7 +534,15 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
         height: 34,
         margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
         decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-        child: Center(child: Text(body, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+        child: Center(
+          child: Text(
+            body,
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+            softWrap: false,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ),
       ),
     );
   }

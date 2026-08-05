@@ -8,7 +8,7 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { currentDate } from "@/lib/datetime";
 import type { NapSessionRow, NapCheck, NapInterval } from "@/lib/types";
-import { NAP_BODY_POSITIONS } from "@/lib/types";
+import { NAP_BODY_POSITIONS, NAP_BODY_POSITIONS_SHORT } from "@/lib/types";
 
 // 午睡区間RPCの例外メッセージを日本語表示へ。
 function friendlyNapError(msg: string | undefined): string {
@@ -400,7 +400,8 @@ function ChildcareNapPageContent() {
                         <button
                           key={slot.toISOString()}
                           onClick={() => setEditing({ row, slot, existing: check })}
-                          className={`flex min-w-[56px] flex-col items-center rounded-lg px-2 py-1 text-xs ${
+                          title={check ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position) : undefined}
+                          className={`flex w-14 shrink-0 flex-col items-center overflow-hidden rounded-lg px-1 py-1 text-xs ${
                             check
                               ? "bg-emerald-50 text-emerald-700"
                               : pastMissing
@@ -409,8 +410,9 @@ function ChildcareNapPageContent() {
                           }`}
                         >
                           <span className="text-[10px] text-slate-400">{hm(slot)}</span>
-                          <span className="font-semibold">
-                            {check ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position) : pastMissing ? "未" : "—"}
+                          {/* セルは固定幅(w-14)。記録内容は短縮表記で格子を崩さない。正式名は title/編集シート/凡例で表示 */}
+                          <span className="truncate font-semibold">
+                            {check ? (NAP_BODY_POSITIONS_SHORT[check.body_position] ?? check.body_position) : pastMissing ? "未" : "—"}
                           </span>
                         </button>
                       );
