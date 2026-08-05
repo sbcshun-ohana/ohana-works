@@ -27,6 +27,8 @@ class FamilyReportListScreen extends StatefulWidget {
 class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
   late DateTime _businessDate = widget.businessDate;
   late Future<List<FamilyReportListItem>> _future;
+  // K8: 園側検温の最新値(childId→(temp,time))。188の fetch_child_latest_temperatures_for_office。
+  Map<String, ({double temperature, String measuredAt})> _latestTemps = const {};
 
   @override
   void initState() {
@@ -36,6 +38,18 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
 
   void _load() {
     _future = widget.service.fetchFamilyDailyReportsForOffice(widget.officeId, _businessDate);
+    widget.service
+        .fetchChildLatestTemperaturesForOffice(widget.officeId, _businessDate)
+        .then((m) {
+      if (mounted) setState(() => _latestTemps = m);
+    }).catchError((_) {
+      if (mounted) setState(() => _latestTemps = const {});
+    });
+  }
+
+  String _officeTempText(String childId) {
+    final t = _latestTemps[childId];
+    return t == null ? '—' : '${t.temperature}℃${t.measuredAt.length >= 5 ? '\n(${t.measuredAt.substring(0, 5)})' : ''}';
   }
 
   Future<void> _reload() async {
@@ -132,6 +146,7 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
     'sleep': 110.0,
     'meal': 220.0,
     'temp': 90.0,
+    'otemp': 96.0,
     'pickup': 120.0,
     'notes': 300.0,
   };
@@ -150,7 +165,8 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
         h('排便', _w['bowel']!),
         h('睡眠', _w['sleep']!),
         h('食事', _w['meal']!),
-        h('検温', _w['temp']!),
+        h('検温(家庭)', _w['temp']!),
+        h('検温(園・最新)', _w['otemp']!),
         h('迎え', _w['pickup']!),
         h('子どもの様子', _w['notes']!),
       ]),
@@ -178,6 +194,7 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
           c(_sleepText(r), _w['sleep']!),
           c(_mealText(r), _w['meal']!),
           c(_tempText(r), _w['temp']!),
+          c(_officeTempText(it.childId), _w['otemp']!),
           c(_pickupText(r), _w['pickup']!),
           c(r.homeNotes ?? '—', _w['notes']!),
         ],
