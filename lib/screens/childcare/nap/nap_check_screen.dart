@@ -6,7 +6,8 @@ import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 
-/// Phase 3 §3: 午睡チェック(iPad)。5分グリッドで身体の向き(4種)+呼吸/顔色/寝具の確認を記録。
+/// Phase 3 §3: 午睡チェック(iPad)。園児は常時一覧・操作は行内ボタン・時間軸は全園児共通。
+/// 5分グリッドで身体の向き(4種)+呼吸/顔色/寝具の確認を記録。
 /// 権限(§3.5)はRPC側で判定(当日30分以内=一般職員可・30分超/過去日=主任以上)。
 /// スロットは5分刻み(UTC整列=fetch_nap_missing_slots と同一の instant)で、表示はJST。
 class NapCheckScreen extends StatefulWidget {
@@ -27,10 +28,52 @@ class NapCheckScreen extends StatefulWidget {
   State<NapCheckScreen> createState() => _NapCheckScreenState();
 }
 
+/// 在籍名簿×午睡セッションのマージ行。セッションが無くても在籍児は行として表示する。
+class _RosterRow {
+  _RosterRow({
+    required this.childId,
+    required this.nameLabel,
+    required this.className,
+    required this.sessionId,
+    required this.intervals,
+    required this.checks,
+  });
+
+  final String childId;
+  final String nameLabel;
+  final String className;
+  final String? sessionId; // null=セッション未生成
+  final List<NapInterval> intervals; // sleep_start_at 昇順
+  final List<NapCheck> checks;
+
+  bool get notSlept => intervals.isEmpty;
+  bool get isSleeping => intervals.any((i) => i.wakeUpAt == null);
+  bool get isAllWoken => intervals.isNotEmpty && intervals.every((i) => i.wakeUpAt != null);
+  NapInterval? get openInterval {
+    NapInterval? open;
+    for (final i in intervals) {
+      if (i.wakeUpAt == null) open = i; // 昇順なので最後の未起床が最新
+    }
+    return open;
+  }
+
+  NapCheck? checkAt(DateTime slot) {
+    for (final c in checks) {
+      if (c.slotAt.isAtSameMomentAs(slot)) return c;
+    }
+    return null;
+  }
+}
+
 class _NapCheckScreenState extends State<NapCheckScreen> {
   List<ChildcareClass> _classes = const [];
   String? _selectedClassId;
-  Future<List<NapSessionRow>>? _future;
+  bool _loading = true;
+  List<NapSessionRow> _board = const [];
+  List<({String childId, String nameLabel, String className})> _roster = const [];
+
+  static const double _nameColWidth = 176;
+  static const double _cellWidth = 46;
 
   @override
   void initState() {
@@ -44,45 +87,81 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     if (mounted) setState(() => _classes = c);
   }
 
-  void _reload() {
-    _future = widget.service.fetchNapBoard(widget.officeId, widget.businessDate, classId: _selectedClassId);
+  Future<void> _reload() async {
+    setState(() => _loading = true);
+    try {
+      final board = await widget.service.fetchNapBoard(widget.officeId, widget.businessDate, classId: _selectedClassId);
+      final List<({String childId, String nameLabel, String className})> roster;
+      if (_selectedClassId != null) {
+        final className = _classes.firstWhere(
+          (c) => c.classId == _selectedClassId,
+          orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0),
+        ).className;
+        final children = await widget.service.fetchClassChildren(_selectedClassId!, widget.businessDate);
+        roster = children
+            .map((c) => (childId: c.childId, nameLabel: '${c.displayName}${c.honorificSuffix ?? ''}', className: className))
+            .toList();
+      } else {
+        final children = await widget.service.fetchChildrenForOffice(widget.officeId);
+        roster = children
+            .map((c) => (childId: c.childId, nameLabel: '${c.displayName}${c.honorificSuffix ?? ''}', className: c.className ?? ''))
+            .toList();
+      }
+      if (mounted) {
+        setState(() {
+          _board = board;
+          _roster = roster;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loading = false);
+        _snack('午睡情報の取得に失敗しました');
+      }
+    }
   }
 
-  Future<void> _refresh() async {
-    setState(_reload);
-    await _future;
+  // 名簿×セッションのマージ。区間は sleep_start_at 昇順。名簿に無いがセッションを持つ児は末尾に補完。
+  List<_RosterRow> _displayRows() {
+    final byChild = {for (final r in _board) r.childId: r};
+    List<NapInterval> sortIv(List<NapInterval> ivs) {
+      final list = [...ivs]..sort((a, b) => a.sleepStartAt.compareTo(b.sleepStartAt));
+      return list;
+    }
+
+    final rows = <_RosterRow>[];
+    for (final c in _roster) {
+      final b = byChild[c.childId];
+      rows.add(_RosterRow(
+        childId: c.childId,
+        nameLabel: c.nameLabel,
+        className: c.className,
+        sessionId: b?.sessionId,
+        intervals: b != null ? sortIv(b.intervals) : const [],
+        checks: b?.checks ?? const [],
+      ));
+    }
+    final rosterIds = {for (final c in _roster) c.childId};
+    for (final b in _board) {
+      if (!rosterIds.contains(b.childId)) {
+        rows.add(_RosterRow(
+          childId: b.childId,
+          nameLabel: b.nameLabel,
+          className: b.className,
+          sessionId: b.sessionId,
+          intervals: sortIv(b.intervals),
+          checks: b.checks,
+        ));
+      }
+    }
+    return rows;
   }
 
   // 5分床(UTC整列)。
   static DateTime _floor5(DateTime t) {
     final u = t.toUtc();
     return DateTime.utc(u.year, u.month, u.day, u.hour, u.minute - (u.minute % 5));
-  }
-
-  // 各睡眠区間 [入眠, min(起床, now)] の5分スロットを連結(覚醒中の隙間は含めない・切り上げ初回)。
-  List<DateTime> _slotsFor(NapSessionRow s) {
-    final now = DateTime.now().toUtc();
-    final slots = <DateTime>[];
-    // 区間が無い(旧データ等)は overall にフォールバック。
-    final ranges = s.intervals.isNotEmpty
-        ? s.intervals.map((i) => (i.sleepStartAt, i.wakeUpAt)).toList()
-        : (s.sleepStartAt != null ? [(s.sleepStartAt!, s.wakeUpAt)] : const <(DateTime, DateTime?)>[]);
-    for (final (start, wake) in ranges) {
-      var first = _floor5(start);
-      if (first.isBefore(start.toUtc())) first = first.add(const Duration(minutes: 5));
-      final upper = wake != null && wake.toUtc().isBefore(now) ? wake.toUtc() : now;
-      for (var t = first; !t.isAfter(upper); t = t.add(const Duration(minutes: 5))) {
-        slots.add(t);
-      }
-    }
-    return slots;
-  }
-
-  // 再入眠(起床済みの子に新しい区間を追加)。
-  Future<void> _reSleep(NapSessionRow s) async {
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-    if (t == null) return;
-    await _guard(() => widget.service.startNapSession(s.childId, _combine(t)));
   }
 
   DateTime _combine(TimeOfDay t) => DateTime(
@@ -93,6 +172,85 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
         t.minute,
       );
 
+  // ピッカー確定値の検証: 未来不可(+2分の猶予)、after 指定時はそれ以降のみ。無効は null を返しスナック表示。
+  DateTime? _validated(TimeOfDay t, {DateTime? after, String afterLabel = '入眠'}) {
+    final dt = _combine(t);
+    final now = DateTime.now();
+    if (dt.isAfter(now.add(const Duration(minutes: 2)))) {
+      _snack('未来の時刻は指定できません');
+      return null;
+    }
+    if (after != null && !dt.isAfter(after)) {
+      _snack('$afterLabelより後の時刻を指定してください');
+      return null;
+    }
+    return dt;
+  }
+
+  // 全園児共通の時間軸(最早入眠を5分床にした時刻 〜 max(最遅起床, 現在))。区間が皆無なら空。
+  List<DateTime> _globalSlots(List<_RosterRow> rows) {
+    final nowUtc = DateTime.now().toUtc();
+    DateTime? minStart;
+    var maxEnd = nowUtc;
+    for (final r in rows) {
+      for (final iv in r.intervals) {
+        final s = iv.sleepStartAt.toUtc();
+        if (minStart == null || s.isBefore(minStart)) minStart = s;
+        final e = iv.wakeUpAt?.toUtc() ?? nowUtc;
+        if (e.isAfter(maxEnd)) maxEnd = e;
+      }
+    }
+    if (minStart == null) return const [];
+    final slots = <DateTime>[];
+    for (var t = _floor5(minStart); !t.isAfter(maxEnd); t = t.add(const Duration(minutes: 5))) {
+      slots.add(t);
+    }
+    return slots;
+  }
+
+  // 指定スロットが当該区間の記録対象範囲 [切上げ入眠, min(起床,現在)] 内か。
+  bool _slotInInterval(NapInterval iv, DateTime slotUtc, DateTime nowUtc) {
+    var first = _floor5(iv.sleepStartAt);
+    if (first.isBefore(iv.sleepStartAt.toUtc())) first = first.add(const Duration(minutes: 5));
+    final upper = (iv.wakeUpAt != null && iv.wakeUpAt!.toUtc().isBefore(nowUtc)) ? iv.wakeUpAt!.toUtc() : nowUtc;
+    return !slotUtc.isBefore(first) && !slotUtc.isAfter(upper);
+  }
+
+  // ---- 行内操作 ----------------------------------------------------------
+
+  Future<void> _sleep(_RosterRow r) async {
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null) return;
+    final dt = _validated(t);
+    if (dt == null) return;
+    await _guard(() => widget.service.startNapSession(r.childId, dt));
+  }
+
+  Future<void> _wake(_RosterRow r) async {
+    final open = r.openInterval;
+    if (open == null || r.sessionId == null) return;
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null) return;
+    final dt = _validated(t, after: open.sleepStartAt, afterLabel: '入眠');
+    if (dt == null) return;
+    await _guard(() => widget.service.endNapSession(r.sessionId!, dt));
+  }
+
+  Future<void> _reSleep(_RosterRow r) async {
+    final lastWake = r.intervals.isNotEmpty ? r.intervals.last.wakeUpAt : null;
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null) return;
+    final dt = _validated(t, after: lastWake, afterLabel: '前回起床');
+    if (dt == null) return;
+    await _guard(() => widget.service.startNapSession(r.childId, dt));
+  }
+
+  // ---- 一括操作(K3: 対象+件数を明示。0件は理由まで) --------------------
+
+  String get _selectedClassName =>
+      _classes.firstWhere((c) => c.classId == _selectedClassId, orElse: () => const ChildcareClass(classId: '', className: 'クラス', ageGroup: '', schoolYear: 0)).className;
+
+  // 入眠(一括)= 未入眠(区間なし)の在籍児のみ入眠。就寝中/起床済みには追加しない(二重就寝中を防止)。
   Future<void> _classBulkStart() async {
     if (_selectedClassId == null) {
       _snack('クラスを選択してください');
@@ -100,20 +258,34 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     }
     final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
     if (t == null) return;
-    await _guard(() => widget.service.startNapSessionsForClass(_selectedClassId!, _combine(t)));
+    final dt = _validated(t);
+    if (dt == null) return;
+    final targets = _displayRows().where((r) => r.notSlept).toList();
+    if (targets.isEmpty) {
+      _snack('入眠の対象がありません(全員すでに入眠/起床済みです)');
+      return;
+    }
+    await _guard(() async {
+      for (final r in targets) {
+        await widget.service.startNapSession(r.childId, dt);
+      }
+      _snack('$_selectedClassName ${targets.length}名を入眠にしました');
+    });
   }
 
+  // 起床(一括)= 就寝中の児の開区間を現在時刻でまとめて閉じる(RPCが未起床区間のみ対象)。
   Future<void> _classBulkEnd() async {
     if (_selectedClassId == null) {
       _snack('クラスを選択してください');
       return;
     }
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-    if (t == null) return;
-    await _guard(() => widget.service.endNapSessionsForClass(_selectedClassId!, widget.businessDate, _combine(t)));
+    await _guard(() async {
+      final n = await widget.service.endNapSessionsForClass(_selectedClassId!, widget.businessDate, DateTime.now());
+      _snack(n > 0 ? '$_selectedClassName $n名を起床にしました' : '起床の対象がありません(就寝中の園児がいません)');
+    });
   }
 
-  // 現在スロットをクラス一括で「変化なし」複製。
+  // 変化なし一括: 現在スロットを5分前から複製(5分前に記録あり&当該スロット未記入のみ)。
   Future<void> _classBulkCopy() async {
     if (_selectedClassId == null) {
       _snack('クラスを選択してください');
@@ -122,66 +294,33 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     final slot = _floor5(DateTime.now());
     await _guard(() async {
       final n = await widget.service.copyPreviousNapChecksForClass(_selectedClassId!, widget.businessDate, slot);
-      _snack('$n 件を複製しました');
+      _snack(n > 0
+          ? '$_selectedClassName $n件を「5分前と同じ」で登録しました'
+          : '複製対象がありません(5分前の記録が無いか、すべて記録済みです)');
     });
   }
 
-  Future<void> _addChild() async {
-    if (_selectedClassId == null) {
-      _snack('クラスを選択してください');
-      return;
-    }
-    final children = await widget.service.fetchClassChildren(_selectedClassId!, widget.businessDate);
-    if (!mounted) return;
-    final picked = await showModalBottomSheet<ClassChild>(
-      context: context,
-      builder: (_) => ListView(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('入眠する園児を選択', style: TextStyle(fontWeight: FontWeight.w800)),
-          ),
-          for (final c in children)
-            ListTile(
-              title: Text('${c.displayName}${c.honorificSuffix ?? ''}'),
-              onTap: () => Navigator.of(context).pop(c),
-            ),
-        ],
-      ),
-    );
-    if (picked == null || !mounted) return;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-    if (t == null) return;
-    await _guard(() => widget.service.startNapSession(picked.childId, _combine(t)));
-  }
-
-  Future<void> _endSession(NapSessionRow s) async {
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-    if (t == null) return;
-    await _guard(() => widget.service.endNapSession(s.sessionId, _combine(t)));
-  }
-
-  Future<void> _openCell(NapSessionRow s, DateTime slot) async {
-    final existing = s.checkAt(slot);
+  Future<void> _openCell(String sessionId, DateTime slot, _RosterRow r) async {
+    final existing = r.checkAt(slot);
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _NapCheckSheet(
         service: widget.service,
-        sessionId: s.sessionId,
-        childName: s.nameLabel,
+        sessionId: sessionId,
+        childName: r.nameLabel,
         slotAt: slot,
         existing: existing,
-        hasPrev: s.checkAt(slot.subtract(const Duration(minutes: 5))) != null,
+        hasPrev: r.checkAt(slot.subtract(const Duration(minutes: 5))) != null,
       ),
     );
-    if (saved == true) await _refresh();
+    if (saved == true) await _reload();
   }
 
   Future<void> _guard(Future<void> Function() op) async {
     try {
       await op();
-      await _refresh();
+      await _reload();
     } catch (_) {
       _snack('操作に失敗しました(権限をご確認ください: 30分超・過去日は主任以上)');
     }
@@ -193,195 +332,196 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rows = _displayRows();
+    final slots = _globalSlots(rows);
+    final nowUtc = DateTime.now().toUtc();
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
-        leadingWidth: 180,
-        title: const Text('午睡チェック'),
+        leadingWidth: 148,
+        titleSpacing: 0,
+        toolbarHeight: 48,
+        title: const Text('午睡チェック', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: DropdownButtonFormField<String?>(
-              initialValue: _selectedClassId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'クラス', isDense: true, border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('全クラス')),
-                for (final c in _classes) DropdownMenuItem<String?>(value: c.classId, child: Text(c.className)),
-              ],
-              onChanged: (v) => setState(() {
-                _selectedClassId = v;
-                _reload();
-              }),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
               children: [
-                FilledButton.tonalIcon(
-                    onPressed: _classBulkStart, icon: const Icon(Icons.bedtime_rounded, size: 18), label: const Text('入眠(一括)')),
-                FilledButton.tonalIcon(
-                    onPressed: _classBulkEnd, icon: const Icon(Icons.wb_sunny_rounded, size: 18), label: const Text('起床(一括)')),
-                OutlinedButton.icon(
-                    onPressed: _classBulkCopy, icon: const Icon(Icons.copy_all_rounded, size: 18), label: const Text('変化なし一括')),
-                OutlinedButton.icon(
-                    onPressed: _addChild, icon: const Icon(Icons.person_add_alt_rounded, size: 18), label: const Text('園児を追加')),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _selectedClassId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'クラス', isDense: true, border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('全クラス')),
+                      for (final c in _classes) DropdownMenuItem<String?>(value: c.classId, child: Text(c.className)),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _selectedClassId = v);
+                      _reload();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      FilledButton.tonalIcon(
+                          onPressed: _classBulkStart, icon: const Icon(Icons.bedtime_rounded, size: 16), label: const Text('入眠(一括)')),
+                      FilledButton.tonalIcon(
+                          onPressed: _classBulkEnd, icon: const Icon(Icons.wb_sunny_rounded, size: 16), label: const Text('起床(一括)')),
+                      OutlinedButton.icon(
+                          onPressed: _classBulkCopy, icon: const Icon(Icons.copy_all_rounded, size: 16), label: const Text('変化なし一括')),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: FutureBuilder<List<NapSessionRow>>(
-                future: _future,
-                builder: (context, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final rows = snap.data ?? const <NapSessionRow>[];
-                  if (rows.isEmpty) {
-                    return ListView(physics: const AlwaysScrollableScrollPhysics(), children: const [
-                      SizedBox(height: 120),
-                      Center(child: Text('午睡セッションがありません(入眠で開始)')),
-                    ]);
-                  }
-                  return ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(12),
-                    itemCount: rows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) => _SessionCard(
-                      row: rows[i],
-                      slots: _slotsFor(rows[i]),
-                      onCellTap: (slot) => _openCell(rows[i], slot),
-                      onEnd: rows[i].wakeUpAt == null ? () => _endSession(rows[i]) : null,
-                      onReSleep: rows[i].isAllWoken ? () => _reSleep(rows[i]) : null,
-                    ),
-                  );
-                },
-              ),
-            ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : rows.isEmpty
+                    ? const Center(child: Text('対象の園児がいません'))
+                    : RefreshIndicator(
+                        onRefresh: _reload,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _headerRow(slots),
+                                for (final r in rows) _childRow(r, slots, nowUtc),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
-}
 
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.row, required this.slots, required this.onCellTap, this.onEnd, this.onReSleep});
-
-  final NapSessionRow row;
-  final List<DateTime> slots;
-  final void Function(DateTime slot) onCellTap;
-  final VoidCallback? onEnd;
-  final VoidCallback? onReSleep;
-
-  String _hm(DateTime t) {
-    final l = t.toLocal();
-    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
-  }
-
-  // 区間ラベル(複数回午睡): 「入眠HH:MM-起床HH:MM / 入眠HH:MM-…」
-  String _intervalsLabel() {
-    if (row.intervals.isEmpty) {
-      return '${row.sleepStartAt != null ? '  入眠 ${_hm(row.sleepStartAt!)}' : ''}'
-          '${row.wakeUpAt != null ? '  起床 ${_hm(row.wakeUpAt!)}' : ''}';
-    }
-    final parts = row.intervals
-        .map((i) => '${_hm(i.sleepStartAt)}-${i.wakeUpAt != null ? _hm(i.wakeUpAt!) : '就寝中'}')
-        .join(' / ');
-    return '  $parts';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now().toUtc();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${row.nameLabel}  ${row.className}${_intervalsLabel()}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                if (onReSleep != null)
-                  TextButton(onPressed: onReSleep, child: const Text('再入眠')),
-                if (onEnd != null)
-                  TextButton(onPressed: onEnd, child: const Text('起床')),
-              ],
+  Widget _headerRow(List<DateTime> slots) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+      child: Row(
+        children: [
+          const SizedBox(width: _nameColWidth, child: Text('園児 / 区間', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+          for (final s in slots)
+            SizedBox(
+              width: _cellWidth,
+              child: Center(child: Text(_hm(s), style: const TextStyle(fontSize: 10, color: AppColors.textSecondary))),
             ),
-            const SizedBox(height: 6),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final slot in slots)
-                    _SlotCell(
-                      timeLabel: _hm(slot),
-                      check: row.checkAt(slot),
-                      isPastMissing: row.checkAt(slot) == null && slot.isBefore(now),
-                      onTap: () => onCellTap(slot),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
-}
 
-class _SlotCell extends StatelessWidget {
-  const _SlotCell({required this.timeLabel, required this.check, required this.isPastMissing, required this.onTap});
+  Widget _childRow(_RosterRow r, List<DateTime> slots, DateTime nowUtc) {
+    return Container(
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0x11000000)))),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: _nameColWidth, child: _nameCell(r)),
+          for (final slot in slots) _cell(r, slot, nowUtc),
+        ],
+      ),
+    );
+  }
 
-  final String timeLabel;
-  final NapCheck? check;
-  final bool isPastMissing;
-  final VoidCallback onTap;
+  Widget _nameCell(_RosterRow r) {
+    // 名前横の区間表示「10:05-10:19 / 10:19-就寝中」(就寝中は最大1つ)。
+    final label = r.intervals.isEmpty
+        ? '未入眠'
+        : r.intervals.map((i) => '${_hm(i.sleepStartAt)}-${i.wakeUpAt != null ? _hm(i.wakeUpAt!) : '就寝中'}').join(' / ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(r.nameLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 2),
+        Wrap(
+          spacing: 4,
+          children: [
+            if (r.notSlept)
+              _rowBtn('入眠', AppColors.leafGreen, () => _sleep(r)),
+            if (r.isSleeping)
+              _rowBtn('起床', AppColors.punchClockOut, () => _wake(r)),
+            if (r.isAllWoken)
+              _rowBtn('再入眠', AppColors.leafGreen, () => _reSleep(r)),
+          ],
+        ),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _rowBtn(String label, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.6)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+      ),
+    );
+  }
+
+  // 共通軸のセル: 区間内=記録セル(緑/未/—・タップ可)、区間外=薄グレー(タップ不可)。
+  Widget _cell(_RosterRow r, DateTime slot, DateTime nowUtc) {
+    final inInterval = r.intervals.any((iv) => _slotInInterval(iv, slot, nowUtc));
+    if (!inInterval) {
+      return Container(
+        width: _cellWidth,
+        height: 34,
+        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
+        decoration: BoxDecoration(color: AppColors.textSecondary.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(6)),
+      );
+    }
+    final check = r.checkAt(slot);
     final Color bg;
     final String body;
     if (check != null) {
       bg = AppColors.leafGreen.withValues(alpha: 0.22);
-      body = napBodyPositions[check!.bodyPosition] ?? check!.bodyPosition;
-    } else if (isPastMissing) {
-      bg = AppColors.punchClockOut.withValues(alpha: 0.20); // 未チェック警告
+      body = napBodyPositions[check.bodyPosition] ?? check.bodyPosition;
+    } else if (slot.isBefore(nowUtc)) {
+      bg = AppColors.punchClockOut.withValues(alpha: 0.20);
       body = '未';
     } else {
       bg = AppColors.textSecondary.withValues(alpha: 0.08);
       body = '—';
     }
     return GestureDetector(
-      onTap: onTap,
+      onTap: r.sessionId != null ? () => _openCell(r.sessionId!, slot, r) : null,
       child: Container(
-        width: 56,
-        margin: const EdgeInsets.only(right: 6),
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-        child: Column(
-          children: [
-            Text(timeLabel, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-            const SizedBox(height: 2),
-            Text(body, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-          ],
-        ),
+        width: _cellWidth,
+        height: 34,
+        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+        child: Center(child: Text(body, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
       ),
     );
+  }
+
+  String _hm(DateTime t) {
+    final l = t.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
   }
 }
 

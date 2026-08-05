@@ -586,12 +586,13 @@ class ChildcareService {
     });
   }
 
-  Future<void> endNapSessionsForClass(String classId, DateTime date, DateTime wakeUpAt) async {
-    await _client.rpc('end_nap_sessions_for_class', params: {
+  Future<int> endNapSessionsForClass(String classId, DateTime date, DateTime wakeUpAt) async {
+    final r = await _client.rpc('end_nap_sessions_for_class', params: {
       'p_class_id': classId,
       'p_session_date': dateOnly(date),
       'p_wake_up_at': wakeUpAt.toUtc().toIso8601String(),
     });
+    return (r as int?) ?? 0;
   }
 
   Future<void> recordNapCheck(
