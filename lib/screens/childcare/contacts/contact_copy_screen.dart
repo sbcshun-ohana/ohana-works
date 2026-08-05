@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 
 /// §13 承認済み文章のコピー(コドモン運用)。承認済みの連絡帳のみコピー可能。
@@ -25,6 +26,7 @@ class ContactCopyScreen extends StatefulWidget {
 }
 
 class _ContactCopyScreenState extends State<ContactCopyScreen> {
+  late DateTime _businessDate = widget.businessDate;
   late Future<List<DailyContact>> _contactsFuture;
   String? _copiedChildId;
 
@@ -36,13 +38,20 @@ class _ContactCopyScreenState extends State<ContactCopyScreen> {
 
   void _load() {
     _contactsFuture = widget.service
-        .fetchDailyContactsForOffice(widget.officeId, widget.businessDate)
+        .fetchDailyContactsForOffice(widget.officeId, _businessDate)
         .then((rows) => rows.where((r) => r.status == 'approved').toList());
   }
 
   Future<void> _reload() async {
     setState(_load);
     await _contactsFuture;
+  }
+
+  void _onDateChanged(DateTime d) {
+    setState(() {
+      _businessDate = d;
+      _load();
+    });
   }
 
   Future<void> _copy(DailyContact contact) async {
@@ -61,6 +70,7 @@ class _ContactCopyScreenState extends State<ContactCopyScreen> {
         leadingWidth: 148,
         toolbarHeight: 48,
         title: const Text('承認済み連絡帳のコピー'),
+        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: RefreshIndicator(
         onRefresh: _reload,

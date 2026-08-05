@@ -28,7 +28,7 @@ class ChildcareHomeScreen extends StatefulWidget {
 class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   late Future<List<ChildcareOffice>> _officesFuture;
   ChildcareOffice? _selectedOffice;
-  DateTime _businessDate = DateTime.now();
+  final DateTime _businessDate = DateTime.now();
   bool _internalNotesEnabled = false;
 
   @override
@@ -42,16 +42,6 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
     if (office == null) return;
     final enabled = await widget.service.isChildInternalNotesEnabledForOffice(office.officeId);
     if (mounted) setState(() => _internalNotesEnabled = enabled);
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _businessDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
-    );
-    if (picked != null) setState(() => _businessDate = picked);
   }
 
   Future<void> _signOut() async {
@@ -225,44 +215,32 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   }
 
   Widget _selectorCard(List<ChildcareOffice> offices) {
+    // 対象日はホームから撤去(各機能画面のヘッダーで選択)。ここは施設選択のみを小さくまとめる。
     return Card(
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           children: [
+            const Icon(Icons.apartment_rounded, size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 8),
+            const Text('施設', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('施設', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  DropdownButton<ChildcareOffice>(
-                    isExpanded: true,
-                    value: _selectedOffice,
-                    items: offices
-                        .map((office) => DropdownMenuItem(value: office, child: Text(office.officeName)))
-                        .toList(),
-                    onChanged: (office) {
-                      if (office == null) return;
-                      setState(() => _selectedOffice = office);
-                      _loadInternalNotesFlag();
-                    },
-                  ),
-                ],
+              child: DropdownButton<ChildcareOffice>(
+                isExpanded: true,
+                isDense: true,
+                underline: const SizedBox.shrink(),
+                value: _selectedOffice,
+                items: offices
+                    .map((office) => DropdownMenuItem(value: office, child: Text(office.officeName)))
+                    .toList(),
+                onChanged: (office) {
+                  if (office == null) return;
+                  setState(() => _selectedOffice = office);
+                  _loadInternalNotesFlag();
+                },
               ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('対象日', style: TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.calendar_today_rounded),
-                  label: Text('${_businessDate.year}/${_businessDate.month}/${_businessDate.day}'),
-                ),
-              ],
             ),
           ],
         ),

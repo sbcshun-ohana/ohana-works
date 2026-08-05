@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import 'class_activity_detail_screen.dart';
 
@@ -26,6 +27,7 @@ class ClassActivityListScreen extends StatefulWidget {
 }
 
 class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
+  late DateTime _businessDate = widget.businessDate;
   late Future<List<ClassActivity>> _activitiesFuture;
 
   @override
@@ -36,12 +38,19 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
 
   void _load() {
     _activitiesFuture =
-        widget.service.fetchClassActivitiesForOffice(widget.officeId, widget.businessDate);
+        widget.service.fetchClassActivitiesForOffice(widget.officeId, _businessDate);
   }
 
   Future<void> _reload() async {
     setState(_load);
     await _activitiesFuture;
+  }
+
+  void _onDateChanged(DateTime d) {
+    setState(() {
+      _businessDate = d;
+      _load();
+    });
   }
 
   @override
@@ -52,6 +61,7 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
         leadingWidth: 148,
         toolbarHeight: 48,
         title: const Text('クラス活動'),
+        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: RefreshIndicator(
         onRefresh: _reload,
@@ -92,7 +102,7 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
                             officeId: widget.officeId,
                             classId: activity.classId,
                             className: activity.className,
-                            businessDate: widget.businessDate,
+                            businessDate: _businessDate,
                             isManager: widget.isManager,
                           ),
                         ),

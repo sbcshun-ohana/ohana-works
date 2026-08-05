@@ -6,6 +6,7 @@ import '../../../models/guardian_app.dart';
 import '../../../models/nap.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
 
@@ -29,6 +30,7 @@ class DailyBoardScreen extends StatefulWidget {
 }
 
 class _DailyBoardScreenState extends State<DailyBoardScreen> {
+  late DateTime _businessDate = widget.businessDate;
   late Future<List<DailyBoardRow>> _rowsFuture;
   RealtimeChannel? _channel;
 
@@ -63,7 +65,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   void _load() {
-    _rowsFuture = widget.service.fetchDailyBoardForOffice(widget.officeId, widget.businessDate).then((rows) {
+    _rowsFuture = widget.service.fetchDailyBoardForOffice(widget.officeId, _businessDate).then((rows) {
       _allRows = rows; // 一括操作の対象抽出用に保持
       return rows;
     });
@@ -81,9 +83,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
 
   // 対象日 + 時刻(JST壁時計)を UTC 実時刻へ変換(端末TZ非依存)。
   DateTime _businessDateAt(int hour, int minute) => DateTime.utc(
-        widget.businessDate.year,
-        widget.businessDate.month,
-        widget.businessDate.day,
+        _businessDate.year,
+        _businessDate.month,
+        _businessDate.day,
         hour,
         minute,
       ).subtract(const Duration(hours: 9));
@@ -123,14 +125,14 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   Future<void> _loadSummary() async {
     final summary = await widget.service.fetchDailyBoardSummary(
       widget.officeId,
-      widget.businessDate,
+      _businessDate,
       classId: _selectedClassId,
     );
     if (mounted) setState(() => _summary = summary);
   }
 
   Future<void> _loadWeather() async {
-    final weather = await widget.service.fetchDailyWeather(widget.officeId, widget.businessDate);
+    final weather = await widget.service.fetchDailyWeather(widget.officeId, _businessDate);
     if (mounted) {
       setState(() {
         _weather = weather;
@@ -142,7 +144,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // §3.4: 午睡チェックの記入漏れ警告バナー用。
   Future<void> _loadNapMissing() async {
     try {
-      final missing = await widget.service.fetchNapMissingSlots(widget.officeId, widget.businessDate);
+      final missing = await widget.service.fetchNapMissingSlots(widget.officeId, _businessDate);
       if (mounted) setState(() => _napMissing = missing);
     } catch (_) {
       // 取得失敗時はバナー非表示(安全側)。
@@ -165,7 +167,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         childId: row.childId,
         childName: row.nameLabel,
         eventType: eventType,
-        businessDate: widget.businessDate,
+        businessDate: _businessDate,
       ),
     );
     if (result == true && mounted) {
@@ -181,7 +183,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       builder: (_) => _WeatherEditSheet(
         service: widget.service,
         officeId: widget.officeId,
-        businessDate: widget.businessDate,
+        businessDate: _businessDate,
         initial: _weather,
       ),
     );
@@ -193,6 +195,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadSummary();
   }
 
+  void _onDateChanged(DateTime d) {
+    setState(() {
+      _businessDate = d;
+      _load();
+    });
+    _loadSummary();
+    _loadWeather();
+    _loadNapMissing();
+  }
+
   void _openChildDetail(DailyBoardRow row) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -201,7 +213,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           childId: row.childId,
           childName: row.nameLabel,
           officeId: widget.officeId,
-          businessDate: widget.businessDate,
+          businessDate: _businessDate,
         ),
       ),
     );
@@ -216,6 +228,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         toolbarHeight: 48,
         titleSpacing: 0,
         title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: Column(
         children: [

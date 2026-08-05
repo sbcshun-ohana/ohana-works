@@ -4,6 +4,7 @@ import '../../../models/childcare.dart';
 import '../../../models/nap.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 
 /// Phase 3 §3: 午睡チェック(iPad)。園児は常時一覧・操作は行内ボタン・時間軸は全園児共通。
@@ -66,6 +67,7 @@ class _RosterRow {
 }
 
 class _NapCheckScreenState extends State<NapCheckScreen> {
+  late DateTime _businessDate = widget.businessDate;
   List<ChildcareClass> _classes = const [];
   String? _selectedClassId;
   bool _loading = true;
@@ -87,17 +89,22 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     if (mounted) setState(() => _classes = c);
   }
 
+  void _onDateChanged(DateTime d) {
+    setState(() => _businessDate = d);
+    _reload();
+  }
+
   Future<void> _reload() async {
     setState(() => _loading = true);
     try {
-      final board = await widget.service.fetchNapBoard(widget.officeId, widget.businessDate, classId: _selectedClassId);
+      final board = await widget.service.fetchNapBoard(widget.officeId, _businessDate, classId: _selectedClassId);
       final List<({String childId, String nameLabel, String className})> roster;
       if (_selectedClassId != null) {
         final className = _classes.firstWhere(
           (c) => c.classId == _selectedClassId,
           orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0),
         ).className;
-        final children = await widget.service.fetchClassChildren(_selectedClassId!, widget.businessDate);
+        final children = await widget.service.fetchClassChildren(_selectedClassId!, _businessDate);
         roster = children
             .map((c) => (childId: c.childId, nameLabel: '${c.displayName}${c.honorificSuffix ?? ''}', className: className))
             .toList();
@@ -165,9 +172,9 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
   }
 
   DateTime _combine(TimeOfDay t) => DateTime(
-        widget.businessDate.year,
-        widget.businessDate.month,
-        widget.businessDate.day,
+        _businessDate.year,
+        _businessDate.month,
+        _businessDate.day,
         t.hour,
         t.minute,
       );
@@ -280,7 +287,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
       return;
     }
     await _guard(() async {
-      final n = await widget.service.endNapSessionsForClass(_selectedClassId!, widget.businessDate, DateTime.now());
+      final n = await widget.service.endNapSessionsForClass(_selectedClassId!, _businessDate, DateTime.now());
       _snack(n > 0 ? '$_selectedClassName $n名を起床にしました' : '起床の対象がありません(就寝中の園児がいません)');
     });
   }
@@ -293,7 +300,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     }
     final slot = _floor5(DateTime.now());
     await _guard(() async {
-      final n = await widget.service.copyPreviousNapChecksForClass(_selectedClassId!, widget.businessDate, slot);
+      final n = await widget.service.copyPreviousNapChecksForClass(_selectedClassId!, _businessDate, slot);
       _snack(n > 0
           ? '$_selectedClassName $n件を「5分前と同じ」で登録しました'
           : '複製対象がありません(5分前の記録が無いか、すべて記録済みです)');
@@ -342,6 +349,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
         titleSpacing: 0,
         toolbarHeight: 48,
         title: const Text('午睡チェック', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: Column(
         children: [
