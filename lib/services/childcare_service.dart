@@ -629,6 +629,132 @@ class ChildcareService {
     return (r as int?) ?? 0;
   }
 
+  // ------------------------------------------------------------------
+  // 出欠状況/登降園実績/週次標準/園側検温 (migration 184〜188)
+  // ------------------------------------------------------------------
+
+  /// 出欠モーダルの保存(185)。種別/当日予定override/メモ。is_absentはRPC側で種別から同期。
+  Future<void> setChildAttendanceStatus(
+    String childId,
+    DateTime businessDate,
+    String? attendanceKind, {
+    String? scheduledStart, // 'HH:MM'
+    String? scheduledEnd,
+    String? scheduledSlot,
+    String? attendanceNote,
+  }) async {
+    await _client.rpc('set_child_attendance_status', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_attendance_kind': attendanceKind,
+      'p_scheduled_start': scheduledStart,
+      'p_scheduled_end': scheduledEnd,
+      'p_scheduled_slot': scheduledSlot,
+      'p_attendance_note': attendanceNote,
+    });
+  }
+
+  /// 登降園実績の手動修正(187)。全置換=現在値を全4値プリフィルして渡すこと。NULL=クリア。
+  Future<void> setChildAttendanceActuals(
+    String childId,
+    DateTime businessDate, {
+    String? inAt, // 'HH:MM'
+    String? outAt,
+    String? returnAt,
+    String? departAt,
+  }) async {
+    await _client.rpc('set_child_attendance_actuals', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_in': inAt,
+      'p_out': outAt,
+      'p_return': returnAt,
+      'p_depart': departAt,
+    });
+  }
+
+  /// 園側検温の記録(188・upsert)。measuredAt='HH:MM'。
+  Future<void> recordChildTemperature(
+    String childId,
+    DateTime businessDate,
+    String measuredAt,
+    double temperature,
+  ) async {
+    await _client.rpc('record_child_temperature', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_measured_at': measuredAt,
+      'p_temperature': temperature,
+    });
+  }
+
+  Future<void> deleteChildTemperature(String childId, DateTime businessDate, String measuredAt) async {
+    await _client.rpc('delete_child_temperature', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_measured_at': measuredAt,
+    });
+  }
+
+  /// 検温一覧(188)。園児×記録時刻の行。
+  Future<List<ChildTemperatureRecord>> fetchChildTemperaturesForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_child_temperatures_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    return (rows as List).map((r) => ChildTemperatureRecord.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// K8用: 園児ごとの園側検温の最新値(188)。childId→(temp, time)。
+  Future<Map<String, ({double temperature, String measuredAt})>> fetchChildLatestTemperaturesForOffice(
+      String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_child_latest_temperatures_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    final map = <String, ({double temperature, String measuredAt})>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      map[m['child_id'] as String] = (
+        temperature: double.parse(m['latest_temperature'].toString()),
+        measuredAt: (m['latest_measured_at'] as String?) ?? '',
+      );
+    }
+    return map;
+  }
+
+  /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
+  Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
+    final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});
+    final map = <int, ({String? start, String? end})>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      map[m['weekday'] as int] = (
+        start: m['scheduled_start_at'] as String?,
+        end: m['scheduled_end_at'] as String?,
+      );
+    }
+    return map;
+  }
+
+  /// 週次標準の設定(184・主任以上)。weekday=1:月..7:日、時刻='HH:MM'。
+  Future<void> setChildWeeklySchedule(String childId, int weekday, String start, String end) async {
+    await _client.rpc('set_child_weekly_schedule', params: {
+      'p_child_id': childId,
+      'p_weekday': weekday,
+      'p_start': start,
+      'p_end': end,
+    });
+  }
+
+  /// 週次標準の削除(184・主任以上)=その曜日は通わない。
+  Future<void> deleteChildWeeklySchedule(String childId, int weekday) async {
+    await _client.rpc('delete_child_weekly_schedule', params: {
+      'p_child_id': childId,
+      'p_weekday': weekday,
+    });
+  }
+
   /// 家庭連絡帳(保護者記入)の職員側閲覧。RLS(family_daily_reports_select)で
   /// staff_has_guardian_data_access(child_id)により保護のため直接SELECTでよい。
   Future<FamilyDailyReportSummary?> fetchFamilyDailyReportForStaff(

@@ -27,6 +27,15 @@ class DailyBoardRow {
     this.onTherapyOuting = false,
     this.therapyOutAt,
     this.therapyProviderName,
+    // ▼186 追加(登降園バー/出欠モーダル用)
+    this.arrivalAt,
+    this.departureAt,
+    this.outAt,
+    this.returnAt,
+    this.scheduledStartAt,
+    this.scheduledEndAt,
+    this.attendanceKind,
+    this.attendanceNote,
   });
 
   factory DailyBoardRow.fromJson(Map<String, dynamic> json) => DailyBoardRow(
@@ -58,6 +67,14 @@ class DailyBoardRow {
         therapyOutAt:
             json['therapy_out_at'] != null ? DateTime.parse(json['therapy_out_at'] as String) : null,
         therapyProviderName: json['therapy_provider_name'] as String?,
+        arrivalAt: json['arrival_at'] != null ? DateTime.parse(json['arrival_at'] as String) : null,
+        departureAt: json['departure_at'] != null ? DateTime.parse(json['departure_at'] as String) : null,
+        outAt: json['out_at'] != null ? DateTime.parse(json['out_at'] as String) : null,
+        returnAt: json['return_at'] != null ? DateTime.parse(json['return_at'] as String) : null,
+        scheduledStartAt: json['scheduled_start_at'] as String?,
+        scheduledEndAt: json['scheduled_end_at'] as String?,
+        attendanceKind: json['attendance_kind'] as String?,
+        attendanceNote: json['attendance_note'] as String?,
       );
 
   final String childId;
@@ -82,6 +99,15 @@ class DailyBoardRow {
   final bool onTherapyOuting;
   final DateTime? therapyOutAt;
   final String? therapyProviderName;
+  // ▼186 追加。scheduled_*/attendance_* は time/text をそのまま保持(表示側で整形)。
+  final DateTime? arrivalAt;
+  final DateTime? departureAt;
+  final DateTime? outAt;
+  final DateTime? returnAt;
+  final String? scheduledStartAt; // 'HH:MM:SS'(予定=日別override優先→週次標準)
+  final String? scheduledEndAt;
+  final String? attendanceKind; // none/late/early_leave/sick_absence/personal_absence
+  final String? attendanceNote;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
 
@@ -232,6 +258,36 @@ class FamilyReportListItem {
   final String displayName;
   final String? honorificSuffix;
   final FamilyDailyReportSummary report;
+
+  String get nameLabel => '$displayName${honorificSuffix ?? ''}';
+}
+
+/// 園側検温の1記録(188 fetch_child_temperatures_for_office の1行)。
+class ChildTemperatureRecord {
+  const ChildTemperatureRecord({
+    required this.childId,
+    required this.displayName,
+    this.honorificSuffix,
+    this.className,
+    required this.measuredAt,
+    required this.temperature,
+  });
+
+  factory ChildTemperatureRecord.fromJson(Map<String, dynamic> json) => ChildTemperatureRecord(
+        childId: json['child_id'] as String,
+        displayName: json['display_name'] as String,
+        honorificSuffix: json['honorific_suffix'] as String?,
+        className: json['class_name'] as String?,
+        measuredAt: json['measured_at'] as String, // 'HH:MM:SS'
+        temperature: double.parse(json['temperature'].toString()),
+      );
+
+  final String childId;
+  final String displayName;
+  final String? honorificSuffix;
+  final String? className;
+  final String measuredAt;
+  final double temperature;
 
   String get nameLabel => '$displayName${honorificSuffix ?? ''}';
 }
