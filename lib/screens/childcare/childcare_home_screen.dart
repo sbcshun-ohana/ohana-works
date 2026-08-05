@@ -323,35 +323,67 @@ class _HomeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // コドモン風: 色付き丸角アイコンバッジ＋下にラベル。軽いカードで視覚的に把握しやすく。
     return Opacity(
-      opacity: comingSoon ? 0.45 : 1,
-      child: Card(
+      opacity: comingSoon ? 0.5 : 1,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        elevation: 0.5,
+        shadowColor: Colors.black26,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: Icon(icon, color: color, size: 30),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                ),
-                if (comingSoon)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text('準備中', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                  ),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // タイルの実寸からアイコンバッジ径を決める(小さい画面でも崩れない)。
+                final badge = (c.maxHeight * 0.5).clamp(44.0, 76.0);
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: badge,
+                          height: badge,
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(badge * 0.28),
+                          ),
+                          child: Icon(icon, color: color, size: badge * 0.52),
+                        ),
+                        if (comingSoon)
+                          Positioned(
+                            right: -4,
+                            top: -4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppColors.warmOrange,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text('準備中',
+                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
