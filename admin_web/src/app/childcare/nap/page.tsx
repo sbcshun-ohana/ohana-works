@@ -68,6 +68,48 @@ function isPastMissing(check: NapCheck | null, slot: Date): boolean {
   return !check && slot.getTime() < Date.now();
 }
 
+// 在籍名簿(クラス選択時=fetch_class_children / 全クラス=fetch_children_for_office)。
+type RosterChild = {
+  child_id: string;
+  display_name: string;
+  honorific_suffix: string | null;
+  class_id: string | null;
+  class_name: string | null;
+  is_absent?: boolean;
+};
+
+// 名簿 × 午睡セッションのマージ: 在籍園児全員を行にし、セッションがあればその内容を、無ければ空の行を返す。
+// 区間は sleep_start_at 昇順に統一(seq順でなく時刻順)。名簿に無いがセッションを持つ児(異動等)は末尾に補完。
+function buildDisplayRows(roster: RosterChild[], board: NapSessionRow[]): NapSessionRow[] {
+  const boardByChild = new Map(board.map((r) => [r.child_id, r]));
+  const sortIv = (r: NapSessionRow): NapSessionRow => ({
+    ...r,
+    intervals: [...r.intervals].sort(
+      (a, b) => new Date(a.sleep_start_at).getTime() - new Date(b.sleep_start_at).getTime(),
+    ),
+  });
+  const rows: NapSessionRow[] = roster.map((c) => {
+    const found = boardByChild.get(c.child_id);
+    if (found) return sortIv(found);
+    return {
+      session_id: "",
+      child_id: c.child_id,
+      display_name: c.display_name,
+      honorific_suffix: c.honorific_suffix,
+      class_id: c.class_id ?? "",
+      class_name: c.class_name ?? "",
+      is_required: false,
+      sleep_start_at: null,
+      wake_up_at: null,
+      intervals: [],
+      checks: [],
+    };
+  });
+  const rosterIds = new Set(roster.map((c) => c.child_id));
+  for (const r of board) if (!rosterIds.has(r.child_id)) rows.push(sortIv(r));
+  return rows;
+}
+
 function ChildcareNapPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
   const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice);
@@ -76,7 +118,7 @@ function ChildcareNapPageContent() {
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState<{ row: NapSessionRow; slot: Date; existing: NapCheck | null } | null>(null);
   const [intervalEdit, setIntervalEdit] = useState<{ interval: NapInterval } | null>(null);
-  const [addTarget, setAddTarget] = useState<{ childId: string; name: string } | null>(null);
+  const [roster, setRoster] = useState<RosterChild[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(m: string) {
@@ -151,6 +193,70 @@ function ChildcareNapPageContent() {
     load();
   }, [selectedOffice, selectedClass, businessDate, reloadToken]);
 
+  // 在籍名簿の取得。クラス選択時=そのクラスの在籍児、全クラス=施設の全園児(退園済み除く)。
+  useEffect(() => {
+    function load() {
+      if (!selectedOffice) {
+        setRoster([]);
+        return;
+      }
+      const supabase = createClient();
+      if (selectedClass !== "") {
+        const className = classes.find((c) => c.class_id === selectedClass)?.class_name ?? null;
+        supabase
+          .rpc("fetch_class_children", { p_class_id: selectedClass, p_business_date: businessDate })
+          .then(({ data }) =>
+            setRoster(
+              ((data ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null; is_absent: boolean }[]).map(
+                (c) => ({ ...c, class_id: selectedClass, class_name: className }),
+              ),
+            ),
+          );
+      } else {
+        supabase
+          .rpc("fetch_children_for_office", { p_office_id: selectedOffice })
+          .then(({ data }) =>
+            setRoster(
+              ((data ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null; class_name: string | null }[]).map(
+                (c) => ({ ...c, class_id: null }),
+              ),
+            ),
+          );
+      }
+    }
+    load();
+  }, [selectedOffice, selectedClass, businessDate, reloadToken, classes]);
+
+  // 「5分前と同じ(一括)」: 表示中の児のうち、5分前に記録があり現スロット未記入のものをクラス単位で複製(169)。
+  // 全クラス時は、セッションを持つ児の所属クラスごとに複製を呼び集計する。
+  async function classBulkCopy() {
+    const slot = floor5(new Date()).toISOString();
+    const classIds =
+      selectedClass !== ""
+        ? [selectedClass]
+        : Array.from(new Set(rows.map((r) => r.class_id).filter((id): id is string => !!id)));
+    if (classIds.length === 0) {
+      showToast("対象がありません(午睡中の記録がまだありません)");
+      return;
+    }
+    const supabase = createClient();
+    let total = 0;
+    for (const cid of classIds) {
+      const { data, error } = await supabase.rpc("copy_previous_nap_checks_for_class", {
+        p_class_id: cid,
+        p_session_date: businessDate,
+        p_slot_at: slot,
+      });
+      if (error) {
+        showToast(friendlyNapError(error.message));
+        return;
+      }
+      total += (data as number) ?? 0;
+    }
+    showToast(total > 0 ? `${total}件を「5分前と同じ」で登録しました` : "対象がありません(5分前の記録がある未記入スロットなし)");
+    setReloadToken((t) => t + 1);
+  }
+
   async function saveCheck(
     row: NapSessionRow,
     slot: Date,
@@ -180,6 +286,9 @@ function ChildcareNapPageContent() {
       </div>
     );
   }
+
+  // 在籍名簿 × 午睡セッションのマージ(区間は sleep_start_at 昇順)。
+  const displayRows = buildDisplayRows(roster, rows);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -232,30 +341,31 @@ function ChildcareNapPageContent() {
           </div>
         </div>
 
-        {selectedClass !== "" && (
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setAddTarget({ childId: "", name: "" })}
-            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+            onClick={classBulkCopy}
+            className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
           >
-            + 入眠を追加(園児選択)
+            5分前と同じ(一括)
           </button>
-        )}
+        </div>
 
-        {rows.length === 0 && <p className="text-sm text-slate-400">午睡セッションがありません。</p>}
+        {displayRows.length === 0 && <p className="text-sm text-slate-400">対象の園児がいません。</p>}
 
         <div className="space-y-3">
-          {rows.map((row) => {
+          {displayRows.map((row) => {
             const slots = slotsFor(row);
             const lastOpen = row.intervals.find((i) => !i.wake_up_at);
             const allWoken = row.intervals.length > 0 && row.intervals.every((i) => i.wake_up_at);
+            const notSlept = row.intervals.length === 0;
             return (
-              <div key={row.session_id} className="rounded-2xl bg-white p-4 shadow-sm">
+              <div key={row.child_id} className="rounded-2xl bg-white p-4 shadow-sm">
                 <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
                   <span>
                     {row.display_name}
                     {row.honorific_suffix ?? ""} <span className="text-slate-400">/ {row.class_name}</span>
                   </span>
-                  {/* 区間(入眠-起床)の一覧・編集・削除 */}
+                  {/* 区間(入眠-起床)の一覧・編集・削除。sleep_start_at 昇順。 */}
                   {row.intervals.map((iv) => (
                     <span key={iv.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">
                       {hmLocal(iv.sleep_start_at)}-{iv.wake_up_at ? hmLocal(iv.wake_up_at) : "就寝中"}
@@ -263,6 +373,12 @@ function ChildcareNapPageContent() {
                       <button onClick={() => deleteInterval(iv)} className="text-red-500 hover:underline">削除</button>
                     </span>
                   ))}
+                  {/* 状態に応じた操作ボタン: 未入眠=入眠 / 就寝中=起床 / 全て起床済み=再入眠 */}
+                  {notSlept && (
+                    <button onClick={() => addInterval(row.child_id, nowHm())} className="rounded border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50">
+                      入眠(現在時刻)
+                    </button>
+                  )}
                   {lastOpen && (
                     <button onClick={() => setWake(lastOpen, nowHm())} className="rounded border border-emerald-300 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50">
                       起床(現在時刻)
@@ -274,31 +390,34 @@ function ChildcareNapPageContent() {
                     </button>
                   )}
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {slots.map((slot) => {
-                    const check = row.checks.find((c) => new Date(c.slot_at).getTime() === slot.getTime()) ?? null;
-                    const pastMissing = isPastMissing(check, slot);
-                    return (
-                      <button
-                        key={slot.toISOString()}
-                        onClick={() => setEditing({ row, slot, existing: check })}
-                        className={`flex min-w-[56px] flex-col items-center rounded-lg px-2 py-1 text-xs ${
-                          check
-                            ? "bg-emerald-50 text-emerald-700"
-                            : pastMissing
-                              ? "bg-red-50 text-red-600"
-                              : "bg-slate-50 text-slate-400"
-                        }`}
-                      >
-                        <span className="text-[10px] text-slate-400">{hm(slot)}</span>
-                        <span className="font-semibold">
-                          {check ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position) : pastMissing ? "未" : "—"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {slots.length === 0 && <span className="text-xs text-slate-400">入眠未登録</span>}
-                </div>
+                {/* 区間があるときのみチェックスロットを表示(区間なしなら上の入眠ボタンのみ) */}
+                {!notSlept && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {slots.map((slot) => {
+                      const check = row.checks.find((c) => new Date(c.slot_at).getTime() === slot.getTime()) ?? null;
+                      const pastMissing = isPastMissing(check, slot);
+                      return (
+                        <button
+                          key={slot.toISOString()}
+                          onClick={() => setEditing({ row, slot, existing: check })}
+                          className={`flex min-w-[56px] flex-col items-center rounded-lg px-2 py-1 text-xs ${
+                            check
+                              ? "bg-emerald-50 text-emerald-700"
+                              : pastMissing
+                                ? "bg-red-50 text-red-600"
+                                : "bg-slate-50 text-slate-400"
+                          }`}
+                        >
+                          <span className="text-[10px] text-slate-400">{hm(slot)}</span>
+                          <span className="font-semibold">
+                            {check ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position) : pastMissing ? "未" : "—"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {slots.length === 0 && <span className="text-xs text-slate-400">就寝直後(記録待ち)</span>}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -326,18 +445,6 @@ function ChildcareNapPageContent() {
           onSave={async (sleepTime, wakeTime) => {
             const ok = await saveInterval(intervalEdit.interval, sleepTime, wakeTime);
             if (ok) setIntervalEdit(null);
-          }}
-        />
-      )}
-
-      {addTarget && (
-        <NapAddIntervalModal
-          classId={selectedClass}
-          businessDate={businessDate}
-          onClose={() => setAddTarget(null)}
-          onAdd={async (childId, sleepTime, wakeTime) => {
-            await addInterval(childId, sleepTime, wakeTime || undefined);
-            setAddTarget(null);
           }}
         />
       )}
@@ -380,68 +487,6 @@ function NapIntervalEditModal({
         <div className="mt-6 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">キャンセル</button>
           <button onClick={() => onSave(sleep, wake)} className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600">保存</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// 入眠を追加(クラスの園児を選んで入眠[+任意で起床])。
-function NapAddIntervalModal({
-  classId,
-  businessDate,
-  onClose,
-  onAdd,
-}: {
-  classId: string;
-  businessDate: string;
-  onClose: () => void;
-  onAdd: (childId: string, sleepTime: string, wakeTime: string) => void;
-}) {
-  const [children, setChildren] = useState<{ child_id: string; display_name: string; honorific_suffix: string | null }[]>([]);
-  const [childId, setChildId] = useState("");
-  const [sleep, setSleep] = useState(nowHm());
-  const [wake, setWake] = useState("");
-
-  useEffect(() => {
-    function load() {
-      createClient()
-        .rpc("fetch_class_children", { p_class_id: classId, p_business_date: businessDate })
-        .then(({ data }) => setChildren((data ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null }[]));
-    }
-    load();
-  }, [classId, businessDate]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <h3 className="text-base font-bold text-slate-800">入眠を追加</h3>
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">園児</label>
-            <select value={childId} onChange={(e) => setChildId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="">選択</option>
-              {children.map((c) => (
-                <option key={c.child_id} value={c.child_id}>{c.display_name}{c.honorific_suffix ?? ""}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex gap-3">
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">入眠</label>
-              <input type="time" value={sleep} onChange={(e) => setSleep(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">起床(任意)</label>
-              <input type="time" value={wake} onChange={(e) => setWake(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            </div>
-          </div>
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">キャンセル</button>
-          <button onClick={() => childId && onAdd(childId, sleep, wake)} className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50" disabled={!childId}>
-            追加
-          </button>
         </div>
       </div>
     </div>
