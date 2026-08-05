@@ -10,6 +10,7 @@ import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
 import 'daily_board/daily_board_screen.dart';
+import 'health/temperature_screen.dart';
 import 'nap/nap_check_screen.dart';
 
 /// Ohana Kids ホーム画面(childcare_home_enabled=ON時の初期画面)。
@@ -124,6 +125,17 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               color: AppColors.warmOrange,
               label: '午睡チェック',
               onTap: () => _push(NapCheckScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+                isManager: office.isManager,
+              )),
+            ),
+            _HomeTile(
+              icon: Icons.thermostat_rounded,
+              color: AppColors.punchClockOut,
+              label: '健康チェック(検温)',
+              onTap: () => _push(TemperatureScreen(
                 service: widget.service,
                 officeId: office.officeId,
                 businessDate: _businessDate,
