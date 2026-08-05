@@ -212,9 +212,9 @@ class _ClassActivityDetailScreenState extends State<ClassActivityDetailScreen> {
                       ),
                       child: Text('差し戻し理由: ${_activity!.rejectedReason}'),
                     ),
-                  _field('今日の活動', _themeController, enabled: _canEditContent),
+                  _field('今日の活動のねらい', _themeController, enabled: _canEditContent),
                   _field('活動内容', _contentController, enabled: _canEditContent, maxLines: 3),
-                  _field('クラス全体の様子', _overviewController, enabled: _canEditContent, maxLines: 3),
+                  _field('子どもたちの様子', _overviewController, enabled: _canEditContent, maxLines: 3),
                   _field('クラス全体へのお知らせ', _announcementController, enabled: _canEditContent),
                   _field('その他', _otherController, enabled: _canEditContent),
                   if (_errorMessage != null) ...[

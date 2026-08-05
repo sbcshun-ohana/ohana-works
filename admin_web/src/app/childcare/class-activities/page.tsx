@@ -338,9 +338,9 @@ function ChildcareClassActivitiesPageContent() {
                 )}
 
                 {([
-                  ["today_theme", "今日の活動"],
+                  ["today_theme", "今日の活動のねらい"],
                   ["activity_content", "活動内容"],
-                  ["class_overview", "クラス全体の様子"],
+                  ["class_overview", "子どもたちの様子"],
                   ["class_announcement", "クラス全体へのお知らせ"],
                   ["other_notes", "その他"],
                 ] as const).map(([key, label]) => (
