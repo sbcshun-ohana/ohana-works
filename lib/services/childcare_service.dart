@@ -645,6 +645,32 @@ class ChildcareService {
     return FamilyDailyReportSummary.fromJson(row);
   }
 
+  /// 家庭での様子 一覧: 施設×日の提出済み家庭連絡帳を全園児分。
+  /// 新規RPCは作らず、既存RLS(family_daily_reports_select = staff_has_guardian_data_access)で保護された
+  /// 直接selectを用いる(children!inner で office 絞り込み)。DB変更なし。
+  Future<List<FamilyReportListItem>> fetchFamilyDailyReportsForOffice(
+    String officeId,
+    DateTime businessDate,
+  ) async {
+    final rows = await _client
+        .from('family_daily_reports')
+        .select('*, children!inner(display_name, honorific_suffix, office_id, enrollment_status)')
+        .eq('business_date', dateOnly(businessDate))
+        .eq('children.office_id', officeId)
+        .eq('status', 'submitted');
+    return (rows as List).map((r) {
+      final m = r as Map<String, dynamic>;
+      final child = m['children'] as Map<String, dynamic>;
+      return FamilyReportListItem(
+        childId: m['child_id'] as String,
+        displayName: child['display_name'] as String,
+        honorificSuffix: child['honorific_suffix'] as String?,
+        report: FamilyDailyReportSummary.fromJson(m),
+      );
+    }).toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+  }
+
   /// daily_child_statusの変更をRealtimeで購読する(登降園は保護者アプリ・キオスク端末など
   /// 複数端末から行われるため、複数端末への即時反映が必要)。呼び出し側でchannelを保持し、
   /// 画面破棄時にunsubscribe()すること。

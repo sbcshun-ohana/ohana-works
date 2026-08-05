@@ -184,6 +184,7 @@ class _ChildcareMenuScreenState extends State<ChildcareMenuScreen> {
                       service: widget.service,
                       officeId: _selectedOffice!.officeId,
                       businessDate: _businessDate,
+                      isManager: _selectedOffice!.isManager,
                     ),
                   ),
                 ),

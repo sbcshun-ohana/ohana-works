@@ -219,6 +219,23 @@ class FamilyDailyReportSummary {
   bool get isSubmitted => status == 'submitted';
 }
 
+/// 家庭での様子 一覧の1行(園児名 + 提出済みの家庭連絡帳内容)。朝の受け入れ時に一括把握する用途。
+class FamilyReportListItem {
+  const FamilyReportListItem({
+    required this.childId,
+    required this.displayName,
+    this.honorificSuffix,
+    required this.report,
+  });
+
+  final String childId;
+  final String displayName;
+  final String? honorificSuffix;
+  final FamilyDailyReportSummary report;
+
+  String get nameLabel => '$displayName${honorificSuffix ?? ''}';
+}
+
 String dailyBoardStatusLabel(String status) {
   switch (status) {
     case 'not_arrived':

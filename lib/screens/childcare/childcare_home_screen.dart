@@ -94,6 +94,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 service: widget.service,
                 officeId: office.officeId,
                 businessDate: _businessDate,
+                isManager: office.isManager,
               )),
             ),
             _HomeTile(
@@ -147,6 +148,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                   service: widget.service,
                   officeId: office.officeId,
                   businessDate: _businessDate,
+                  isManager: office.isManager,
                 )),
               ),
             _HomeTile(

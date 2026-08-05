@@ -9,6 +9,8 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
+import '../contacts/daily_contact_detail_screen.dart';
+import '../family_report/family_report_list_screen.dart';
 
 /// 保護者アプリ・後続保育機能 Phase A: デイリーボード(iPad中心)。
 /// 登降園は保護者アプリ・キオスク端末など複数端末から記録されるため、Realtimeで即時反映する。
@@ -19,11 +21,13 @@ class DailyBoardScreen extends StatefulWidget {
     required this.service,
     required this.officeId,
     required this.businessDate,
+    this.isManager = false,
   });
 
   final ChildcareService service;
   final String officeId;
   final DateTime businessDate;
+  final bool isManager;
 
   @override
   State<DailyBoardScreen> createState() => _DailyBoardScreenState();
@@ -242,6 +246,35 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadNapMissing();
   }
 
+  // K5(iii)/Phase A: 園児行から当日の連絡帳(園側 日誌・連絡帳)へ。既存詳細画面を再利用。
+  Future<void> _openContact(DailyBoardRow row) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => DailyContactDetailScreen(
+        service: widget.service,
+        officeId: widget.officeId,
+        childId: row.childId,
+        childNameLabel: row.nameLabel,
+        businessDate: _businessDate,
+        isManager: widget.isManager,
+      ),
+    ));
+    if (mounted) {
+      setState(_load);
+      _loadSummary();
+    }
+  }
+
+  // 家庭での様子 一覧(Phase A)。デイリーボードからの導線。
+  void _openFamilyReports() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => FamilyReportListScreen(
+        service: widget.service,
+        officeId: widget.officeId,
+        businessDate: _businessDate,
+      ),
+    ));
+  }
+
   void _openChildDetail(DailyBoardRow row) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -265,7 +298,14 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         toolbarHeight: 48,
         titleSpacing: 0,
         title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
+        actions: [
+          TextButton.icon(
+            onPressed: _openFamilyReports,
+            icon: const Icon(Icons.family_restroom_rounded, size: 16),
+            label: const Text('家庭での様子', style: TextStyle(fontSize: 13)),
+          ),
+          BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
+        ],
       ),
       body: Column(
         children: [
@@ -333,7 +373,27 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                 children: [
                                   Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
                                   const SizedBox(height: 4),
-                                  InkWell(
+                                  Wrap(
+                                    spacing: 14,
+                                    runSpacing: 2,
+                                    children: [
+                                      InkWell(
+                                        onTap: () => _openContact(row),
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(vertical: 2),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.menu_book_rounded, size: 15, color: AppColors.skyBlue),
+                                              SizedBox(width: 4),
+                                              Text('日誌・連絡帳',
+                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.skyBlue)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      InkWell(
                                     onTap: () => _toggleAbsence(row),
                                     borderRadius: BorderRadius.circular(6),
                                     child: Padding(
@@ -358,6 +418,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                         ],
                                       ),
                                     ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
