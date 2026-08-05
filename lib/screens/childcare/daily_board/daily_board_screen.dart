@@ -264,6 +264,24 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  // K7: 出欠編集モーダル。種別/予定override(185) + 実績 入/外/戻/退(187・主任のみ・全置換)を1画面で。
+  Future<void> _openAttendanceEdit(DailyBoardRow row) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AttendanceEditSheet(
+        service: widget.service,
+        row: row,
+        businessDate: _businessDate,
+        isManager: widget.isManager,
+      ),
+    );
+    if (saved == true && mounted) {
+      setState(_load);
+      _loadSummary();
+    }
+  }
+
   // 家庭での様子 一覧(Phase A)。デイリーボードからの導線。
   void _openFamilyReports() {
     Navigator.of(context).push(MaterialPageRoute(
@@ -394,6 +412,22 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                         ),
                                       ),
                                       InkWell(
+                                        onTap: () => _openAttendanceEdit(row),
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(vertical: 2),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.edit_calendar_rounded, size: 15, color: AppColors.warmOrange),
+                                              SizedBox(width: 4),
+                                              Text('出欠編集',
+                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warmOrange)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      InkWell(
                                     onTap: () => _toggleAbsence(row),
                                     borderRadius: BorderRadius.circular(6),
                                     child: Padding(
@@ -440,6 +474,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                 ],
                               ),
                             ),
+                            _AttendanceTimeBar(row: row),
                             if (row.hasPickupChange)
                               Container(
                                 width: double.infinity,
@@ -1042,6 +1077,266 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         dailyBoardStatusLabel(status),
         style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12),
+      ),
+    );
+  }
+}
+
+/// K6: 登降園タイムバー(行内)。予定=薄バー(186の二層解決値)、実績=濃バー(登園〜降園、中抜けは切れ目)。
+/// 上に実績時刻、下に予定時刻を小さく表示。予定も実績も無ければ非表示。
+class _AttendanceTimeBar extends StatelessWidget {
+  const _AttendanceTimeBar({required this.row});
+
+  final DailyBoardRow row;
+
+  int? _minFromDbTime(String? s) {
+    if (s == null || s.length < 5) return null;
+    final p = s.split(':');
+    return int.parse(p[0]) * 60 + int.parse(p[1]);
+  }
+
+  int? _minFromDt(DateTime? d) {
+    if (d == null) return null;
+    final l = d.toLocal();
+    return l.hour * 60 + l.minute;
+  }
+
+  String _hm(int? m) => m == null ? '--:--' : '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final schedS = _minFromDbTime(row.scheduledStartAt);
+    final schedE = _minFromDbTime(row.scheduledEndAt);
+    final arr = _minFromDt(row.arrivalAt);
+    final dep = _minFromDt(row.departureAt);
+    final out = _minFromDt(row.outAt);
+    final ret = _minFromDt(row.returnAt);
+    final now = DateTime.now();
+    final nowMin = now.hour * 60 + now.minute;
+    final actEnd = dep ?? (arr != null ? nowMin : null);
+
+    if (schedS == null && arr == null) return const SizedBox.shrink();
+
+    final startCand = <int>[?schedS, ?arr];
+    final endCand = <int>[?schedE, ?actEnd];
+    var winStart = startCand.isEmpty ? 8 * 60 : startCand.reduce((a, b) => a < b ? a : b);
+    var winEnd = endCand.isEmpty ? 18 * 60 : endCand.reduce((a, b) => a > b ? a : b);
+    if (winEnd <= winStart) winEnd = winStart + 60;
+    final span = winEnd - winStart;
+    double frac(int m) => ((m - winStart) / span).clamp(0.0, 1.0);
+
+    final actualLabel = arr == null
+        ? ''
+        : '登園 ${_hm(arr)}'
+            '${dep != null ? ' / 降園 ${_hm(dep)}' : ' / 在園中'}'
+            '${(out != null && ret != null) ? ' ・中抜け ${_hm(out)}〜${_hm(ret)}' : ''}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (actualLabel.isNotEmpty)
+            Text(actualLabel, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.skyBlue)),
+          const SizedBox(height: 2),
+          LayoutBuilder(builder: (context, c) {
+            final w = c.maxWidth;
+            Widget seg(int a, int b, Color col, double top, double h) {
+              final l = frac(a) * w;
+              final r = frac(b) * w;
+              return Positioned(
+                left: l,
+                width: (r - l).clamp(2.0, w),
+                top: top,
+                height: h,
+                child: Container(decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(4))),
+              );
+            }
+
+            final children = <Widget>[
+              Positioned(
+                left: 0, right: 0, top: 7, height: 6,
+                child: Container(decoration: BoxDecoration(color: AppColors.textSecondary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(4))),
+              ),
+            ];
+            if (schedS != null && schedE != null) {
+              children.add(seg(schedS, schedE, AppColors.skyBlue.withValues(alpha: 0.28), 5, 10));
+            }
+            if (arr != null && actEnd != null) {
+              if (out != null && ret != null && out < ret) {
+                children.add(seg(arr, out, AppColors.skyBlue, 5, 10));
+                children.add(seg(ret, actEnd, AppColors.skyBlue, 5, 10));
+              } else {
+                children.add(seg(arr, actEnd, AppColors.skyBlue, 5, 10));
+              }
+            }
+            return SizedBox(height: 20, width: w, child: Stack(children: children));
+          }),
+          if (schedS != null || schedE != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text('予定 ${_hm(schedS)}〜${_hm(schedE)}', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// K7: 出欠編集モーダル。出欠種別/予定override(185) + 実績 入/外/戻/退(187・主任のみ・全置換)。
+/// 実績は現在値を全4値プリフィルして187へ渡す(187の全置換セマンティクス厳守)。
+class _AttendanceEditSheet extends StatefulWidget {
+  const _AttendanceEditSheet({required this.service, required this.row, required this.businessDate, required this.isManager});
+
+  final ChildcareService service;
+  final DailyBoardRow row;
+  final DateTime businessDate;
+  final bool isManager;
+
+  @override
+  State<_AttendanceEditSheet> createState() => _AttendanceEditSheetState();
+}
+
+class _AttendanceEditSheetState extends State<_AttendanceEditSheet> {
+  static const _kinds = [
+    ('none', '-'),
+    ('late', '遅刻'),
+    ('early_leave', '早退'),
+    ('sick_absence', '病欠'),
+    ('personal_absence', '都合欠'),
+  ];
+
+  late String _kind = widget.row.attendanceKind ?? 'none';
+  late TimeOfDay? _schedStart = _fromDbTime(widget.row.scheduledStartAt);
+  late TimeOfDay? _schedEnd = _fromDbTime(widget.row.scheduledEndAt);
+  late TimeOfDay? _in = _fromDt(widget.row.arrivalAt);
+  late TimeOfDay? _out = _fromDt(widget.row.outAt);
+  late TimeOfDay? _return = _fromDt(widget.row.returnAt);
+  late TimeOfDay? _depart = _fromDt(widget.row.departureAt);
+  late final TextEditingController _note = TextEditingController(text: widget.row.attendanceNote ?? '');
+  bool _saving = false;
+
+  static TimeOfDay? _fromDbTime(String? s) {
+    if (s == null || s.length < 5) return null;
+    final p = s.split(':');
+    return TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+  }
+
+  static TimeOfDay? _fromDt(DateTime? d) => d == null ? null : TimeOfDay.fromDateTime(d.toLocal());
+
+  static String? _hhmm(TimeOfDay? t) => t == null ? null : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  Future<TimeOfDay?> _pick(TimeOfDay? init) => showTimePicker(context: context, initialTime: init ?? TimeOfDay.now());
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await widget.service.setChildAttendanceStatus(
+        widget.row.childId,
+        widget.businessDate,
+        _kind,
+        scheduledStart: _hhmm(_schedStart),
+        scheduledEnd: _hhmm(_schedEnd),
+        attendanceNote: _note.text.trim().isEmpty ? null : _note.text.trim(),
+      );
+      // 実績は主任のみ。全4値をプリフィルのまま渡す(187=全置換・NULL=クリア)。
+      if (widget.isManager) {
+        await widget.service.setChildAttendanceActuals(
+          widget.row.childId,
+          widget.businessDate,
+          inAt: _hhmm(_in),
+          outAt: _hhmm(_out),
+          returnAt: _hhmm(_return),
+          departAt: _hhmm(_depart),
+        );
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存に失敗しました(過去日・実績修正は主任以上)')),
+        );
+      }
+    }
+  }
+
+  Widget _timeField(String label, TimeOfDay? value, ValueChanged<TimeOfDay?> onChanged, {bool enabled = true}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            OutlinedButton(
+              onPressed: !enabled ? null : () async { final t = await _pick(value); if (t != null) onChanged(t); },
+              child: Text(_hhmm(value) ?? '--:--'),
+            ),
+            if (value != null && enabled)
+              IconButton(icon: const Icon(Icons.clear, size: 16), onPressed: () => onChanged(null), tooltip: 'クリア'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.businessDate;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${widget.row.nameLabel} の出欠状況  ${d.year}/${d.month}/${d.day}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 14),
+            const Text('出欠', style: TextStyle(color: AppColors.textSecondary)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, children: [
+              for (final k in _kinds)
+                ChoiceChip(label: Text(k.$2), selected: _kind == k.$1, onSelected: (_) => setState(() => _kind = k.$1)),
+            ]),
+            const SizedBox(height: 14),
+            const Text('登降園(予定)', style: TextStyle(color: AppColors.textSecondary)),
+            const SizedBox(height: 6),
+            Row(children: [
+              _timeField('登園予定', _schedStart, (t) => setState(() => _schedStart = t)),
+              const SizedBox(width: 16),
+              _timeField('降園予定', _schedEnd, (t) => setState(() => _schedEnd = t)),
+            ]),
+            const SizedBox(height: 14),
+            Row(children: [
+              const Text('登降園(実績)', style: TextStyle(color: AppColors.textSecondary)),
+              if (!widget.isManager)
+                const Padding(padding: EdgeInsets.only(left: 8), child: Text('※修正は主任以上', style: TextStyle(fontSize: 11, color: AppColors.punchClockOut))),
+            ]),
+            const SizedBox(height: 6),
+            Wrap(spacing: 16, runSpacing: 8, children: [
+              _timeField('入', _in, (t) => setState(() => _in = t), enabled: widget.isManager),
+              _timeField('外', _out, (t) => setState(() => _out = t), enabled: widget.isManager),
+              _timeField('戻', _return, (t) => setState(() => _return = t), enabled: widget.isManager),
+              _timeField('退', _depart, (t) => setState(() => _depart = t), enabled: widget.isManager),
+            ]),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _note,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(labelText: '出欠メモ', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: OutlinedButton(onPressed: _saving ? null : () => Navigator.of(context).pop(false), child: const Text('キャンセル'))),
+              const SizedBox(width: 12),
+              Expanded(child: FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? '保存中…' : '保存'))),
+            ]),
+          ],
+        ),
       ),
     );
   }
