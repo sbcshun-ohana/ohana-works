@@ -7,7 +7,6 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
   { href: "/childcare/nap", label: "午睡チェック" },
   { href: "/childcare/children", label: "園児マスタ" },
-  { href: "/childcare/attendance", label: "欠席選択" },
   { href: "/childcare/class-activities", label: "クラス活動" },
   { href: "/childcare/contacts", label: "連絡帳" },
   { href: "/childcare/contacts/copy", label: "コピー" },
