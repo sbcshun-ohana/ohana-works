@@ -50,13 +50,18 @@ function ChildcareFamilyReportsPageContent() {
   const [rowsError, setRowsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedOffice) {
-      setRows([]);
-      return;
+    function load() {
+      if (!selectedOffice) {
+        setRows([]);
+        return null;
+      }
+      setIsLoading(true);
+      setRowsError(null);
+      return createClient();
     }
-    setIsLoading(true);
-    setRowsError(null);
-    createClient()
+    const supabase = load();
+    if (!supabase) return;
+    supabase
       .from("family_daily_reports")
       .select("*, children!inner(display_name, honorific_suffix, office_id)")
       .eq("business_date", businessDate)
@@ -78,11 +83,16 @@ function ChildcareFamilyReportsPageContent() {
 
   // 園側検温の最新値(188)。
   useEffect(() => {
-    if (!selectedOffice) {
-      setLatestTemps({});
-      return;
+    function load() {
+      if (!selectedOffice) {
+        setLatestTemps({});
+        return null;
+      }
+      return createClient();
     }
-    createClient()
+    const supabase = load();
+    if (!supabase) return;
+    supabase
       .rpc("fetch_child_latest_temperatures_for_office", {
         p_office_id: selectedOffice,
         p_business_date: businessDate,
