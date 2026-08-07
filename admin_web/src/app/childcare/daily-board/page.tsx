@@ -10,11 +10,12 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
-import type { DailyBoardRow, DailyBoardSummary, WeatherRecord, NapMissing } from "@/lib/types";
+import type { AttendanceKind, DailyBoardRow, DailyBoardSummary, WeatherRecord, NapMissing } from "@/lib/types";
 import { ATTENDANCE_KIND_LABELS, DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
 
 function ChildcareDailyBoardPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
   const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice);
 
   const [businessDate, setBusinessDate] = useState(currentDate());
@@ -27,6 +28,7 @@ function ChildcareDailyBoardPageContent() {
     null,
   );
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
+  const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(message: string) {
@@ -448,17 +450,25 @@ function ChildcareDailyBoardPageContent() {
                           scheduledStartAt={row.scheduled_start_at}
                           scheduledEndAt={row.scheduled_end_at}
                         />
-                        {row.attendance_kind && row.attendance_kind !== "none" && (
-                          <span
-                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence"
-                                ? "bg-red-50 text-red-600"
-                                : "bg-amber-50 text-amber-700"
-                            }`}
+                        <div className="flex items-center gap-2">
+                          {row.attendance_kind && row.attendance_kind !== "none" && (
+                            <span
+                              className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence"
+                                  ? "bg-red-50 text-red-600"
+                                  : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {ATTENDANCE_KIND_LABELS[row.attendance_kind]}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setAttendanceTarget(row)}
+                            className="rounded-lg border border-slate-300 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100"
                           >
-                            {ATTENDANCE_KIND_LABELS[row.attendance_kind]}
-                          </span>
-                        )}
+                            出欠編集
+                          </button>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
@@ -555,6 +565,19 @@ function ChildcareDailyBoardPageContent() {
           target={proxyTarget}
           onClose={() => setProxyTarget(null)}
           onSubmit={recordProxyAttendance}
+        />
+      )}
+
+      {attendanceTarget && (
+        <AttendanceEditModal
+          row={attendanceTarget}
+          businessDate={businessDate}
+          isManager={isManager}
+          onClose={() => setAttendanceTarget(null)}
+          onSaved={(msg) => {
+            showToast(msg);
+            setReloadToken((t) => t + 1);
+          }}
         />
       )}
 
@@ -760,6 +783,240 @@ function ProxyAttendanceModal({
             className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
           >
             {saving ? "登録中…" : "登録"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// timestamptz(ISO)→ JST の "HH:MM"(実績プリフィル用)。null は空文字。
+function isoToJstHm(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+// K7 出欠編集モーダル。
+// - 出欠状況(種別/予定/枠/メモ)= set_child_attendance_status(185・担当施設の職員)
+// - 登降園実績(入/外/戻/退)= set_child_attendance_actuals(187・主任以上・全置換)
+//   実績は現在値を全4値プリフィルして常に4値を渡す(空欄=そのクリア)= 全置換セマンティクス。
+function AttendanceEditModal({
+  row,
+  businessDate,
+  isManager,
+  onClose,
+  onSaved,
+}: {
+  row: DailyBoardRow;
+  businessDate: string;
+  isManager: boolean;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const childName = `${row.display_name}${row.honorific_suffix ?? ""}`;
+
+  // 出欠状況(全職員)
+  const [kind, setKind] = useState<AttendanceKind>(row.attendance_kind ?? "none");
+  const [schedStart, setSchedStart] = useState(row.scheduled_start_at?.slice(0, 5) ?? "");
+  const [schedEnd, setSchedEnd] = useState(row.scheduled_end_at?.slice(0, 5) ?? "");
+  const [slot, setSlot] = useState("");
+  const [note, setNote] = useState(row.attendance_note ?? "");
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // scheduled_slot は board(186)が返さないため、上書き防止に現行行を直接selectしてプリフィル。
+  useEffect(() => {
+    let alive = true;
+    createClient()
+      .from("child_daily_attendance")
+      .select("scheduled_slot")
+      .eq("child_id", row.child_id)
+      .eq("business_date", businessDate)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (alive && data?.scheduled_slot) setSlot(data.scheduled_slot as string);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [row.child_id, businessDate]);
+
+  // 登降園実績(主任以上)。現在値を全4値プリフィル。
+  const [inAt, setInAt] = useState(isoToJstHm(row.arrival_at));
+  const [outAt, setOutAt] = useState(isoToJstHm(row.out_at));
+  const [returnAt, setReturnAt] = useState(isoToJstHm(row.return_at));
+  const [departAt, setDepartAt] = useState(isoToJstHm(row.departure_at));
+  const [savingActuals, setSavingActuals] = useState(false);
+  const [actualsError, setActualsError] = useState<string | null>(null);
+
+  async function saveStatus() {
+    setSavingStatus(true);
+    setStatusError(null);
+    const { error } = await createClient().rpc("set_child_attendance_status", {
+      p_child_id: row.child_id,
+      p_business_date: businessDate,
+      p_attendance_kind: kind,
+      p_scheduled_start: schedStart || null,
+      p_scheduled_end: schedEnd || null,
+      p_scheduled_slot: slot || null,
+      p_attendance_note: note || null,
+    });
+    setSavingStatus(false);
+    if (error) {
+      setStatusError(`保存に失敗しました: ${error.message}`);
+      return;
+    }
+    onSaved("出欠状況を保存しました");
+    onClose();
+  }
+
+  async function saveActuals() {
+    setSavingActuals(true);
+    setActualsError(null);
+    // 全置換: 空欄は null(=その実績を削除)として常に4値を渡す。
+    const { error } = await createClient().rpc("set_child_attendance_actuals", {
+      p_child_id: row.child_id,
+      p_business_date: businessDate,
+      p_in: inAt || null,
+      p_out: outAt || null,
+      p_return: returnAt || null,
+      p_depart: departAt || null,
+    });
+    setSavingActuals(false);
+    if (error) {
+      setActualsError(`保存に失敗しました(主任以上のみ・退≥入/戻≥外): ${error.message}`);
+      return;
+    }
+    onSaved("登降園実績を保存しました");
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4">
+      <div className="my-8 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <h3 className="text-base font-bold text-slate-800">{childName} の出欠編集</h3>
+
+        {/* 出欠状況(全職員) */}
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">出欠種別</label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as AttendanceKind)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              {(Object.keys(ATTENDANCE_KIND_LABELS) as AttendanceKind[]).map((k) => (
+                <option key={k} value={k}>
+                  {ATTENDANCE_KIND_LABELS[k]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-400">病欠・都合欠のみ欠席として集計されます(遅刻/早退は出席)。</p>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-slate-500">登園予定</label>
+              <input
+                type="time"
+                value={schedStart}
+                onChange={(e) => setSchedStart(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-slate-500">降園予定</label>
+              <input
+                type="time"
+                value={schedEnd}
+                onChange={(e) => setSchedEnd(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">予定枠(任意)</label>
+            <input
+              type="text"
+              value={slot}
+              onChange={(e) => setSlot(e.target.value)}
+              placeholder="標準/短時間/延長 など"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">出欠メモ(任意)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          {statusError && <p className="text-xs font-medium text-red-500">{statusError}</p>}
+          <div className="flex justify-end">
+            <button
+              onClick={saveStatus}
+              disabled={savingStatus}
+              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+            >
+              {savingStatus ? "保存中…" : "出欠状況を保存"}
+            </button>
+          </div>
+        </div>
+
+        {/* 登降園実績(主任以上) */}
+        <div className="mt-6 border-t border-slate-200 pt-4">
+          <h4 className="text-sm font-bold text-slate-700">登降園実績(入/外/戻/退)</h4>
+          {isManager ? (
+            <>
+              <p className="mt-1 text-[10px] text-amber-600">
+                全置換: 4項目すべてが現在値です。空欄で保存するとその実績が削除されます。
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">入(登園)</label>
+                  <input type="time" value={inAt} onChange={(e) => setInAt(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">退(降園)</label>
+                  <input type="time" value={departAt} onChange={(e) => setDepartAt(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">外(外出)</label>
+                  <input type="time" value={outAt} onChange={(e) => setOutAt(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">戻(再入室)</label>
+                  <input type="time" value={returnAt} onChange={(e) => setReturnAt(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                </div>
+              </div>
+              {actualsError && <p className="mt-2 text-xs font-medium text-red-500">{actualsError}</p>}
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={saveActuals}
+                  disabled={savingActuals}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {savingActuals ? "保存中…" : "実績を保存"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-slate-400">実績の事後修正は主任以上のみ可能です。</p>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            閉じる
           </button>
         </div>
       </div>
