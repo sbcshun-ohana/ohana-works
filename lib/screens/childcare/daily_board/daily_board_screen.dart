@@ -461,7 +461,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  _StatusChip(status: row.status),
+                                  _StatusChip(status: effectiveBoardStatus(row)),
                                   if (row.lastEventAt != null)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 4),
@@ -690,11 +690,11 @@ class _ProxyAttendanceButton extends StatelessWidget {
     switch (row.status) {
       case 'present':
         eventType = 'pick_up';
-        label = '降園を登録';
+        label = '降園を代理打刻(保護者通知あり)';
       case 'not_arrived':
       case 'absent':
         eventType = 'drop_off';
-        label = '登園を登録';
+        label = '登園を代理打刻(保護者通知あり)';
       default:
         eventType = null;
         label = '';
@@ -1052,6 +1052,15 @@ class _SummaryItem {
   final String label;
   final int? value;
   final Color color;
+}
+
+// K7で出欠種別=病欠/都合欠(is_absent同期対象)の園児は状態を「欠席」表示にする
+// (daily_child_status は代理打刻由来のため未登園のまま。サマリーの欠席数と整合させる)。
+String effectiveBoardStatus(DailyBoardRow row) {
+  if (row.attendanceKind == 'sick_absence' || row.attendanceKind == 'personal_absence') {
+    return 'absent';
+  }
+  return row.status;
 }
 
 class _StatusChip extends StatelessWidget {

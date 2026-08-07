@@ -307,7 +307,7 @@ function ChildcareNapPageContent() {
       <main className="flex-1 space-y-6 p-6">
         <h2 className="text-lg font-bold text-slate-800">午睡チェック(閲覧・修正)</h2>
         <p className="text-xs text-slate-500">
-          過去日・30分超の修正は主任以上のみ可能です(修正は監査に残ります)。当日30分以内は一般職員も記入できます。
+          過去日・30分超の修正は主任以上のみ可能です。当日30分以内は一般職員も記入できます。
         </p>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">

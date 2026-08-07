@@ -13,6 +13,13 @@ import { currentDate } from "@/lib/datetime";
 import type { AttendanceKind, DailyBoardRow, DailyBoardSummary, WeatherRecord, NapMissing } from "@/lib/types";
 import { ATTENDANCE_KIND_LABELS, DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
 
+// K7で出欠種別=病欠/都合欠(is_absent同期対象)の園児は、状態列を「欠席」表示にする
+// (daily_child_status は代理打刻由来のため未登園のままになる。サマリーの欠席数と整合させる)。
+function effectiveBoardStatus(row: DailyBoardRow): DailyBoardRow["status"] {
+  if (row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence") return "absent";
+  return row.status;
+}
+
 function ChildcareDailyBoardPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
@@ -390,7 +397,7 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">最終イベント</th>
                 <th className="px-4 py-3">家庭連絡帳</th>
                 <th className="px-4 py-3">お迎え変更</th>
-                <th className="px-4 py-3">代理登録</th>
+                <th className="px-4 py-3">代理打刻(保護者通知あり)</th>
                 <th className="px-4 py-3">連絡帳公開</th>
                 {internalNotesEnabled && <th className="px-4 py-3">園内記録</th>}
               </tr>
@@ -421,16 +428,16 @@ function ChildcareDailyBoardPageContent() {
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          row.status === "present"
+                          effectiveBoardStatus(row) === "present"
                             ? "bg-emerald-50 text-emerald-700"
-                            : row.status === "picked_up"
+                            : effectiveBoardStatus(row) === "picked_up"
                               ? "bg-slate-100 text-slate-500"
-                              : row.status === "absent"
+                              : effectiveBoardStatus(row) === "absent"
                                 ? "bg-red-50 text-red-600"
                                 : "bg-amber-50 text-amber-700"
                         }`}
                       >
-                        {DAILY_BOARD_STATUS_LABELS[row.status]}
+                        {DAILY_BOARD_STATUS_LABELS[effectiveBoardStatus(row)]}
                       </span>
                       {row.on_therapy_outing && (
                         <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
