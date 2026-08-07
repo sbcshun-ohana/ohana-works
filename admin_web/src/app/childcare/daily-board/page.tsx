@@ -5,12 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
+import { AttendanceTimeBar } from "@/components/AttendanceTimeBar";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
 import { currentDate } from "@/lib/datetime";
 import type { DailyBoardRow, DailyBoardSummary, WeatherRecord, NapMissing } from "@/lib/types";
-import { DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
+import { ATTENDANCE_KIND_LABELS, DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
 
 function ChildcareDailyBoardPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
@@ -382,6 +383,7 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">園児</th>
                 <th className="px-4 py-3">クラス</th>
                 <th className="px-4 py-3">状態</th>
+                <th className="px-4 py-3">登降園</th>
                 <th className="px-4 py-3">最終イベント</th>
                 <th className="px-4 py-3">家庭連絡帳</th>
                 <th className="px-4 py-3">お迎え変更</th>
@@ -393,14 +395,14 @@ function ChildcareDailyBoardPageContent() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 10 : 9} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 10 : 9} className="px-4 py-6 text-center text-slate-400">
                     在籍園児がいません
                   </td>
                 </tr>
@@ -435,6 +437,29 @@ function ChildcareDailyBoardPageContent() {
                             : ""}
                         </span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        <AttendanceTimeBar
+                          arrivalAt={row.arrival_at}
+                          departureAt={row.departure_at}
+                          outAt={row.out_at}
+                          returnAt={row.return_at}
+                          scheduledStartAt={row.scheduled_start_at}
+                          scheduledEndAt={row.scheduled_end_at}
+                        />
+                        {row.attendance_kind && row.attendance_kind !== "none" && (
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence"
+                                ? "bg-red-50 text-red-600"
+                                : "bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            {ATTENDANCE_KIND_LABELS[row.attendance_kind]}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {row.last_event_at

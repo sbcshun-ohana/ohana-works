@@ -174,6 +174,26 @@ export type DailyBoardRow = {
   on_therapy_outing: boolean;
   therapy_out_at: string | null;
   therapy_provider_name: string | null;
+  // ▼186 追加(登降園バー / 出欠モーダル用)
+  arrival_at: string | null; // 実績 登園(最初のdrop系) timestamptz
+  departure_at: string | null; // 実績 降園(最後のpick系) timestamptz
+  out_at: string | null; // 実績 外出(最後のout) timestamptz
+  return_at: string | null; // 実績 戻り(最後のreturn) timestamptz
+  scheduled_start_at: string | null; // 予定 登園(日別override優先→週次標準) "HH:MM:SS"
+  scheduled_end_at: string | null; // 予定 降園 "HH:MM:SS"
+  attendance_kind: AttendanceKind | null;
+  attendance_note: string | null;
+};
+
+// 出欠種別(184/185)。遅刻/早退は出席側、is_absent同期は sick/personal のみ。
+export type AttendanceKind = "none" | "late" | "early_leave" | "sick_absence" | "personal_absence";
+
+export const ATTENDANCE_KIND_LABELS: Record<AttendanceKind, string> = {
+  none: "通常",
+  late: "遅刻",
+  early_leave: "早退",
+  sick_absence: "病欠",
+  personal_absence: "都合欠",
 };
 
 /**
