@@ -29,6 +29,7 @@ function ChildcareDailyBoardPageContent() {
   );
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
+  const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(message: string) {
@@ -468,6 +469,12 @@ function ChildcareDailyBoardPageContent() {
                           >
                             出欠編集
                           </button>
+                          <button
+                            onClick={() => setTemperatureTarget(row)}
+                            className="rounded-lg border border-slate-300 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100"
+                          >
+                            検温
+                          </button>
                         </div>
                       </div>
                     </td>
@@ -578,6 +585,16 @@ function ChildcareDailyBoardPageContent() {
             showToast(msg);
             setReloadToken((t) => t + 1);
           }}
+        />
+      )}
+
+      {temperatureTarget && (
+        <TemperatureModal
+          row={temperatureTarget}
+          businessDate={businessDate}
+          isManager={isManager}
+          onClose={() => setTemperatureTarget(null)}
+          onSaved={(msg) => showToast(msg)}
         />
       )}
 
@@ -1010,6 +1027,182 @@ function AttendanceEditModal({
             <p className="mt-1 text-xs text-slate-400">実績の事後修正は主任以上のみ可能です。</p>
           )}
         </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            閉じる
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 園側検温(188)の記録モーダル。職員が日中に複数回記録できる。
+// 過去日(・未来日)の記録/削除は主任以上のみ(サーバー record_child_temperature と対称)。
+// UIでも当日以外は一般職員に対して入力を無効化する(サーバー側ゲートは現状維持)。
+function TemperatureModal({
+  row,
+  businessDate,
+  isManager,
+  onClose,
+  onSaved,
+}: {
+  row: DailyBoardRow;
+  businessDate: string;
+  isManager: boolean;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const childName = `${row.display_name}${row.honorific_suffix ?? ""}`;
+  const canEdit = isManager || businessDate === currentDate(); // 当日以外は主任以上のみ
+
+  const [records, setRecords] = useState<{ measured_at: string; temperature: number }[]>([]);
+  const now = new Date();
+  const [measuredAt, setMeasuredAt] = useState(
+    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+  );
+  const [temp, setTemp] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    createClient()
+      .from("child_temperature_records")
+      .select("measured_at, temperature")
+      .eq("child_id", row.child_id)
+      .eq("business_date", businessDate)
+      .order("measured_at", { ascending: true })
+      .then(({ data }) => {
+        if (alive) setRecords((data ?? []) as { measured_at: string; temperature: number }[]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [row.child_id, businessDate, reload]);
+
+  async function addRecord() {
+    const t = Number(temp);
+    if (!temp || Number.isNaN(t) || t < 34 || t > 42) {
+      setError("体温は34.0〜42.0℃で入力してください");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const { error: e } = await createClient().rpc("record_child_temperature", {
+      p_child_id: row.child_id,
+      p_business_date: businessDate,
+      p_measured_at: measuredAt,
+      p_temperature: t,
+    });
+    setBusy(false);
+    if (e) {
+      setError(`記録に失敗しました(過去日は主任以上): ${e.message}`);
+      return;
+    }
+    setTemp("");
+    onSaved("検温を記録しました");
+    setReload((r) => r + 1);
+  }
+
+  async function removeRecord(at: string) {
+    setBusy(true);
+    setError(null);
+    const { error: e } = await createClient().rpc("delete_child_temperature", {
+      p_child_id: row.child_id,
+      p_business_date: businessDate,
+      p_measured_at: at,
+    });
+    setBusy(false);
+    if (e) {
+      setError(`削除に失敗しました(過去日は主任以上): ${e.message}`);
+      return;
+    }
+    onSaved("検温を削除しました");
+    setReload((r) => r + 1);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <h3 className="text-base font-bold text-slate-800">{childName} の検温(園側)</h3>
+        {!canEdit && (
+          <p className="mt-2 text-xs font-medium text-amber-600">過去日・未来日の検温は主任以上のみ記録・削除できます。</p>
+        )}
+
+        <div className="mt-4 space-y-1">
+          {records.length === 0 ? (
+            <p className="text-sm text-slate-400">記録はありません</p>
+          ) : (
+            records.map((r) => (
+              <div key={r.measured_at} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
+                <span className="tabular-nums text-slate-600">{r.measured_at.slice(0, 5)}</span>
+                <span className="font-semibold text-slate-800">{Number(r.temperature).toFixed(1)}℃</span>
+                <button
+                  onClick={() => removeRecord(r.measured_at)}
+                  disabled={busy || !canEdit}
+                  className="text-xs font-medium text-red-500 hover:underline disabled:opacity-40"
+                >
+                  削除
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-4 flex items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">時刻</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="time"
+                value={measuredAt}
+                disabled={!canEdit}
+                onChange={(e) => setMeasuredAt(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
+              />
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => {
+                  const d = new Date();
+                  setMeasuredAt(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+                }}
+                className="rounded-lg border border-slate-300 px-2 py-1.5 text-[10px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+              >
+                現在時刻
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">体温(℃)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="34"
+              max="42"
+              value={temp}
+              disabled={!canEdit}
+              onChange={(e) => setTemp(e.target.value)}
+              placeholder="36.5"
+              className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50"
+            />
+          </div>
+          <button
+            onClick={addRecord}
+            disabled={busy || !canEdit}
+            className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+          >
+            記録
+          </button>
+        </div>
+
+        {error && <p className="mt-3 text-xs font-medium text-red-500">{error}</p>}
 
         <div className="mt-6 flex justify-end">
           <button
