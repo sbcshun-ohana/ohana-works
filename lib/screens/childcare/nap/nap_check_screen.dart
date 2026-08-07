@@ -68,6 +68,7 @@ class _RosterRow {
 
 class _NapCheckScreenState extends State<NapCheckScreen> {
   late DateTime _businessDate = widget.businessDate;
+  int _selectedHour = DateTime.now().hour; // 表示中の時間帯(コドモン準拠の1時間グリッド)
   List<ChildcareClass> _classes = const [];
   String? _selectedClassId;
   bool _loading = true;
@@ -165,12 +166,6 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     return rows;
   }
 
-  // 5分床(UTC整列)。
-  static DateTime _floor5(DateTime t) {
-    final u = t.toUtc();
-    return DateTime.utc(u.year, u.month, u.day, u.hour, u.minute - (u.minute % 5));
-  }
-
   DateTime _combine(TimeOfDay t) => DateTime(
         _businessDate.year,
         _businessDate.month,
@@ -194,33 +189,56 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     return dt;
   }
 
-  // 全園児共通の時間軸(最早入眠を5分床にした時刻 〜 max(最遅起床, 現在))。区間が皆無なら空。
-  List<DateTime> _globalSlots(List<_RosterRow> rows) {
-    final nowUtc = DateTime.now().toUtc();
-    DateTime? minStart;
-    var maxEnd = nowUtc;
-    for (final r in rows) {
-      for (final iv in r.intervals) {
-        final s = iv.sleepStartAt.toUtc();
-        if (minStart == null || s.isBefore(minStart)) minStart = s;
-        final e = iv.wakeUpAt?.toUtc() ?? nowUtc;
-        if (e.isAfter(maxEnd)) maxEnd = e;
-      }
-    }
-    if (minStart == null) return const [];
-    final slots = <DateTime>[];
-    for (var t = _floor5(minStart); !t.isAfter(maxEnd); t = t.add(const Duration(minutes: 5))) {
-      slots.add(t);
-    }
-    return slots;
+  // 選択中の時間帯(1時間)の5分スロット12本(HH:00〜HH:55 JST)を UTC 実体で返す。
+  List<DateTime> _hourSlots(int hour) {
+    return List.generate(
+      12,
+      (i) => DateTime(_businessDate.year, _businessDate.month, _businessDate.day, hour, i * 5).toUtc(),
+    );
   }
 
-  // 指定スロットが当該区間の記録対象範囲 [切上げ入眠, min(起床,現在)] 内か。
-  bool _slotInInterval(NapInterval iv, DateTime slotUtc, DateTime nowUtc) {
-    var first = _floor5(iv.sleepStartAt);
-    if (first.isBefore(iv.sleepStartAt.toUtc())) first = first.add(const Duration(minutes: 5));
-    final upper = (iv.wakeUpAt != null && iv.wakeUpAt!.toUtc().isBefore(nowUtc)) ? iv.wakeUpAt!.toUtc() : nowUtc;
-    return !slotUtc.isBefore(first) && !slotUtc.isAfter(upper);
+  // slot時点で就寝中か(いずれかの区間 [入眠,起床) に入る)。
+  bool _isSleepingAt(_RosterRow r, DateTime slotUtc) {
+    for (final iv in r.intervals) {
+      final s = iv.sleepStartAt.toUtc();
+      final w = iv.wakeUpAt?.toUtc();
+      if (!slotUtc.isBefore(s) && (w == null || slotUtc.isBefore(w))) return true;
+    }
+    return false;
+  }
+
+  // slotより前で最も新しいチェック(列一括の「各児の直前チェック」)。
+  NapCheck? _priorCheck(_RosterRow r, DateTime slotUtc) {
+    NapCheck? best;
+    for (final c in r.checks) {
+      if (c.slotAt.toUtc().isBefore(slotUtc)) {
+        if (best == null || c.slotAt.isAfter(best.slotAt)) best = c;
+      }
+    }
+    return best;
+  }
+
+  // セルの編集可否(サーバー側 nap_check_authz を UI で先取り。サーバー側ゲートは現状維持)。
+  // 未来=不可 / 主任=窓外も可・過去日可 / 一般当日: 未記入=その5分間のみ・記録済=30分以内 / 過去日=不可。
+  bool _cellCanEdit(DateTime slotUtc, bool hasCheck) {
+    final now = DateTime.now();
+    if (now.isBefore(slotUtc)) return false;
+    if (widget.isManager) return true;
+    final isPastDay = DateTime(_businessDate.year, _businessDate.month, _businessDate.day)
+        .isBefore(DateTime(now.year, now.month, now.day));
+    if (isPastDay) return false;
+    if (hasCheck) return now.difference(slotUtc).inSeconds / 60.0 <= 30;
+    return now.isBefore(slotUtc.add(const Duration(minutes: 5))); // その5分間(now>=slot は上で保証)
+  }
+
+  bool _columnBulkEnabled(DateTime slotUtc) {
+    final now = DateTime.now();
+    if (now.isBefore(slotUtc)) return false;
+    if (widget.isManager) return true;
+    final isPastDay = DateTime(_businessDate.year, _businessDate.month, _businessDate.day)
+        .isBefore(DateTime(now.year, now.month, now.day));
+    if (isPastDay) return false;
+    return now.isBefore(slotUtc.add(const Duration(minutes: 5)));
   }
 
   // ---- 行内操作 ----------------------------------------------------------
@@ -292,18 +310,32 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     });
   }
 
-  // 変化なし一括: 現在スロットを5分前から複製(5分前に記録あり&当該スロット未記入のみ)。
-  Future<void> _classBulkCopy() async {
-    if (_selectedClassId == null) {
-      _snack('クラスを選択してください');
-      return;
-    }
-    final slot = _floor5(DateTime.now());
+  // 列一括: その時刻列(slot)に就寝中の全児へ「各児の直前チェックと同じ体位」で一括記録。
+  // 直前チェックが無い児・当該スロットが既記入の児はスキップ(旧「5分前と同じ」の
+  // “ちょうど5分前が必須”という不具合を避け、隣接に限らず各児の最新の直前記録を複製する)。
+  Future<void> _columnBulk(DateTime slotUtc) async {
+    final rows = _displayRows();
     await _guard(() async {
-      final n = await widget.service.copyPreviousNapChecksForClass(_selectedClassId!, _businessDate, slot);
-      _snack(n > 0
-          ? '$_selectedClassName $n件を「5分前と同じ」で登録しました'
-          : '複製対象がありません(5分前の記録が無いか、すべて記録済みです)');
+      var count = 0;
+      for (final r in rows) {
+        if (r.sessionId == null) continue;
+        if (!_isSleepingAt(r, slotUtc)) continue;
+        if (r.checkAt(slotUtc) != null) continue;
+        final prior = _priorCheck(r, slotUtc);
+        if (prior == null) continue;
+        await widget.service.recordNapCheck(
+          r.sessionId!,
+          slotUtc,
+          bodyPosition: prior.bodyPosition,
+          breathing: prior.breathing,
+          complexion: prior.complexion,
+          bedding: prior.bedding,
+        );
+        count++;
+      }
+      _snack(count > 0
+          ? '$count件を「直前と同じ」で登録しました'
+          : '対象がありません(就寝中で直前チェックのある未記入セルなし)');
     });
   }
 
@@ -340,7 +372,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
   @override
   Widget build(BuildContext context) {
     final rows = _displayRows();
-    final slots = _globalSlots(rows);
+    final slots = _hourSlots(_selectedHour);
     final nowUtc = DateTime.now().toUtc();
     return Scaffold(
       appBar: AppBar(
@@ -374,6 +406,22 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
+                SizedBox(
+                  width: 130,
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _selectedHour,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: '時間帯', isDense: true, border: OutlineInputBorder()),
+                    items: [
+                      for (var h = 0; h < 24; h++)
+                        DropdownMenuItem<int>(value: h, child: Text('${h.toString().padLeft(2, '0')}:00 台')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => _selectedHour = v);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Wrap(
                     alignment: WrapAlignment.end,
@@ -384,8 +432,6 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
                           onPressed: _classBulkStart, icon: const Icon(Icons.bedtime_rounded, size: 16), label: const Text('入眠(一括)')),
                       FilledButton.tonalIcon(
                           onPressed: _classBulkEnd, icon: const Icon(Icons.wb_sunny_rounded, size: 16), label: const Text('起床(一括)')),
-                      OutlinedButton.icon(
-                          onPressed: _classBulkCopy, icon: const Icon(Icons.copy_all_rounded, size: 16), label: const Text('変化なし一括')),
                     ],
                   ),
                 ),
@@ -440,7 +486,29 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
           for (final s in slots)
             SizedBox(
               width: _cellWidth,
-              child: Center(child: Text(_hm(s), style: const TextStyle(fontSize: 10, color: AppColors.textSecondary))),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_hm(s), style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                  const SizedBox(height: 2),
+                  // 列一括: この時刻に就寝中の全児へ、各児の直前チェックと同じ体位で一括記録。
+                  InkWell(
+                    onTap: _columnBulkEnabled(s) ? () => _columnBulk(s) : null,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Opacity(
+                      opacity: _columnBulkEnabled(s) ? 1 : 0.35,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.leafGreen.withValues(alpha: 0.6)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('一括', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.leafGreen)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
         ],
       ),
@@ -502,23 +570,12 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     );
   }
 
-  // 共通軸のセル: 区間内=記録セル(緑/未/—・タップ可)、区間外=薄グレー(タップ不可)。
-  // 午睡チェックのセルが編集可能か。サーバー側 nap_check_authz と同じ判定を UI で先取りし、
-  // 修正不可のセルは編集シートを開かせずグレーアウトする(サーバー側ゲートは現状維持)。
-  // 一般職員: 当日 かつ slot経過 ≤ 30分 のみ。過去日 or 30分超は主任以上のみ。
-  bool _canEditCell(DateTime slotUtc) {
-    if (widget.isManager) return true;
-    final today = DateTime.now();
-    final bd = _businessDate;
-    final isPastDay = DateTime(bd.year, bd.month, bd.day)
-        .isBefore(DateTime(today.year, today.month, today.day));
-    if (isPastDay) return false;
-    return DateTime.now().difference(slotUtc).inMinutes <= 30;
-  }
-
+  // 共通軸のセル: 就寝中=記録セル(緑/未/—・窓内タップ可)、就寝外=薄グレー(空欄)。
   Widget _cell(_RosterRow r, DateTime slot, DateTime nowUtc) {
-    final inInterval = r.intervals.any((iv) => _slotInInterval(iv, slot, nowUtc));
-    if (!inInterval) {
+    final sleeping = _isSleepingAt(r, slot);
+    final check = r.checkAt(slot);
+    // 就寝中でなく記録も無いセルは空欄(記録対象外)。
+    if (!sleeping && check == null) {
       return Container(
         width: _cellWidth,
         height: 34,
@@ -526,7 +583,6 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
         decoration: BoxDecoration(color: AppColors.textSecondary.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(6)),
       );
     }
-    final check = r.checkAt(slot);
     final Color bg;
     final String body;
     if (check != null) {
@@ -540,7 +596,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
       bg = AppColors.textSecondary.withValues(alpha: 0.08);
       body = '—';
     }
-    final editable = _canEditCell(slot);
+    final editable = _cellCanEdit(slot, check != null);
     final cell = Container(
       width: _cellWidth,
       height: 34,

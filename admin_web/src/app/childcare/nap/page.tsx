@@ -31,41 +31,51 @@ function nowHm(): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-// 5分床(UTC整列)。
-function floor5(d: Date): Date {
-  const t = new Date(d);
-  t.setUTCSeconds(0, 0);
-  t.setUTCMinutes(t.getUTCMinutes() - (t.getUTCMinutes() % 5));
-  return t;
-}
-
-// 各睡眠区間 [入眠, min(起床, now, 入眠+4h)] の5分スロットを連結(覚醒中の隙間は含めない)。
-function slotsFor(row: NapSessionRow): Date[] {
-  const now = new Date();
-  const ranges: [Date, Date | null][] =
-    row.intervals.length > 0
-      ? row.intervals.map((i) => [new Date(i.sleep_start_at), i.wake_up_at ? new Date(i.wake_up_at) : null])
-      : row.sleep_start_at
-        ? [[new Date(row.sleep_start_at), row.wake_up_at ? new Date(row.wake_up_at) : null]]
-        : [];
-  const slots: Date[] = [];
-  for (const [start, wake] of ranges) {
-    let first = floor5(start);
-    if (first.getTime() < start.getTime()) first = new Date(first.getTime() + 5 * 60000);
-    const cap = new Date(start.getTime() + 4 * 60 * 60000);
-    const upper = new Date(Math.min(wake ? wake.getTime() : cap.getTime(), now.getTime(), cap.getTime()));
-    for (let t = first; t.getTime() <= upper.getTime(); t = new Date(t.getTime() + 5 * 60000)) slots.push(t);
-  }
-  return slots;
-}
-
 function hm(d: Date): string {
   return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
-// 過去スロットの未チェック判定(Date.now はレンダー本体で呼べないためモジュール関数に隔離)。
-function isPastMissing(check: NapCheck | null, slot: Date): boolean {
-  return !check && slot.getTime() < Date.now();
+// 選択中の時間帯(1時間)の5分スロット12本(HH:00〜HH:55 JST)。
+function hourSlots(businessDate: string, hour: number): Date[] {
+  const hh = String(hour).padStart(2, "0");
+  return Array.from(
+    { length: 12 },
+    (_, i) => new Date(`${businessDate}T${hh}:${String(i * 5).padStart(2, "0")}:00+09:00`),
+  );
+}
+
+// 各睡眠区間を [入眠ms, 起床ms|null] で返す(起床null=就寝中)。
+function sleepRanges(row: NapSessionRow): [number, number | null][] {
+  if (row.intervals.length > 0) {
+    return row.intervals.map((i) => [
+      new Date(i.sleep_start_at).getTime(),
+      i.wake_up_at ? new Date(i.wake_up_at).getTime() : null,
+    ]);
+  }
+  if (row.sleep_start_at) {
+    return [[new Date(row.sleep_start_at).getTime(), row.wake_up_at ? new Date(row.wake_up_at).getTime() : null]];
+  }
+  return [];
+}
+
+// slot時点で就寝中か(いずれかの区間 [入眠,起床) に入る)。
+function isSleepingAt(row: NapSessionRow, slot: Date): boolean {
+  const t = slot.getTime();
+  return sleepRanges(row).some(([s, w]) => t >= s && (w == null || t < w));
+}
+
+// slotより前で最も新しいチェック(列一括の「各児の直前チェック」)。
+function priorCheck(row: NapSessionRow, slot: Date): NapCheck | null {
+  let best: NapCheck | null = null;
+  let bestT = -1;
+  for (const c of row.checks) {
+    const ct = new Date(c.slot_at).getTime();
+    if (ct < slot.getTime() && ct > bestT) {
+      best = c;
+      bestT = ct;
+    }
+  }
+  return best;
 }
 
 // 在籍名簿(クラス選択時=fetch_class_children / 全クラス=fetch_children_for_office)。
@@ -115,25 +125,49 @@ function ChildcareNapPageContent() {
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
   const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice);
   const [businessDate, setBusinessDate] = useState(currentDate());
+  const [selectedHour, setSelectedHour] = useState<number>(new Date().getHours());
   const [rows, setRows] = useState<NapSessionRow[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState<{ row: NapSessionRow; slot: Date; existing: NapCheck | null } | null>(null);
   const [intervalEdit, setIntervalEdit] = useState<{ interval: NapInterval } | null>(null);
   const [roster, setRoster] = useState<RosterChild[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  // 現在時刻(5分窓・30分ルールの判定用)。レンダー中に Date.now() を呼ばないため状態化し、
+  // 30秒ごとに更新して窓の開閉を自動反映する。
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
 
   function showToast(m: string) {
     setToast(m);
     window.setTimeout(() => setToast((c) => (c === m ? null : c)), 3500);
   }
 
-  // 午睡チェックのセルが編集可能か。サーバー側 nap_check_authz と同じ判定を UI で先取りし、
-  // 修正不可のセルは編集モーダルを開かせずグレーアウトする(サーバー側ゲートは現状維持)。
-  // 一般職員: 当日 かつ slot経過 ≤ 30分 のみ。過去日 or 30分超は主任以上のみ。
-  function canEditCell(slot: Date): boolean {
+  // セルの編集可否(サーバー側 nap_check_authz を UI で先取り。サーバー側ゲートは現状維持)。
+  // - 未来のセル(まだ来ていない5分)は誰も記録不可。
+  // - 主任以上: 窓外(過去)も記録・修正可。過去日も可。
+  // - 一般職員 かつ 当日:
+  //     未記入 = 「その5分間」(slot〜slot+5分)のみ記録可。
+  //     記録済 = 記録から30分以内(slot経過で近似)のみ修正可。
+  //   過去日は不可(主任のみ)。
+  function cellCanEdit(slot: Date, hasCheck: boolean): boolean {
+    const s = slot.getTime();
+    if (nowMs < s) return false; // 未来
     if (isManager) return true;
-    if (businessDate < currentDate()) return false; // 過去日
-    return (Date.now() - slot.getTime()) / 60000 <= 30; // 30分ルール
+    if (businessDate < currentDate()) return false; // 過去日=主任のみ
+    if (hasCheck) return (nowMs - s) / 60000 <= 30; // 記録済は30分以内のみ修正
+    return nowMs < s + 5 * 60000; // 未記入は「その5分間」のみ(nowMs>=s は上で保証)
+  }
+
+  // 列一括の可否(未記入セルの記録と同基準)。
+  function columnBulkEnabled(slot: Date): boolean {
+    const s = slot.getTime();
+    if (nowMs < s) return false;
+    if (isManager) return true;
+    if (businessDate < currentDate()) return false;
+    return nowMs < s + 5 * 60000; // 現在の5分窓
   }
 
   // 起床(開いている最終区間に起床時刻を書く)
@@ -237,33 +271,37 @@ function ChildcareNapPageContent() {
     load();
   }, [selectedOffice, selectedClass, businessDate, reloadToken, classes]);
 
-  // 「5分前と同じ(一括)」: 表示中の児のうち、5分前に記録があり現スロット未記入のものをクラス単位で複製(169)。
-  // 全クラス時は、セッションを持つ児の所属クラスごとに複製を呼び集計する。
-  async function classBulkCopy() {
-    const slot = floor5(new Date()).toISOString();
-    const classIds =
-      selectedClass !== ""
-        ? [selectedClass]
-        : Array.from(new Set(rows.map((r) => r.class_id).filter((id): id is string => !!id)));
-    if (classIds.length === 0) {
-      showToast("対象がありません(午睡中の記録がまだありません)");
-      return;
-    }
+  // 在籍名簿 × 午睡セッションのマージ(区間は sleep_start_at 昇順)。
+  const displayRows = buildDisplayRows(roster, rows);
+
+  // 列一括: その時刻列(slot)に就寝中の全児へ「各児の直前チェックと同じ体位」で一括記録。
+  // 直前チェックが無い児・既に当該スロットに記録がある児はスキップ(旧「5分前と同じ」の
+  // “ちょうど5分前が必須”という不具合を避け、隣接に限らず各児の最新の直前記録を複製する)。
+  async function columnBulk(slot: Date) {
     const supabase = createClient();
-    let total = 0;
-    for (const cid of classIds) {
-      const { data, error } = await supabase.rpc("copy_previous_nap_checks_for_class", {
-        p_class_id: cid,
-        p_session_date: businessDate,
-        p_slot_at: slot,
+    let count = 0;
+    for (const row of displayRows) {
+      if (!row.session_id) continue;
+      if (!isSleepingAt(row, slot)) continue; // 就寝中のみ
+      const has = row.checks.some((c) => new Date(c.slot_at).getTime() === slot.getTime());
+      if (has) continue; // 既記入はスキップ
+      const prior = priorCheck(row, slot);
+      if (!prior) continue; // 直前記録が無い児はスキップ
+      const { error } = await supabase.rpc("record_nap_check", {
+        p_session_id: row.session_id,
+        p_slot_at: slot.toISOString(),
+        p_body_position: prior.body_position,
+        p_breathing: prior.breathing,
+        p_complexion: prior.complexion,
+        p_bedding: prior.bedding,
       });
       if (error) {
         showToast(friendlyNapError(error.message));
         return;
       }
-      total += (data as number) ?? 0;
+      count += 1;
     }
-    showToast(total > 0 ? `${total}件を「5分前と同じ」で登録しました` : "対象がありません(5分前の記録がある未記入スロットなし)");
+    showToast(count > 0 ? `${count}件を「直前と同じ」で登録しました` : "対象がありません(就寝中で直前チェックのある未記入セルなし)");
     setReloadToken((t) => t + 1);
   }
 
@@ -296,9 +334,6 @@ function ChildcareNapPageContent() {
       </div>
     );
   }
-
-  // 在籍名簿 × 午睡セッションのマージ(区間は sleep_start_at 昇順)。
-  const displayRows = buildDisplayRows(roster, rows);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -349,99 +384,129 @@ function ChildcareNapPageContent() {
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             />
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={classBulkCopy}
-            className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-          >
-            5分前と同じ(一括)
-          </button>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">時間帯</label>
+            <select
+              value={selectedHour}
+              onChange={(e) => setSelectedHour(Number(e.target.value))}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>
+                  {String(h).padStart(2, "0")}:00 台
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {displayRows.length === 0 && <p className="text-sm text-slate-400">対象の園児がいません。</p>}
 
-        <div className="space-y-3">
-          {displayRows.map((row) => {
-            const slots = slotsFor(row);
-            const lastOpen = row.intervals.find((i) => !i.wake_up_at);
-            const allWoken = row.intervals.length > 0 && row.intervals.every((i) => i.wake_up_at);
-            const notSlept = row.intervals.length === 0;
-            return (
-              <div key={row.child_id} className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
-                  <span>
-                    {row.display_name}
-                    {row.honorific_suffix ?? ""} <span className="text-slate-400">/ {row.class_name}</span>
-                  </span>
-                  {/* 区間(入眠-起床)の一覧・編集・削除。sleep_start_at 昇順。 */}
-                  {row.intervals.map((iv) => (
-                    <span key={iv.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">
-                      {hmLocal(iv.sleep_start_at)}-{iv.wake_up_at ? hmLocal(iv.wake_up_at) : "就寝中"}
-                      <button onClick={() => setIntervalEdit({ interval: iv })} className="text-sky-600 hover:underline">編集</button>
-                      <button onClick={() => deleteInterval(iv)} className="text-red-500 hover:underline">削除</button>
-                    </span>
+        {/* コドモン準拠: 時間帯(1時間)の5分刻み12列グリッド。各列上部に列一括ボタン。 */}
+        {displayRows.length > 0 && (
+          <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+            <table className="min-w-full border-separate border-spacing-0 text-xs">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left font-semibold text-slate-500">
+                    園児 / 区間
+                  </th>
+                  {hourSlots(businessDate, selectedHour).map((slot) => (
+                    <th key={slot.toISOString()} className="px-1 py-2 text-center">
+                      <div className="text-[10px] tabular-nums text-slate-500">{hm(slot)}</div>
+                      <button
+                        onClick={() => columnBulk(slot)}
+                        disabled={!columnBulkEnabled(slot)}
+                        title="この時刻に就寝中の全児へ、各児の直前チェックと同じ体位で一括記録"
+                        className="mt-0.5 rounded border border-indigo-300 bg-indigo-50 px-1 py-0.5 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        一括
+                      </button>
+                    </th>
                   ))}
-                  {/* 状態に応じた操作ボタン: 未入眠=入眠 / 就寝中=起床 / 全て起床済み=再入眠 */}
-                  {notSlept && (
-                    <button onClick={() => addInterval(row.child_id, nowHm())} className="rounded border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50">
-                      入眠(現在時刻)
-                    </button>
-                  )}
-                  {lastOpen && (
-                    <button onClick={() => setWake(lastOpen, nowHm())} className="rounded border border-emerald-300 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50">
-                      起床(現在時刻)
-                    </button>
-                  )}
-                  {allWoken && (
-                    <button onClick={() => addInterval(row.child_id, nowHm())} className="rounded border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50">
-                      再入眠(現在時刻)
-                    </button>
-                  )}
-                </div>
-                {/* 区間があるときのみチェックスロットを表示(区間なしなら上の入眠ボタンのみ) */}
-                {!notSlept && (
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {slots.map((slot) => {
-                      const check = row.checks.find((c) => new Date(c.slot_at).getTime() === slot.getTime()) ?? null;
-                      const pastMissing = isPastMissing(check, slot);
-                      const editable = canEditCell(slot);
-                      return (
-                        <button
-                          key={slot.toISOString()}
-                          disabled={!editable}
-                          onClick={editable ? () => setEditing({ row, slot, existing: check }) : undefined}
-                          title={
-                            !editable
-                              ? "過去日・30分超のため主任以上のみ修正できます"
-                              : check
-                                ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position)
-                                : undefined
-                          }
-                          className={`flex w-14 shrink-0 flex-col items-center overflow-hidden rounded-lg px-1 py-1 text-xs ${
-                            check
-                              ? "bg-emerald-50 text-emerald-700"
-                              : pastMissing
-                                ? "bg-red-50 text-red-600"
-                                : "bg-slate-50 text-slate-400"
-                          } ${editable ? "" : "cursor-not-allowed opacity-40 grayscale"}`}
-                        >
-                          <span className="text-[10px] text-slate-400">{hm(slot)}</span>
-                          {/* セルは固定幅(w-14)。記録内容は短縮表記で格子を崩さない。正式名は title/編集シート/凡例で表示 */}
-                          <span className="truncate font-semibold">
-                            {check ? (NAP_BODY_POSITIONS_SHORT[check.body_position] ?? check.body_position) : pastMissing ? "未" : "—"}
+                </tr>
+              </thead>
+              <tbody>
+                {displayRows.map((row) => {
+                  const lastOpen = row.intervals.find((i) => !i.wake_up_at);
+                  const allWoken = row.intervals.length > 0 && row.intervals.every((i) => i.wake_up_at);
+                  const notSlept = row.intervals.length === 0;
+                  return (
+                    <tr key={row.child_id} className="border-t border-slate-100">
+                      <td className="sticky left-0 z-10 min-w-[16rem] bg-white px-3 py-2 align-top">
+                        <div className="flex flex-wrap items-center gap-1 text-slate-800">
+                          <span className="font-semibold">
+                            {row.display_name}
+                            {row.honorific_suffix ?? ""}
                           </span>
-                        </button>
-                      );
-                    })}
-                    {slots.length === 0 && <span className="text-xs text-slate-400">就寝直後(記録待ち)</span>}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                          <span className="text-slate-400">/ {row.class_name}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {row.intervals.map((iv) => (
+                            <span key={iv.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                              {hmLocal(iv.sleep_start_at)}-{iv.wake_up_at ? hmLocal(iv.wake_up_at) : "就寝中"}
+                              <button onClick={() => setIntervalEdit({ interval: iv })} className="text-sky-600 hover:underline">編集</button>
+                              <button onClick={() => deleteInterval(iv)} className="text-red-500 hover:underline">削除</button>
+                            </span>
+                          ))}
+                          {notSlept && (
+                            <button onClick={() => addInterval(row.child_id, nowHm())} className="rounded border border-sky-300 px-2 py-0.5 text-[11px] text-sky-700 hover:bg-sky-50">
+                              入眠(現在)
+                            </button>
+                          )}
+                          {lastOpen && (
+                            <button onClick={() => setWake(lastOpen, nowHm())} className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50">
+                              起床(現在)
+                            </button>
+                          )}
+                          {allWoken && (
+                            <button onClick={() => addInterval(row.child_id, nowHm())} className="rounded border border-sky-300 px-2 py-0.5 text-[11px] text-sky-700 hover:bg-sky-50">
+                              再入眠(現在)
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      {hourSlots(businessDate, selectedHour).map((slot) => {
+                        const sleeping = isSleepingAt(row, slot);
+                        const check = row.checks.find((c) => new Date(c.slot_at).getTime() === slot.getTime()) ?? null;
+                        // 就寝中でなく記録も無いセルは空欄(記録対象外)。
+                        if (!sleeping && !check) {
+                          return <td key={slot.toISOString()} className="px-1 py-1 text-center text-slate-200">·</td>;
+                        }
+                        const missing = sleeping && !check && slot.getTime() < nowMs;
+                        const editable = cellCanEdit(slot, !!check);
+                        return (
+                          <td key={slot.toISOString()} className="px-1 py-1 text-center">
+                            <button
+                              disabled={!editable}
+                              onClick={editable ? () => setEditing({ row, slot, existing: check }) : undefined}
+                              title={
+                                !editable
+                                  ? "この5分間のみ記録可(過去・30分超は主任以上)"
+                                  : check
+                                    ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position)
+                                    : undefined
+                              }
+                              className={`w-9 rounded px-1 py-1 font-semibold ${
+                                check
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : missing
+                                    ? "bg-red-50 text-red-600"
+                                    : "bg-slate-50 text-slate-400"
+                              } ${editable ? "" : "cursor-not-allowed opacity-40 grayscale"}`}
+                            >
+                              {check ? (NAP_BODY_POSITIONS_SHORT[check.body_position] ?? check.body_position) : missing ? "未" : "—"}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </main>
 
       {editing && (
