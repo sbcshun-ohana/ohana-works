@@ -8,6 +8,7 @@ import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
+import { ChildWeeklyScheduleModal } from "@/components/ChildWeeklyScheduleModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
@@ -28,6 +29,7 @@ function isCurrentlyRequired(row: ChildMasterRow, today: string): boolean {
 
 function ChildcareChildrenPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
   const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [rows, setRows] = useState<ChildMasterRow[]>([]);
@@ -42,6 +44,7 @@ function ChildcareChildrenPageContent() {
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [therapyRow, setTherapyRow] = useState<ChildMasterRow | null>(null);
   const [therapyEnabled, setTherapyEnabled] = useState(false);
+  const [weeklyRow, setWeeklyRow] = useState<ChildMasterRow | null>(null);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -266,6 +269,12 @@ function ChildcareChildrenPageContent() {
                               期間設定
                             </button>
                           )}
+                          <button
+                            onClick={() => setWeeklyRow(row)}
+                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                          >
+                            週次予定
+                          </button>
                           {therapyEnabled && (
                             <button
                               onClick={() => setTherapyRow(row)}
@@ -297,6 +306,15 @@ function ChildcareChildrenPageContent() {
           row={therapyRow}
           officeName={offices?.find((o) => o.office_id === selectedOffice)?.office_name ?? ""}
           onClose={() => setTherapyRow(null)}
+        />
+      )}
+
+      {weeklyRow && (
+        <ChildWeeklyScheduleModal
+          row={weeklyRow}
+          isManager={isManager}
+          onClose={() => setWeeklyRow(null)}
+          onSaved={() => setWeeklyRow(null)}
         />
       )}
 
