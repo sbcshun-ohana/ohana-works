@@ -612,14 +612,24 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
         ),
       ),
     );
+    Widget result;
     if (!editable) {
       // 権限的に修正不可: タップ無効化 + グレーアウト表示。
-      return Opacity(opacity: 0.4, child: cell);
+      result = Opacity(opacity: 0.4, child: cell);
+    } else {
+      result = GestureDetector(
+        onTap: r.sessionId != null ? () => _openCell(r.sessionId!, slot, r) : null,
+        child: cell,
+      );
     }
-    return GestureDetector(
-      onTap: r.sessionId != null ? () => _openCell(r.sessionId!, slot, r) : null,
-      child: cell,
-    );
+    // X4: 記録済セルは長押し/ホバーで記録者名をポップアップ(コドモン準拠)。
+    if (check?.checkedByName != null) {
+      result = Tooltip(
+        message: '${napBodyPositions[check!.bodyPosition] ?? check.bodyPosition} / 記録者: ${check.checkedByName}',
+        child: result,
+      );
+    }
+    return result;
   }
 
   String _hm(DateTime t) {

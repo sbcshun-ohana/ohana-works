@@ -276,6 +276,7 @@ export type NapCheck = {
   complexion: boolean;
   bedding: boolean;
   source: string;
+  checked_by_name?: string | null; // 191で追加。記録者名(セルのツールチップ用)
 };
 
 export type NapInterval = {

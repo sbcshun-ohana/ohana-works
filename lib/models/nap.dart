@@ -26,6 +26,7 @@ class NapCheck {
     required this.complexion,
     required this.bedding,
     required this.source,
+    this.checkedByName,
   });
 
   factory NapCheck.fromJson(Map<String, dynamic> json) => NapCheck(
@@ -35,6 +36,7 @@ class NapCheck {
         complexion: json['complexion'] as bool? ?? false,
         bedding: json['bedding'] as bool? ?? false,
         source: json['source'] as String? ?? 'realtime',
+        checkedByName: json['checked_by_name'] as String?, // 191で追加。記録者名。
       );
 
   final DateTime slotAt;
@@ -43,6 +45,7 @@ class NapCheck {
   final bool complexion;
   final bool bedding;
   final String source;
+  final String? checkedByName;
 }
 
 /// 午睡区間(nap_intervals)。1セッションに複数(複数回午睡)。

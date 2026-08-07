@@ -481,10 +481,10 @@ function ChildcareNapPageContent() {
                               disabled={!editable}
                               onClick={editable ? () => setEditing({ row, slot, existing: check }) : undefined}
                               title={
-                                !editable
-                                  ? "この5分間のみ記録可(過去・30分超は主任以上)"
-                                  : check
-                                    ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position)
+                                check
+                                  ? `${NAP_BODY_POSITIONS[check.body_position] ?? check.body_position}${check.checked_by_name ? ` / 記録者: ${check.checked_by_name}` : ""}`
+                                  : !editable
+                                    ? "この5分間のみ記録可(過去・30分超は主任以上)"
                                     : undefined
                               }
                               className={`w-9 rounded px-1 py-1 font-semibold ${
