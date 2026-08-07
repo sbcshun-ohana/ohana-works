@@ -90,13 +90,19 @@ function ChildcareClassActivitiesPageContent() {
     if (row?.activity_id) return;
 
     const supabase = createClient();
-    const { error } = await supabase.rpc("ensure_class_daily_activity", {
+    const { data: activityId, error } = await supabase.rpc("ensure_class_daily_activity", {
       p_class_id: classId,
       p_business_date: businessDate,
     });
     if (error) {
       setActionError(error.message);
       return;
+    }
+    // 新規作成時は担当者にログイン中職員を既定で自動割当する。すでに他職員が担当の
+    // 場合 claim は 'already assigned to another employee' を返すため握り潰し、既存の
+    // 担当を尊重する(差し替えは「担当者を変更」プルダウン/「自分を担当にする」で可能)。
+    if (activityId) {
+      await supabase.rpc("claim_class_activity", { p_activity_id: activityId as string });
     }
     setReloadToken((t) => t + 1);
   }

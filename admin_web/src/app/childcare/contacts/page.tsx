@@ -60,6 +60,8 @@ function ChildcareContactsPageContent() {
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // 下書き保存済みの合図。保存成功時に時刻を記録し、編集で変わったら消す。
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   function showToast(m: string) {
     setToast(m);
@@ -143,6 +145,7 @@ function ChildcareContactsPageContent() {
       setBathTaken(selectedRow.bath_taken);
       setEditableText(selectedRow.current_text ?? selectedRow.ai_generated_text ?? "");
       setAdminComment("");
+      setLastSavedAt(null); // 別の園児/連絡帳に切り替えたら保存済み合図を消す
     }
     syncForm();
 
@@ -201,7 +204,8 @@ function ChildcareContactsPageContent() {
     setReloadToken((t) => t + 1);
   }
 
-  async function saveContent() {
+  // silent=true: AI生成前や申請前の内部保存。成功トーストは出さない(呼び出し側が出す)。
+  async function saveContent(silent = false) {
     if (!selectedRow?.contact_id) return;
     setIsBusy(true);
     setActionError(null);
@@ -223,8 +227,11 @@ function ChildcareContactsPageContent() {
     setIsBusy(false);
     if (error) {
       setActionError(error.message);
+      showToast(`下書き保存に失敗しました: ${error.message}`);
       return;
     }
+    setLastSavedAt(new Date());
+    if (!silent) showToast("下書きを保存しました");
     setReloadToken((t) => t + 1);
   }
 
@@ -262,7 +269,11 @@ function ChildcareContactsPageContent() {
       .eq("child_id", selectedRow.child_id)
       .eq("business_date", businessDate)
       .maybeSingle();
-    setNapPeriods(((data?.nap_periods ?? []) as { start: string; end: string }[]));
+    // 取込結果は開始時刻の昇順で表示する("HH:MM" のゼロ埋め文字列なので文字列比較で昇順一致)。
+    const imported = ((data?.nap_periods ?? []) as { start: string; end: string }[])
+      .slice()
+      .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""));
+    setNapPeriods(imported);
     if (!selectedRow.contact_id) setReloadToken((t) => t + 1); // 新規作成時は contact_id を取得
     showToast(`午睡${n}件を取り込みました`);
   }
@@ -310,7 +321,7 @@ function ChildcareContactsPageContent() {
     setIsBusy(true);
     setActionError(null);
     // AI生成の前に、その場の入力内容を保存しておく(class_activity/child_contactへの反映のため)。
-    await saveContent();
+    await saveContent(true);
 
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("generate-contact-note", {
@@ -376,15 +387,19 @@ function ChildcareContactsPageContent() {
 
   async function submit() {
     if (!selectedRow?.contact_id) return;
-    await saveContent();
+    setIsBusy(true);
+    await saveContent(true);
     const supabase = createClient();
     const { error } = await supabase.rpc("submit_child_daily_contact", {
       p_contact_id: selectedRow.contact_id,
     });
+    setIsBusy(false);
     if (error) {
       setActionError(error.message);
+      showToast(`承認申請に失敗しました: ${error.message}`);
       return;
     }
+    showToast("承認申請しました");
     setReloadToken((t) => t + 1);
   }
 
@@ -398,8 +413,10 @@ function ChildcareContactsPageContent() {
     });
     if (error) {
       setActionError(error.message);
+      showToast(`承認に失敗しました: ${error.message}`);
       return;
     }
+    showToast("承認しました");
     setReloadToken((t) => t + 1);
   }
 
@@ -414,8 +431,10 @@ function ChildcareContactsPageContent() {
     });
     if (error) {
       setActionError(error.message);
+      showToast(`差し戻しに失敗しました: ${error.message}`);
       return;
     }
+    showToast("差し戻しました");
     setReloadToken((t) => t + 1);
   }
 
@@ -812,6 +831,19 @@ function ChildcareContactsPageContent() {
                         onChange={(e) => setTemperatureMeasuredAt(e.target.value)}
                         className="rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
                       />
+                      <button
+                        type="button"
+                        disabled={!canEditInput}
+                        onClick={() => {
+                          const now = new Date();
+                          const hh = String(now.getHours()).padStart(2, "0");
+                          const mm = String(now.getMinutes()).padStart(2, "0");
+                          setTemperatureMeasuredAt(`${hh}:${mm}`);
+                        }}
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        現在時刻
+                      </button>
                     </div>
                     {temperature !== "" && Number(temperature) >= 37.5 && (
                       <p className="mt-1 text-xs font-medium text-amber-600">
@@ -911,7 +943,7 @@ function ChildcareContactsPageContent() {
                 <div className="flex flex-wrap gap-2 pt-2">
                   {canEditInput && (
                     <button
-                      onClick={saveContent}
+                      onClick={() => saveContent()}
                       disabled={isBusy}
                       className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
                     >
@@ -921,10 +953,17 @@ function ChildcareContactsPageContent() {
                   {canSubmit && (
                     <button
                       onClick={submit}
-                      className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+                      disabled={isBusy}
+                      className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
                     >
                       申請する
                     </button>
+                  )}
+                  {lastSavedAt && (
+                    <span className="self-center text-xs font-medium text-emerald-600">
+                      下書き保存済み(
+                      {lastSavedAt.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })})
+                    </span>
                   )}
                   {isManager && selectedRow.status === "submitted" && (
                     <>

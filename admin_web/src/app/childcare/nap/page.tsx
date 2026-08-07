@@ -112,6 +112,7 @@ function buildDisplayRows(roster: RosterChild[], board: NapSessionRow[]): NapSes
 
 function ChildcareNapPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
   const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice);
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<NapSessionRow[]>([]);
@@ -124,6 +125,15 @@ function ChildcareNapPageContent() {
   function showToast(m: string) {
     setToast(m);
     window.setTimeout(() => setToast((c) => (c === m ? null : c)), 3500);
+  }
+
+  // 午睡チェックのセルが編集可能か。サーバー側 nap_check_authz と同じ判定を UI で先取りし、
+  // 修正不可のセルは編集モーダルを開かせずグレーアウトする(サーバー側ゲートは現状維持)。
+  // 一般職員: 当日 かつ slot経過 ≤ 30分 のみ。過去日 or 30分超は主任以上のみ。
+  function canEditCell(slot: Date): boolean {
+    if (isManager) return true;
+    if (businessDate < currentDate()) return false; // 過去日
+    return (Date.now() - slot.getTime()) / 60000 <= 30; // 30分ルール
   }
 
   // 起床(開いている最終区間に起床時刻を書く)
@@ -396,18 +406,26 @@ function ChildcareNapPageContent() {
                     {slots.map((slot) => {
                       const check = row.checks.find((c) => new Date(c.slot_at).getTime() === slot.getTime()) ?? null;
                       const pastMissing = isPastMissing(check, slot);
+                      const editable = canEditCell(slot);
                       return (
                         <button
                           key={slot.toISOString()}
-                          onClick={() => setEditing({ row, slot, existing: check })}
-                          title={check ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position) : undefined}
+                          disabled={!editable}
+                          onClick={editable ? () => setEditing({ row, slot, existing: check }) : undefined}
+                          title={
+                            !editable
+                              ? "過去日・30分超のため主任以上のみ修正できます"
+                              : check
+                                ? (NAP_BODY_POSITIONS[check.body_position] ?? check.body_position)
+                                : undefined
+                          }
                           className={`flex w-14 shrink-0 flex-col items-center overflow-hidden rounded-lg px-1 py-1 text-xs ${
                             check
                               ? "bg-emerald-50 text-emerald-700"
                               : pastMissing
                                 ? "bg-red-50 text-red-600"
                                 : "bg-slate-50 text-slate-400"
-                          }`}
+                          } ${editable ? "" : "cursor-not-allowed opacity-40 grayscale"}`}
                         >
                           <span className="text-[10px] text-slate-400">{hm(slot)}</span>
                           {/* セルは固定幅(w-14)。記録内容は短縮表記で格子を崩さない。正式名は title/編集シート/凡例で表示 */}

@@ -503,6 +503,19 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
   }
 
   // 共通軸のセル: 区間内=記録セル(緑/未/—・タップ可)、区間外=薄グレー(タップ不可)。
+  // 午睡チェックのセルが編集可能か。サーバー側 nap_check_authz と同じ判定を UI で先取りし、
+  // 修正不可のセルは編集シートを開かせずグレーアウトする(サーバー側ゲートは現状維持)。
+  // 一般職員: 当日 かつ slot経過 ≤ 30分 のみ。過去日 or 30分超は主任以上のみ。
+  bool _canEditCell(DateTime slotUtc) {
+    if (widget.isManager) return true;
+    final today = DateTime.now();
+    final bd = _businessDate;
+    final isPastDay = DateTime(bd.year, bd.month, bd.day)
+        .isBefore(DateTime(today.year, today.month, today.day));
+    if (isPastDay) return false;
+    return DateTime.now().difference(slotUtc).inMinutes <= 30;
+  }
+
   Widget _cell(_RosterRow r, DateTime slot, DateTime nowUtc) {
     final inInterval = r.intervals.any((iv) => _slotInInterval(iv, slot, nowUtc));
     if (!inInterval) {
@@ -527,23 +540,29 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
       bg = AppColors.textSecondary.withValues(alpha: 0.08);
       body = '—';
     }
-    return GestureDetector(
-      onTap: r.sessionId != null ? () => _openCell(r.sessionId!, slot, r) : null,
-      child: Container(
-        width: _cellWidth,
-        height: 34,
-        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-        child: Center(
-          child: Text(
-            body,
-            maxLines: 1,
-            overflow: TextOverflow.clip,
-            softWrap: false,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
+    final editable = _canEditCell(slot);
+    final cell = Container(
+      width: _cellWidth,
+      height: 34,
+      margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+      child: Center(
+        child: Text(
+          body,
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          softWrap: false,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
       ),
+    );
+    if (!editable) {
+      // 権限的に修正不可: タップ無効化 + グレーアウト表示。
+      return Opacity(opacity: 0.4, child: cell);
+    }
+    return GestureDetector(
+      onTap: r.sessionId != null ? () => _openCell(r.sessionId!, slot, r) : null,
+      child: cell,
     );
   }
 
