@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/my_data_service.dart';
+import '../services/push_service.dart';
 import '../theme/app_theme.dart';
 import 'notices/notice_list_screen.dart';
 import 'qr_attendance_screen.dart';
@@ -17,6 +18,8 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   Future<void> _signOut() async {
+    // signOut 前にこの端末のトークンを削除(ログアウト済み端末への誤配防止)。
+    await PushService(Supabase.instance.client).unregisterCurrentDevice();
     await Supabase.instance.client.auth.signOut();
   }
 

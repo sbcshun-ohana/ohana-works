@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/role_display.dart';
+import '../services/push_service.dart';
 import '../services/secure_device_store.dart';
 import '../services/session_identity.dart';
 import '../theme/app_theme.dart';
@@ -49,6 +50,9 @@ class _SessionBannerState extends State<SessionBanner> {
   }
 
   Future<void> _signOut() async {
+    // signOut 後は my_employee_id() が null になり RLS で削除できないため、必ず前に実行。
+    // staff以外(Firebase未初期化)では PushService 側が例外を握りつぶす no-op。
+    await PushService(Supabase.instance.client).unregisterCurrentDevice();
     await Supabase.instance.client.auth.signOut();
   }
 

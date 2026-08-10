@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -17,6 +18,17 @@ const String _appMode = String.fromEnvironment('APP_MODE', defaultValue: 'staff'
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // プッシュ通知は staff 既定モード(個人スマホ)のみ。共有iPad(childcare/kiosk)では初期化しない。
+  // iOS は GoogleService-Info.plist からネイティブ初期化するため options は渡さない。
+  // plist 未配置など初期化失敗時も例外を握りつぶし、アプリ起動は継続する(push無効)。
+  if (_appMode == 'staff') {
+    try {
+      await Firebase.initializeApp();
+    } catch (e) {
+      debugPrint('Firebase init skipped (push disabled): $e');
+    }
+  }
 
   await Supabase.initialize(
     url: SupabaseConfig.url,

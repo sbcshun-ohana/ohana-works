@@ -68,5 +68,9 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>勤怠QRコードの読み取りにカメラを使用します。</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
