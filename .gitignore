@@ -2,6 +2,7 @@
 /secrets/
 parent_app/ios/Runner/GoogleService-Info.plist
 parent_app/android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
 
 # Miscellaneous
 *.class
