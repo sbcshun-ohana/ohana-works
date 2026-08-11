@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// 職員個人スマホ(Ohana Staff=既定モード)のFCMデバイストークン登録。
@@ -31,6 +32,9 @@ class PushService {
   /// onTokenRefresh は多重購読を避けるためアプリ内で一度だけ張る。
   static bool _tokenRefreshWired = false;
 
+  /// ネイティブ(AppDelegate)へ APNs 登録を発火させるチャネル。
+  static const MethodChannel _pushChannel = MethodChannel('ohana/push');
+
   /// 成功時にログへ出す目印(俊の実機確認用にgrepする文字列)。
   static const String _successLog = '[push] device token registered';
 
@@ -53,8 +57,15 @@ class PushService {
       // APNs設定完了後にトークンが生成されると onTokenRefresh 経由でも登録される。
       _wireTokenRefresh(messaging);
 
-      // iOS: APNsトークン設定前の getToken() は apns-token-not-set で失敗するため待つ。
       if (Platform.isIOS) {
+        // APNs登録はポーリングでは始まらない。Firebase初期化後に毎回ネイティブ登録を
+        // 明示発火させる(許可済みなら即座に走り、到着後 getAPNSToken が非nullになる)。
+        try {
+          await _pushChannel.invokeMethod<void>('registerForRemoteNotifications');
+        } catch (e) {
+          debugPrint('[push] registerForRemoteNotifications invoke skipped: $e');
+        }
+        // APNsトークン設定前の getToken() は apns-token-not-set で失敗するため待つ。
         var apns = await messaging.getAPNSToken();
         for (var i = 0; apns == null && i < 20; i++) {
           await Future<void>.delayed(const Duration(seconds: 1));
