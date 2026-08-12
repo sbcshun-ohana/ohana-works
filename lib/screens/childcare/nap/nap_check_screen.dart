@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../models/nap.dart';
 import '../../../services/childcare_service.dart';
+import '../../../widgets/time_dropdown_picker.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
@@ -244,7 +245,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
   // ---- 行内操作 ----------------------------------------------------------
 
   Future<void> _sleep(_RosterRow r) async {
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
     if (t == null) return;
     final dt = _validated(t);
     if (dt == null) return;
@@ -254,7 +255,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
   Future<void> _wake(_RosterRow r) async {
     final open = r.openInterval;
     if (open == null || r.sessionId == null) return;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
     if (t == null) return;
     final dt = _validated(t, after: open.sleepStartAt, afterLabel: '入眠');
     if (dt == null) return;
@@ -263,7 +264,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
 
   Future<void> _reSleep(_RosterRow r) async {
     final lastWake = r.intervals.isNotEmpty ? r.intervals.last.wakeUpAt : null;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
     if (t == null) return;
     final dt = _validated(t, after: lastWake, afterLabel: '前回起床');
     if (dt == null) return;
@@ -281,7 +282,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
       _snack('クラスを選択してください');
       return;
     }
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
     if (t == null) return;
     final dt = _validated(t);
     if (dt == null) return;

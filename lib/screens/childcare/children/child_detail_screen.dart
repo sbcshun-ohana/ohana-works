@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
+import '../../../widgets/time_dropdown_picker.dart';
 import 'child_internal_notes_tab.dart';
 import '../family_daily_report_summary_view.dart';
 
@@ -229,7 +230,7 @@ class _WeeklyScheduleSheetState extends State<_WeeklyScheduleSheet> {
 
   Future<void> _pick(int wd, bool isStart) async {
     final cur = isStart ? _sched[wd]!.start : _sched[wd]!.end;
-    final t = await showTimePicker(context: context, initialTime: cur ?? const TimeOfDay(hour: 9, minute: 0));
+    final t = await showTimeDropdownPicker(context: context, initialTime: cur ?? const TimeOfDay(hour: 9, minute: 0));
     if (t == null) return;
     setState(() {
       final s = _sched[wd]!;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
+import '../../../widgets/time_dropdown_picker.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
@@ -104,7 +105,7 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
   String _hm(String dbTime) => dbTime.length >= 5 ? dbTime.substring(0, 5) : dbTime;
 
   Future<void> _addRecord(({String childId, String nameLabel, String className}) child) async {
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
     if (t == null || !mounted) return;
     final temp = await _pickTemperature();
     if (temp == null) return;
@@ -118,31 +119,28 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
   }
 
   Future<double?> _pickTemperature() async {
-    final controller = TextEditingController(text: '36.5');
+    // 体温は 34.0〜42.0℃ を 0.1 刻みのプルダウンで選択(188のレンジに合わせる。俊確定)。
+    final options = <double>[for (var i = 0; i <= 80; i++) double.parse((34.0 + i * 0.1).toStringAsFixed(1))];
+    double selected = 36.5;
     return showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('体温(℃)'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(hintText: '例: 36.5', suffixText: '℃'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
-          FilledButton(
-            onPressed: () {
-              final v = double.tryParse(controller.text.trim());
-              if (v == null || v < 34.0 || v > 42.0) {
-                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('34.0〜42.0℃で入力してください')));
-                return;
-              }
-              Navigator.pop(ctx, v);
-            },
-            child: const Text('記録'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('体温(℃)'),
+          content: DropdownButton<double>(
+            value: selected,
+            isExpanded: true,
+            items: [
+              for (final v in options)
+                DropdownMenuItem(value: v, child: Text('${v.toStringAsFixed(1)} ℃')),
+            ],
+            onChanged: (v) => setState(() => selected = v ?? selected),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, selected), child: const Text('記録')),
+          ],
+        ),
       ),
     );
   }

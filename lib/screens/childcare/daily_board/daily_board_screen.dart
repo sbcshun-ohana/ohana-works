@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
 import '../../../models/nap.dart';
+import '../../../widgets/time_dropdown_picker.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
@@ -117,7 +118,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   Future<void> _pickAndSchedule(List<String> ids) async {
-    final picked = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 17, minute: 0));
+    final picked = await showTimeDropdownPicker(context: context, initialTime: const TimeOfDay(hour: 17, minute: 0));
     if (picked != null) await _scheduleContacts(ids, hour: picked.hour, minute: picked.minute);
   }
 
@@ -743,7 +744,7 @@ class _ProxyAttendanceSheetState extends State<_ProxyAttendanceSheet> {
   String get _actionLabel => widget.eventType == 'drop_off' ? '登園' : '降園';
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _time);
+    final picked = await showTimeDropdownPicker(context: context, initialTime: _time);
     if (picked != null) setState(() => _time = picked);
   }
 
@@ -1235,7 +1236,7 @@ class _AttendanceEditSheetState extends State<_AttendanceEditSheet> {
 
   static String? _hhmm(TimeOfDay? t) => t == null ? null : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  Future<TimeOfDay?> _pick(TimeOfDay? init) => showTimePicker(context: context, initialTime: init ?? TimeOfDay.now());
+  Future<TimeOfDay?> _pick(TimeOfDay? init) => showTimeDropdownPicker(context: context, initialTime: init ?? TimeOfDay.now());
 
   Future<void> _save() async {
     setState(() => _saving = true);
