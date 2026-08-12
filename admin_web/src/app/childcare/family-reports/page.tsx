@@ -25,7 +25,6 @@ type ReportRow = FamilyDailyReportSummary & {
   children: ChildJoin;
 };
 
-type LatestTemp = { temperature: number; measured_at: string | null };
 
 function fmtTime(t: string | null): string {
   return t ? t.slice(0, 5) : "—";
@@ -45,7 +44,6 @@ function ChildcareFamilyReportsPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<ReportRow[]>([]);
-  const [latestTemps, setLatestTemps] = useState<Record<string, LatestTemp>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
 
@@ -81,30 +79,8 @@ function ChildcareFamilyReportsPageContent() {
       });
   }, [selectedOffice, businessDate]);
 
-  // 園側検温の最新値(188)。
-  useEffect(() => {
-    function load() {
-      if (!selectedOffice) {
-        setLatestTemps({});
-        return null;
-      }
-      return createClient();
-    }
-    const supabase = load();
-    if (!supabase) return;
-    supabase
-      .rpc("fetch_child_latest_temperatures_for_office", {
-        p_office_id: selectedOffice,
-        p_business_date: businessDate,
-      })
-      .then(({ data }) => {
-        const map: Record<string, LatestTemp> = {};
-        for (const r of (data ?? []) as { child_id: string; latest_temperature: number; latest_measured_at: string | null }[]) {
-          map[r.child_id] = { temperature: r.latest_temperature, measured_at: r.latest_measured_at };
-        }
-        setLatestTemps(map);
-      });
-  }, [selectedOffice, businessDate]);
+  // K8方針変更(俊確定): 園側検温は family-reports には出さず、公開時に園→保護者の連絡帳へ
+  // 自動反映する(195/196)。よって「園側検温(最新)」列は廃止。
 
   const filtered = rows;
 
@@ -170,7 +146,6 @@ function ChildcareFamilyReportsPageContent() {
                 <th className="px-3 py-3">睡眠</th>
                 <th className="px-3 py-3">食事(夕/朝)</th>
                 <th className="px-3 py-3">検温(家庭朝)</th>
-                <th className="px-3 py-3">園側検温(最新)</th>
                 <th className="px-3 py-3">迎え</th>
                 <th className="px-3 py-3">子どもの様子</th>
               </tr>
@@ -192,7 +167,6 @@ function ChildcareFamilyReportsPageContent() {
               )}
               {!isLoading &&
                 filtered.map((r) => {
-                  const lt = latestTemps[r.child_id];
                   return (
                     <tr key={r.child_id} className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50">
                       <td className="px-3 py-3 font-medium text-slate-800">
@@ -218,15 +192,6 @@ function ChildcareFamilyReportsPageContent() {
                       <td className="px-3 py-3 text-slate-600">
                         {r.temperature != null ? `${r.temperature.toFixed(1)}℃` : "—"}
                         {r.temperature_measured_at ? `(${fmtTime(r.temperature_measured_at)})` : ""}
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">
-                        {lt ? (
-                          <span className={lt.temperature >= 37.5 ? "font-semibold text-amber-600" : ""}>
-                            {Number(lt.temperature).toFixed(1)}℃{lt.measured_at ? `(${fmtTime(lt.measured_at)})` : ""}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         {r.pickup_person_name

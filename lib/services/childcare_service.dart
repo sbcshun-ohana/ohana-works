@@ -696,6 +696,37 @@ class ChildcareService {
     });
   }
 
+  /// 排便記録の取得(194 fetch_toileting_records)。連絡帳の toileting_records と同一実体。
+  Future<List<({String time, String type})>> fetchToiletingRecords(String childId, DateTime businessDate) async {
+    final data = await _client.rpc('fetch_toileting_records', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    return (data as List).map((e) {
+      final m = e as Map<String, dynamic>;
+      return (time: (m['time'] as String?) ?? '', type: (m['type'] as String?) ?? '');
+    }).toList();
+  }
+
+  /// 排便記録の追加(194 add_toileting_record)。timeは "HH:MM"。
+  Future<void> addToiletingRecord(String childId, DateTime businessDate, String time, String type) async {
+    await _client.rpc('add_toileting_record', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_time': time,
+      'p_type': type,
+    });
+  }
+
+  /// 排便記録の削除(194 delete_toileting_record)。indexは toileting_records 配列の位置。
+  Future<void> deleteToiletingRecord(String childId, DateTime businessDate, int index) async {
+    await _client.rpc('delete_toileting_record', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_index': index,
+    });
+  }
+
   /// 検温一覧(188)。園児×記録時刻の行。
   Future<List<ChildTemperatureRecord>> fetchChildTemperaturesForOffice(String officeId, DateTime businessDate) async {
     final rows = await _client.rpc('fetch_child_temperatures_for_office', params: {

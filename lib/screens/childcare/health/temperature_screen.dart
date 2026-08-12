@@ -145,6 +145,26 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
     );
   }
 
+  // 排便(排泄)記録の性状。連絡帳の排泄欄(admin_web TOILETING_TYPES)と同一。
+  static const List<String> _toiletingTypes = ['普通', '軟便', '硬便', '下痢便'];
+
+  // 排便記録シート: 当日の記録を fetch し、時/分+性状プルダウンで追記・削除(194 RPC)。
+  // データは連絡帳の toileting_records と同一実体(二重管理なし)。
+  Future<void> _openToiletingSheet(({String childId, String nameLabel, String className}) child) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ToiletingSheet(
+        service: widget.service,
+        childId: child.childId,
+        nameLabel: child.nameLabel,
+        businessDate: _businessDate,
+        canEdit: _canEdit,
+        toiletingTypes: _toiletingTypes,
+      ),
+    );
+  }
+
   Future<void> _deleteRecord(String childId, ChildTemperatureRecord rec) async {
     if (!await _confirm('${_hm(rec.measuredAt)} ${rec.temperature}℃ を削除しますか?')) return;
     try {
@@ -248,16 +268,27 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
                                               visualDensity: VisualDensity.compact,
                                             ),
                                           if (recs.isEmpty)
-                                            const Text('未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                            const Text('検温 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                                         ],
                                       ),
                                     ),
-                                    if (_canEdit)
-                                      OutlinedButton.icon(
-                                        onPressed: () => _addRecord(child),
-                                        icon: const Icon(Icons.add, size: 16),
-                                        label: const Text('記録'),
-                                      ),
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (_canEdit)
+                                          OutlinedButton.icon(
+                                            onPressed: () => _addRecord(child),
+                                            icon: const Icon(Icons.add, size: 16),
+                                            label: const Text('検温'),
+                                          ),
+                                        const SizedBox(height: 4),
+                                        OutlinedButton.icon(
+                                          onPressed: () => _openToiletingSheet(child),
+                                          icon: const Icon(Icons.wc_rounded, size: 16),
+                                          label: const Text('排便'),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -267,6 +298,150 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
                       ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 排便記録シート(194 RPC)。当日の記録を一覧・時/分+性状プルダウンで追記・削除。
+/// データは連絡帳の child_daily_contacts.toileting_records と同一実体。
+class _ToiletingSheet extends StatefulWidget {
+  const _ToiletingSheet({
+    required this.service,
+    required this.childId,
+    required this.nameLabel,
+    required this.businessDate,
+    required this.canEdit,
+    required this.toiletingTypes,
+  });
+
+  final ChildcareService service;
+  final String childId;
+  final String nameLabel;
+  final DateTime businessDate;
+  final bool canEdit;
+  final List<String> toiletingTypes;
+
+  @override
+  State<_ToiletingSheet> createState() => _ToiletingSheetState();
+}
+
+class _ToiletingSheetState extends State<_ToiletingSheet> {
+  List<({String time, String type})> _records = const [];
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final r = await widget.service.fetchToiletingRecords(widget.childId, widget.businessDate);
+      if (mounted) setState(() { _records = r; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _snack(String m) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _add() async {
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null || !mounted) return;
+    final type = await _pickType();
+    if (type == null) return;
+    final hhmm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    setState(() => _busy = true);
+    try {
+      await widget.service.addToiletingRecord(widget.childId, widget.businessDate, hhmm, type);
+      await _load();
+    } catch (_) {
+      _snack('記録に失敗しました(過去日・公開後は主任以上)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<String?> _pickType() {
+    String selected = widget.toiletingTypes.first;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('便の性状'),
+          content: DropdownButton<String>(
+            value: selected,
+            isExpanded: true,
+            items: [for (final t in widget.toiletingTypes) DropdownMenuItem(value: t, child: Text(t))],
+            onChanged: (v) => setState(() => selected = v ?? selected),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, selected), child: const Text('記録')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _delete(int index) async {
+    setState(() => _busy = true);
+    try {
+      await widget.service.deleteToiletingRecord(widget.childId, widget.businessDate, index);
+      await _load();
+    } catch (_) {
+      _snack('削除に失敗しました(過去日・公開後は主任以上)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('排便記録 — ${widget.nameLabel}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                if (widget.canEdit)
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _add,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('追加'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_loading)
+              const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+            else if (_records.isEmpty)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('記録はありません', style: TextStyle(color: AppColors.textSecondary)))
+            else
+              ..._records.asMap().entries.map((e) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.wc_rounded, color: AppColors.skyBlue),
+                    title: Text('${e.value.time}  ${e.value.type}'),
+                    trailing: widget.canEdit
+                        ? IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                            onPressed: _busy ? null : () => _delete(e.key),
+                          )
+                        : null,
+                  )),
+          ],
+        ),
       ),
     );
   }
