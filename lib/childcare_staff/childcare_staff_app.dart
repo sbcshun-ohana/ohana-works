@@ -32,7 +32,15 @@ class ChildcareStaffApp extends StatelessWidget {
         child: Column(
           children: [
             SafeArea(bottom: false, child: const SessionBanner()),
-            Expanded(child: child ?? const SizedBox.shrink()),
+            // 上部SafeAreaが消費したtop insetを子から除去(二重計上によるY1オーバーフロー回避。
+            // staffアプリ main.dart と同一対処)。
+            Expanded(
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
           ],
         ),
       ),
@@ -51,11 +59,16 @@ class _ChildcareStaffAuthGate extends StatelessWidget {
 
     return StreamBuilder<AuthState>(
       stream: auth.onAuthStateChange,
-      initialData: AuthState(AuthChangeEvent.initialSession, auth.currentSession),
+      initialData: AuthState(
+        AuthChangeEvent.initialSession,
+        auth.currentSession,
+      ),
       builder: (context, snapshot) {
         final session = snapshot.data?.session ?? auth.currentSession;
         if (session != null) {
-          return _ChildcareRootRouter(service: ChildcareService(Supabase.instance.client));
+          return _ChildcareRootRouter(
+            service: ChildcareService(Supabase.instance.client),
+          );
         }
         return const _ChildcareLoginRouter();
       },
@@ -87,7 +100,9 @@ class _ChildcareRootRouterState extends State<_ChildcareRootRouter> {
     try {
       final offices = await widget.service.fetchMyChildcareOffices();
       for (final office in offices) {
-        if (await widget.service.isChildcareHomeEnabled(office.officeId)) return true;
+        if (await widget.service.isChildcareHomeEnabled(office.officeId)) {
+          return true;
+        }
       }
     } catch (_) {
       // 取得失敗は安全側=従来メニュー。
@@ -101,7 +116,9 @@ class _ChildcareRootRouterState extends State<_ChildcareRootRouter> {
       future: _homeEnabledFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
         if (snapshot.data == true) {
           return ChildcareHomeScreen(service: widget.service);
@@ -141,14 +158,27 @@ class _ChildcareLoginRouterState extends State<_ChildcareLoginRouter> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('管理者から受け取った端末コードを入力してください。', style: TextStyle(fontSize: 13)),
+            const Text(
+              '管理者から受け取った端末コードを入力してください。',
+              style: TextStyle(fontSize: 13),
+            ),
             const SizedBox(height: 8),
-            TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: '端末コード')),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '端末コード'),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('キャンセル')),
-          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('登録')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('登録'),
+          ),
         ],
       ),
     );
@@ -163,7 +193,9 @@ class _ChildcareLoginRouterState extends State<_ChildcareLoginRouter> {
       }
     } on DevicePairingException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -174,7 +206,9 @@ class _ChildcareLoginRouterState extends State<_ChildcareLoginRouter> {
       future: _deviceFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
         final device = snapshot.data;
         if (device != null && !_forceEmail) {
@@ -186,7 +220,9 @@ class _ChildcareLoginRouterState extends State<_ChildcareLoginRouter> {
         // メール+パスワード。未登録端末は「この端末を登録」、登録端末は「PINログインに戻る」を出す。
         return LoginScreen(
           footer: TextButton(
-            onPressed: device != null ? () => setState(() => _forceEmail = false) : _pairDevice,
+            onPressed: device != null
+                ? () => setState(() => _forceEmail = false)
+                : _pairDevice,
             child: Text(device != null ? '← PINログインに戻る' : 'この端末を保育業務端末として登録'),
           ),
         );

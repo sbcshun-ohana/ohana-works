@@ -14,7 +14,10 @@ import 'widgets/session_banner.dart';
 /// 未指定時は職員個人スマホ向けアプリ(既定)。職員アプリ・キオスクアプリ・保育業務アプリは
 /// 同一コードベースの別flavor相当で、利用シーン(個人スマホ/受付iPad/保育業務iPad)が
 /// 異なるため同じ画面には混在させない。
-const String _appMode = String.fromEnvironment('APP_MODE', defaultValue: 'staff');
+const String _appMode = String.fromEnvironment(
+  'APP_MODE',
+  defaultValue: 'staff',
+);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,7 +59,16 @@ class MyApp extends StatelessWidget {
       builder: (context, child) => Column(
         children: [
           SafeArea(bottom: false, child: const SessionBanner()),
-          Expanded(child: child ?? const SizedBox.shrink()),
+          // 上部SafeAreaが消費したtop inset(ステータスバー/ダイナミックアイランド)を
+          // 子から除去する。除去しないと内側ScaffoldのAppBarが同じtop paddingを二重計上し、
+          // その分だけ全画面で下端がはみ出す(Y1: Bottom Overflow)。
+          Expanded(
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
         ],
       ),
       home: const AuthGate(),
