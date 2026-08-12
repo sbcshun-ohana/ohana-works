@@ -142,6 +142,20 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 isManager: office.isManager,
               )),
             ),
+            // 週次予定(標準保育時間・園児単位)。発見性のため home に導線を新設(俊確定)。
+            // 園内記録と同じく新規画面は作らず、デイリーボード→園児行→園児詳細(AppBar 週次アイコン)の
+            // 既存導線に乗せる。デイリーボードで対象園児を選ぶ。
+            _HomeTile(
+              icon: Icons.event_repeat_rounded,
+              color: AppColors.leafGreen,
+              label: '週次予定',
+              onTap: () => _push(DailyBoardScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
+                isManager: office.isManager,
+              )),
+            ),
             _HomeTile(
               icon: Icons.mark_email_unread_rounded,
               color: AppColors.warmOrange,
