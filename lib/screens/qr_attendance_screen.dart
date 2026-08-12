@@ -74,7 +74,10 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
         _isLoading = false;
       });
       final untilRefresh = token.remaining - const Duration(seconds: 10);
-      _autoRefreshTimer = Timer(untilRefresh.isNegative ? Duration.zero : untilRefresh, _refreshToken);
+      _autoRefreshTimer = Timer(
+        untilRefresh.isNegative ? Duration.zero : untilRefresh,
+        _refreshToken,
+      );
     } on QrAttendanceException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -91,55 +94,68 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('勤怠QR')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'iPadにQRをかざしてください',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+      // QR(260px)+文言+ボタンが縦に収まらない端末でもはみ出さずスクロールする(Y1)。
+      // 収まる場合は中央寄せを維持。home_screen と同方針。
+      body: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'iPadにQRをかざしてください',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: 260,
+                          height: 260,
+                          child: _buildQrArea(token, isExpired),
+                        ),
+                        const SizedBox(height: 20),
+                        if (token != null &&
+                            !_isLoading &&
+                            _errorMessage == null)
+                          Text(
+                            isExpired
+                                ? '更新中です…'
+                                : '残り${token.remaining.inSeconds}秒で自動更新',
+                            style: TextStyle(
+                              color: isExpired
+                                  ? Colors.redAccent
+                                  : AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: _isLoading ? null : _refreshToken,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('QRを更新'),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: 260,
-                    height: 260,
-                    child: _buildQrArea(token, isExpired),
-                  ),
-                  const SizedBox(height: 20),
-                  if (token != null && !_isLoading && _errorMessage == null)
-                    Text(
-                      isExpired ? '更新中です…' : '残り${token.remaining.inSeconds}秒で自動更新',
-                      style: TextStyle(
-                        color: isExpired
-                            ? Colors.redAccent
-                            : AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  if (_errorMessage != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _refreshToken,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('QRを更新'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
