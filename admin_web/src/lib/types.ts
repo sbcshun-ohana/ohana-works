@@ -382,8 +382,15 @@ export type ParentRequestRow = {
   guardian_name: string;
   request_type: "absence" | "tardiness" | "early_leave" | "pickup_person_change" | "other";
   target_date: string;
+  end_date: string | null;
+  absence_kind: "sick_absence" | "personal_absence" | null;
   details: Record<string, unknown>;
   created_at: string;
+};
+
+export const ABSENCE_KIND_LABELS: Record<"sick_absence" | "personal_absence", string> = {
+  sick_absence: "病気",
+  personal_absence: "家庭の都合",
 };
 
 export const PARENT_REQUEST_TYPE_LABELS: Record<ParentRequestRow["request_type"], string> = {

@@ -123,7 +123,11 @@ class _ParentRequestListScreenState extends State<ParentRequestListScreen> {
                       ),
                     ),
                     title: Text(parentRequestTypeLabels[request.requestType] ?? request.requestType),
-                    subtitle: Text('対象日: ${_formatDate(request.targetDate)}'),
+                    subtitle: Text(
+                      '対象日: ${_formatDate(request.targetDate)}'
+                      '${request.endDate != null ? '〜${_formatDate(request.endDate!)}' : ''}'
+                      '${request.absenceKind != null ? ' ・${absenceKindLabels[request.absenceKind] ?? ''}' : ''}',
+                    ),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(

@@ -80,7 +80,9 @@ class _ParentRequestDetailScreenState extends State<ParentRequestDetailScreen> {
                     Row(
                       children: [
                         Text(
-                          '対象日: ${request.targetDate.year}/${request.targetDate.month}/${request.targetDate.day}',
+                          '対象日: ${request.targetDate.year}/${request.targetDate.month}/${request.targetDate.day}'
+                          '${request.endDate != null ? '〜${request.endDate!.year}/${request.endDate!.month}/${request.endDate!.day}' : ''}'
+                          '${request.absenceKind != null ? '(${absenceKindLabels[request.absenceKind] ?? ''})' : ''}',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const Spacer(),

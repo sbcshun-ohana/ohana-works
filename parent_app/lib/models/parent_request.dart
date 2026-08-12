@@ -11,6 +11,8 @@ class ParentRequest {
     required this.childId,
     required this.requestType,
     required this.targetDate,
+    this.endDate,
+    this.absenceKind,
     required this.details,
     required this.status,
     this.decisionReason,
@@ -22,6 +24,8 @@ class ParentRequest {
         childId: json['child_id'] as String,
         requestType: json['request_type'] as String,
         targetDate: DateTime.parse(json['target_date'] as String),
+        endDate: json['end_date'] != null ? DateTime.parse(json['end_date'] as String) : null,
+        absenceKind: json['absence_kind'] as String?,
         details: (json['details'] as Map<String, dynamic>?) ?? const {},
         status: json['status'] as String,
         decisionReason: json['decision_reason'] as String?,
@@ -32,6 +36,12 @@ class ParentRequest {
   final String childId;
   final String requestType;
   final DateTime targetDate;
+
+  /// 欠席の期間指定(終了日)。null=単日(target_date のみ)。
+  final DateTime? endDate;
+
+  /// 欠席種別。'sick_absence'(病気)/'personal_absence'(家庭の都合)。absence 申請のみ。
+  final String? absenceKind;
   final Map<String, dynamic> details;
   final String status;
   final String? decisionReason;
@@ -39,6 +49,12 @@ class ParentRequest {
 
   bool get isPending => status == 'pending';
 }
+
+/// 欠席種別の表示ラベル(absence_kind → 日本語)。
+const absenceKindLabels = {
+  'sick_absence': '病気',
+  'personal_absence': '家庭の都合',
+};
 
 const parentRequestTypeLabels = {
   'absence': '欠席',

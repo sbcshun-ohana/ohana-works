@@ -531,12 +531,16 @@ class GuardianService {
     required String requestType,
     required DateTime targetDate,
     required Map<String, dynamic> details,
+    DateTime? endDate,
+    String? absenceKind,
   }) async {
     await _client.from('parent_requests').insert({
       'child_id': childId,
       'guardian_id': guardianId,
       'request_type': requestType,
       'target_date': _formatDate(targetDate),
+      if (endDate != null) 'end_date': _formatDate(endDate),
+      'absence_kind': ?absenceKind,
       'details': details,
     });
   }

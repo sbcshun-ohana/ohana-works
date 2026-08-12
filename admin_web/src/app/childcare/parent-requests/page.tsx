@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import type { ParentRequestRow } from "@/lib/types";
-import { PARENT_REQUEST_TYPE_LABELS } from "@/lib/types";
+import { PARENT_REQUEST_TYPE_LABELS, ABSENCE_KIND_LABELS } from "@/lib/types";
 
 function ChildcareParentRequestsPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
@@ -131,6 +131,8 @@ function ChildcareParentRequestsPageContent() {
                   </h3>
                   <p className="text-xs text-slate-500">
                     申請者: {req.guardian_name} ・ 対象日: {req.target_date}
+                    {req.end_date ? `〜${req.end_date}` : ""}
+                    {req.absence_kind ? ` ・${ABSENCE_KIND_LABELS[req.absence_kind]}` : ""}
                   </p>
                 </div>
                 <p className="text-xs text-slate-400">

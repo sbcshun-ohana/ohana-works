@@ -29,6 +29,10 @@ class NewParentRequestScreen extends StatefulWidget {
 class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   String _requestType = 'absence';
   DateTime _targetDate = DateTime.now();
+  // 欠席の期間(任意・終了日)と種別(必須)。終了日は target_date 以降31日以内(DBのCHECKに一致)。
+  DateTime? _endDate;
+  String? _absenceKind; // 'sick_absence' | 'personal_absence'
+  static const int _absenceMaxSpanDays = 31;
   final _reasonController = TextEditingController();
   final _otherMessageController = TextEditingController();
   TimeOfDay? _time;
@@ -65,7 +69,26 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
       firstDate: DateTime.now().subtract(const Duration(days: 7)),
       lastDate: DateTime.now().add(const Duration(days: 90)),
     );
-    if (picked != null) setState(() => _targetDate = picked);
+    if (picked != null) {
+      setState(() {
+        _targetDate = picked;
+        // 開始日を変えたら、範囲外になった終了日はクリア(単日へ戻す)。
+        if (_endDate != null &&
+            (_endDate!.isBefore(_targetDate) ||
+                _endDate!.isAfter(_targetDate.add(const Duration(days: _absenceMaxSpanDays))))) {
+          _endDate = null;
+        }
+      });
+    }
+  }
+
+  // 欠席の終了日(任意)。target_date 以降・31日以内のみ選択可(DBのCHECKに合わせフォームで制限)。
+  Future<void> _pickEndDate() async {
+    final first = _targetDate;
+    final last = _targetDate.add(const Duration(days: _absenceMaxSpanDays));
+    final init = (_endDate != null && !_endDate!.isBefore(first) && !_endDate!.isAfter(last)) ? _endDate! : first;
+    final picked = await showDatePicker(context: context, initialDate: init, firstDate: first, lastDate: last);
+    if (picked != null) setState(() => _endDate = picked);
   }
 
   Future<void> _pickTime() async {
@@ -108,6 +131,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   }
 
   String? _validate() {
+    if (_requestType == 'absence' && _absenceKind == null) {
+      return '欠席の種別(病気・家庭の都合)を選択してください';
+    }
     if (_requestType == 'pickup_person_change' && _pickupNameController.text.trim().isEmpty) {
       return 'お迎えの方の氏名を入力してください';
     }
@@ -134,6 +160,8 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
         requestType: _requestType,
         targetDate: _targetDate,
         details: _buildDetails(),
+        endDate: _requestType == 'absence' ? _endDate : null,
+        absenceKind: _requestType == 'absence' ? _absenceKind : null,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
@@ -251,6 +279,38 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
       case 'absence':
       default:
         return [
+          const Text('欠席の種別', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: _absenceKind,
+            decoration: const InputDecoration(hintText: '病気 / 家庭の都合 を選択'),
+            items: absenceKindLabels.entries
+                .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                .toList(),
+            onChanged: (v) => setState(() => _absenceKind = v),
+          ),
+          const SizedBox(height: 20),
+          const Text('終了日(任意・連続で休む場合)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 4),
+          const Text('未指定なら対象日1日のみ。最大31日先まで。', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _pickEndDate,
+                icon: const Icon(Icons.event_rounded),
+                label: Text(_endDate == null
+                    ? '終了日を選択'
+                    : '${_endDate!.year}/${_endDate!.month}/${_endDate!.day}'),
+              ),
+              if (_endDate != null)
+                TextButton(
+                  onPressed: () => setState(() => _endDate = null),
+                  child: const Text('クリア'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
           _reasonField('理由(任意)'),
           const SizedBox(height: 12),
           CheckboxListTile(
