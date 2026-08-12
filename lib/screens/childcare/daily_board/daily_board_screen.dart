@@ -1127,13 +1127,14 @@ class _AttendanceTimeBar extends StatelessWidget {
 
     if (schedS == null && arr == null) return const SizedBox.shrink();
 
-    final startCand = <int>[?schedS, ?arr];
-    final endCand = <int>[?schedE, ?actEnd];
-    var winStart = startCand.isEmpty ? 8 * 60 : startCand.reduce((a, b) => a < b ? a : b);
-    var winEnd = endCand.isEmpty ? 18 * 60 : endCand.reduce((a, b) => a > b ? a : b);
-    if (winEnd <= winStart) winEnd = winStart + 60;
-    final span = winEnd - winStart;
-    double frac(int m) => ((m - winStart) / span).clamp(0.0, 1.0);
+    // K6再設計(俊確定): 行ごとの相対スケールをやめ、1日固定の絶対時間軸(07:00-19:00)に統一。
+    // 全園児が同一スケールになり「早く来た子はバー開始が左」「早く帰った子はバーが短い」と
+    // 誰がどの時間帯に在園したかを縦並びで比較できる。予定(薄)も実績(濃)も同じ軸に乗る。
+    // 窓外(早朝・夜間)はクランプ。admin_web の AttendanceTimeBar と同一レンジ。
+    const winStart = 7 * 60; // 07:00
+    const winEnd = 19 * 60; // 19:00
+    const span = winEnd - winStart;
+    double frac(int m) => ((m.clamp(winStart, winEnd) - winStart) / span).toDouble();
 
     final actualLabel = arr == null
         ? ''

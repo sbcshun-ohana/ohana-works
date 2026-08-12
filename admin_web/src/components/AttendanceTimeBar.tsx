@@ -74,8 +74,10 @@ export function AttendanceTimeBar({
     return <span className="text-xs text-slate-300">—</span>;
   }
 
-  // 実績の右端: 降園済みなら departure、未降園なら日窓の右端(進行中)。
-  const actualEnd = dep ?? DAY_END_MIN;
+  // 実績の右端: 降園済みなら departure、未降園(進行中)なら現在時刻(JST)まで伸ばす
+  // (俊確定: K6再設計。日窓右端19:00で固定せず「今どこまで在園中か」を絶対軸で示す)。19:00でクランプ。
+  const nowMin = tzToJstMinutes(new Date().toISOString()) ?? DAY_END_MIN;
+  const actualEnd = dep ?? Math.min(nowMin, DAY_END_MIN);
 
   // 中抜け(外出→戻り)の白抜き区間。戻り未登録なら実績右端まで外出中。
   const gapStart = out;
