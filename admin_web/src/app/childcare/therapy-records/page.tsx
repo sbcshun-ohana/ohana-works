@@ -96,6 +96,8 @@ function ChildcareTherapyRecordsContent() {
   const [reload, setReload] = useState(0);
   const [adding, setAdding] = useState(false);
   const [managingProviders, setManagingProviders] = useState(false);
+  // 手動追加モーダル用: 療育設定のある園児(記録0件でも出す)。記録由来の children とは別。
+  const [therapyChildren, setTherapyChildren] = useState<[string, string][]>([]);
 
   useEffect(() => {
     function loadFlag() {
@@ -123,6 +125,33 @@ function ChildcareTherapyRecordsContent() {
     for (const r of records) m.set(r.child_id, `${r.display_name}${r.honorific_suffix ?? ""}`);
     return Array.from(m.entries());
   }, [records]);
+
+  // 手動追加・修正の園児候補: 施設の園児のうち療育設定(child_therapy_settings)がある者。
+  // 記録由来(children)だと記録0件の適用済み園児が選べない循環バグになるため別ソースにする。
+  useEffect(() => {
+    async function loadTherapyChildren() {
+      if (!selectedOffice) {
+        setTherapyChildren([]);
+        return;
+      }
+      const client = createClient();
+      const { data: kids } = await client.rpc("fetch_children_for_office_master", { p_office_id: selectedOffice });
+      const officeChildren = (kids ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null }[];
+      const ids = officeChildren.map((k) => k.child_id);
+      if (ids.length === 0) {
+        setTherapyChildren([]);
+        return;
+      }
+      const { data: settings } = await client.from("child_therapy_settings").select("child_id").in("child_id", ids);
+      const eligible = new Set((settings ?? []).map((s) => (s as { child_id: string }).child_id));
+      setTherapyChildren(
+        officeChildren
+          .filter((k) => eligible.has(k.child_id))
+          .map((k) => [k.child_id, `${k.display_name}${k.honorific_suffix ?? ""}`] as [string, string]),
+      );
+    }
+    void loadTherapyChildren();
+  }, [selectedOffice, reload]);
 
   const pairs = useMemo(() => {
     const filtered = childFilter ? records.filter((r) => r.child_id === childFilter) : records;
@@ -270,7 +299,7 @@ function ChildcareTherapyRecordsContent() {
       {adding && (
         <TherapyManualAddModal
           officeId={selectedOffice}
-          childOptions={children}
+          childOptions={therapyChildren}
           onClose={() => setAdding(false)}
           onSaved={() => {
             setAdding(false);
