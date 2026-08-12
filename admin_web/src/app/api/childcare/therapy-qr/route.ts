@@ -30,7 +30,9 @@ async function generateCardPdf(input: {
   doc.on("data", (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
 
-  doc.fontSize(11).fillColor("#7A5FC0").text("療育送迎用", { align: "center" });
+  // 玄関/受け渡しで他者の目に触れうる物理カード。機微配慮で「療育」語を出さず「送迎用」とする
+  // (俊承認 2026-08-12)。事業所名・園児名・園名・発行日は取り違え防止のため維持。
+  doc.fontSize(11).fillColor("#7A5FC0").text("送迎用", { align: "center" });
   doc.moveDown(0.3);
   doc.fontSize(16).fillColor("#000").text(input.childName, { align: "center" });
   doc.moveDown(0.2);

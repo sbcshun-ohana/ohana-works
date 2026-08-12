@@ -1,3 +1,5 @@
+import '../therapy_strings.dart';
+
 /// 療育QR読取(resolve-therapy-qr)の結果。accepted=false のときは message に理由が入る。
 class TherapyQrResolution {
   const TherapyQrResolution({
@@ -28,16 +30,17 @@ class TherapyQrResolution {
   final DateTime? occurredAt;
   final String? message;
 
-  /// キオスク表示メッセージ(§3.3)。
+  /// キオスク表示メッセージ(§3.3)。玄関設置のため機微情報(療育の語・事業所名・拒否理由)は出さない。
   String get displayMessage {
-    if (!accepted) return message ?? '処理できませんでした';
+    // 拒否は reason に関わらず(既知/未知を問わず)常に統一文言。生のサーバ message は返さない。
+    if (!accepted) return TherapyKioskStrings.rejected;
     final name = '${childName ?? ''}${honorificSuffix ?? ''}';
     final t = occurredAt?.toLocal();
     final hm = t != null
         ? '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'
         : '';
-    final action = eventType == 'out' ? '療育外出' : 'おかえりなさい';
-    final provider = providerName != null ? '($providerName)' : '';
-    return '$name $action $hm $provider';
+    // 事業所名は出さない。園児名+動作+時刻のみ。
+    final action = eventType == 'out' ? TherapyKioskStrings.outAction : TherapyKioskStrings.returnAction;
+    return '$name $action $hm'.trimRight();
   }
 }
