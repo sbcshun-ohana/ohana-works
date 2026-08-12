@@ -5,7 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const FONT_PATH = path.join(process.cwd(), "src/assets/fonts/NotoSansJP-Regular.woff2");
+// woff2 は pdfkit でサブセット化に失敗し日本語が描画されない(白紙)。TTF/OTF を使う。
+// (therapy-qr/route.ts と同一の理由・同一フォント)
+const FONT_PATH = path.join(process.cwd(), "src/assets/fonts/NotoSansJP-Regular.ttf");
 
 type Row = {
   childName: string;

@@ -24,6 +24,10 @@ export function ChildTherapySettingModal({ row, officeName, onClose }: Props) {
   const [newProviderName, setNewProviderName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // 期間編集(既存行の開始日・終了日を変更。権限は追加/削除と同格=主任以上)。
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
 
   useEffect(() => {
     function load() {
@@ -129,6 +133,42 @@ export function ChildTherapySettingModal({ row, officeName, onClose }: Props) {
     setReload((t) => t + 1);
   }
 
+  function startEdit(s: ChildTherapySetting) {
+    setError(null);
+    setEditingId(s.id);
+    setEditStart(s.start_date);
+    setEditEnd(s.end_date ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditStart("");
+    setEditEnd("");
+  }
+
+  async function saveEdit(id: string) {
+    setError(null);
+    if (!editStart) {
+      setError("開始日は必須です");
+      return;
+    }
+    if (editEnd && editEnd < editStart) {
+      setError("終了日は開始日以降にしてください");
+      return;
+    }
+    const { error: e } = await createClient().rpc("update_child_therapy_setting", {
+      p_id: id,
+      p_start_date: editStart,
+      p_end_date: editEnd || null,
+    });
+    if (e) {
+      setError("期間の変更に失敗しました(期間の重複、または権限=主任以上をご確認ください)");
+      return;
+    }
+    cancelEdit();
+    setReload((t) => t + 1);
+  }
+
   async function addProvider() {
     setError(null);
     if (!newProviderName.trim()) return;
@@ -155,37 +195,83 @@ export function ChildTherapySettingModal({ row, officeName, onClose }: Props) {
           <ul className="mt-2 space-y-1">
             {settings.map((s) => {
               const activeQr = activeQrs.find((q) => q.provider_id === s.provider_id);
+              const isEditing = editingId === s.id;
               return (
                 <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                  <span>
-                    {s.therapy_providers?.name ?? "—"} : {s.start_date} 〜 {s.end_date ?? "無期限"}
-                    {activeQr ? (
-                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">QR有効</span>
-                    ) : (
-                      <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-500">QR未発行</span>
-                    )}
-                  </span>
+                  {isEditing ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-slate-700">{s.therapy_providers?.name ?? "—"}</span>
+                      <input
+                        type="date"
+                        value={editStart}
+                        onChange={(e) => setEditStart(e.target.value)}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs"
+                      />
+                      <span className="text-slate-400">〜</span>
+                      <input
+                        type="date"
+                        value={editEnd}
+                        onChange={(e) => setEditEnd(e.target.value)}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs"
+                      />
+                      <span className="text-xs text-slate-400">(終了日空=無期限)</span>
+                    </span>
+                  ) : (
+                    <span>
+                      {s.therapy_providers?.name ?? "—"} : {s.start_date} 〜 {s.end_date ?? "無期限"}
+                      {activeQr ? (
+                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">QR有効</span>
+                      ) : (
+                        <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-500">QR未発行</span>
+                      )}
+                    </span>
+                  )}
                   <span className="flex gap-1">
-                    <button
-                      onClick={() => issueAndPrint(s.provider_id, s.therapy_providers?.name ?? "")}
-                      className="rounded border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50"
-                    >
-                      {activeQr ? "再発行・印刷" : "QR発行・印刷"}
-                    </button>
-                    {activeQr && (
-                      <button
-                        onClick={() => revokeQr(activeQr.id)}
-                        className="rounded border border-amber-300 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-50"
-                      >
-                        無効化
-                      </button>
+                    {isEditing ? (
+                      <>
+                        <button
+                          onClick={() => saveEdit(s.id)}
+                          className="rounded border border-sky-300 bg-sky-500 px-2 py-0.5 text-xs font-semibold text-white hover:bg-sky-600"
+                        >
+                          保存
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+                        >
+                          取消
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => issueAndPrint(s.provider_id, s.therapy_providers?.name ?? "")}
+                          className="rounded border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50"
+                        >
+                          {activeQr ? "再発行・印刷" : "QR発行・印刷"}
+                        </button>
+                        <button
+                          onClick={() => startEdit(s)}
+                          className="rounded border border-violet-300 px-2 py-0.5 text-xs text-violet-700 hover:bg-violet-50"
+                        >
+                          期間編集
+                        </button>
+                        {activeQr && (
+                          <button
+                            onClick={() => revokeQr(activeQr.id)}
+                            className="rounded border border-amber-300 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-50"
+                          >
+                            無効化
+                          </button>
+                        )}
+                        <button
+                          onClick={() => deleteSetting(s.id)}
+                          className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+                        >
+                          削除
+                        </button>
+                      </>
                     )}
-                    <button
-                      onClick={() => deleteSetting(s.id)}
-                      className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      削除
-                    </button>
                   </span>
                 </li>
               );

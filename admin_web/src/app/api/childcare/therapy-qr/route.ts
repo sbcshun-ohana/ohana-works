@@ -6,7 +6,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const FONT_PATH = path.join(process.cwd(), "src/assets/fonts/NotoSansJP-Regular.woff2");
+// pdfkit は woff2 を正しくサブセット化できず(glyf破損)、埋め込みは肥大化するのに
+// 日本語グリフが描画されない(=PDF白紙。ToUnicodeは残るため pdftotext では文字が取れる)。
+// TTF/OTF なら必要グリフのみ正しくサブセットされ描画される。woff2 から変換した TTF を使う。
+const FONT_PATH = path.join(process.cwd(), "src/assets/fonts/NotoSansJP-Regular.ttf");
 
 // 療育送迎用QRカード(A6程度)。QRは "therapy:" + token(発行RPCが返した生token)。
 // このルートはレンダリング専用(DBに触れない)。token発行・権限は client の issue_therapy_qr が担う。
