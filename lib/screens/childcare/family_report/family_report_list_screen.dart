@@ -91,8 +91,8 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: const OhanaLogoHomeButton(),
-        leadingWidth: 148,
+        leading: const OhanaBackHomeLeading(),
+        leadingWidth: 200,
         toolbarHeight: 48,
         titleSpacing: 0,
         title: const Text('家庭での様子', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),

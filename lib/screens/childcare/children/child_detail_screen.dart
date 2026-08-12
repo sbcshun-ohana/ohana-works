@@ -58,8 +58,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         if (snapshot.connectionState != ConnectionState.done) {
           return Scaffold(
             appBar: AppBar(
-              leading: const OhanaLogoHomeButton(),
-              leadingWidth: 180,
+              leading: const OhanaBackHomeLeading(),
+              leadingWidth: 200,
               title: Text(widget.childName),
             ),
             body: const Center(child: CircularProgressIndicator()),
@@ -74,8 +74,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           length: tabs.length,
           child: Scaffold(
             appBar: AppBar(
-              leading: const OhanaLogoHomeButton(),
-              leadingWidth: 180,
+              leading: const OhanaBackHomeLeading(),
+              leadingWidth: 200,
               title: Text(widget.childName),
               actions: [
                 IconButton(

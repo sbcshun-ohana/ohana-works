@@ -145,8 +145,10 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
             Expanded(
               child: GridView.builder(
                 padding: const EdgeInsets.all(16),
+                // childAspectRatio 2.4 だとカード高が不足し、PIN未設定バッジ付きで
+                // 10px オーバーフロー(Y2)。高さに余裕を持たせる(2.0)。
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 220, childAspectRatio: 2.4, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                  maxCrossAxisExtent: 220, childAspectRatio: 2.0, crossAxisSpacing: 12, mainAxisSpacing: 12),
                 itemCount: staff.length,
                 itemBuilder: (context, i) {
                   final s = staff[i];

@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { ChildcareOffice } from "@/lib/types";
+
+const THERAPY_HREF = "/childcare/therapy-records";
 
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
@@ -16,13 +21,38 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/parent-requests", label: "保護者からの連絡" },
   { href: "/childcare/class-photos", label: "クラス写真" },
   { href: "/childcare/emergency-contacts", label: "緊急連絡先" },
-  { href: "/childcare/therapy-records", label: "療育記録" },
+  { href: THERAPY_HREF, label: "療育記録" },
   { href: "/childcare/support-childcare", label: "支援保育" },
 ];
 
 export function ChildcareNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // 療育記録タブは therapy_outing_enabled が「アクセス可能施設のいずれかでON」の
+  // ときのみ表示(園児マスタの療育設定ボタン/デイリーボードのバッジと判定を揃える)。
+  // 全施設OFFなら非表示。判定できるまで(初期)は安全側で非表示。
+  const [therapyVisible, setTherapyVisible] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function resolveTherapyVisibility() {
+      const supabase = createClient();
+      const { data } = await supabase.rpc("fetch_my_childcare_offices");
+      const offices = (data ?? []) as ChildcareOffice[];
+      if (offices.length === 0) return;
+      const checks = await Promise.all(
+        offices.map((o) => supabase.rpc("is_therapy_outing_enabled_for_office", { p_office_id: o.office_id })),
+      );
+      if (!cancelled) setTherapyVisible(checks.some((c) => c.data === true));
+    }
+    void resolveTherapyVisibility();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const items = CHILDCARE_NAV_ITEMS.filter((item) => item.href !== THERAPY_HREF || therapyVisible);
+
   // タブ切替後も選択中の施設(?office=)とクラス(?class=)を引き継ぐ。
   const office = searchParams.get("office");
   const cls = searchParams.get("class");
@@ -35,7 +65,7 @@ export function ChildcareNav() {
   return (
     <div className="border-b border-slate-200 bg-slate-50 px-6 py-2">
       <nav className="flex gap-1">
-        {CHILDCARE_NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <Link
             key={item.href}
             href={`${item.href}${suffix}`}
