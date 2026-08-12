@@ -95,6 +95,7 @@ Deno.serve(async (req) => {
         : tokensByGuardian.get(n.target_guardian_id ?? "") ?? [];
 
       let successCount = 0;
+      const sendErrors: string[] = [];
       for (const token of tokens) {
         const result = await sendFcmPush({
           fcmToken: token,
@@ -103,12 +104,18 @@ Deno.serve(async (req) => {
           data: toDataPayload(n.notification_type, n.payload),
         });
         if (result.ok) successCount++;
+        else if (result.error) sendErrors.push(result.error);
       }
 
       if (successCount > 0) {
         await adminClient.from("notifications").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", n.id);
         sentCount++;
       } else {
+        // 失敗理由をLogsに残す(notificationsにerror列が無いため現状ここでしか観測できない)。
+        console.error(
+          `[dispatch] notification=${n.id} type=${n.notification_type} ` +
+          `tokens=${tokens.length} failed: ${sendErrors.join(" | ") || "no tokens"}`,
+        );
         await adminClient.from("notifications").update({ status: "failed", retry_count: (n.retry_count ?? 0) + 1 }).eq("id", n.id);
         failedCount++;
       }
