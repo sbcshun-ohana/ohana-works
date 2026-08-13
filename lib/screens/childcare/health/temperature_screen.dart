@@ -35,6 +35,8 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
   bool _loading = true;
   List<({String childId, String nameLabel, String className})> _roster = const [];
   Map<String, List<ChildTemperatureRecord>> _byChild = const {};
+  // 当日の排便記録を園児ごとに行内表示(194 fetch_toileting_records)。childId→時刻順の(time,type)。
+  Map<String, List<({String time, String type})>> _toiletingByChild = const {};
 
   bool get _canEdit {
     final today = DateTime.now();
@@ -78,10 +80,20 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
       for (final r in records) {
         byChild.putIfAbsent(r.childId, () => []).add(r);
       }
+      // 排便記録は園児ごとの取得(194に園全体RPCは無いためロスター分を並列取得)。
+      final toiletingLists = await Future.wait(
+        roster.map((c) => widget.service.fetchToiletingRecords(c.childId, _businessDate)),
+      );
+      final toiletingByChild = <String, List<({String time, String type})>>{};
+      for (var i = 0; i < roster.length; i++) {
+        final list = [...toiletingLists[i]]..sort((a, b) => a.time.compareTo(b.time));
+        toiletingByChild[roster[i].childId] = list;
+      }
       if (mounted) {
         setState(() {
           _roster = roster;
           _byChild = byChild;
+          _toiletingByChild = toiletingByChild;
           _loading = false;
         });
       }
@@ -245,6 +257,7 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
                           itemBuilder: (context, i) {
                             final child = _roster[i];
                             final recs = _byChild[child.childId] ?? const [];
+                            final toileting = _toiletingByChild[child.childId] ?? const [];
                             return Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
@@ -256,19 +269,43 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
                                       child: Text(child.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
                                     ),
                                     Expanded(
-                                      child: Wrap(
-                                        spacing: 8,
-                                        runSpacing: 4,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          for (final r in recs)
-                                            Chip(
-                                              label: Text('${_hm(r.measuredAt)} ${r.temperature}℃'),
-                                              onDeleted: _canEdit ? () => _deleteRecord(child.childId, r) : null,
-                                              visualDensity: VisualDensity.compact,
-                                            ),
-                                          if (recs.isEmpty)
-                                            const Text('検温 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 4,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              for (final r in recs)
+                                                Chip(
+                                                  label: Text('${_hm(r.measuredAt)} ${r.temperature}℃'),
+                                                  onDeleted: _canEdit ? () => _deleteRecord(child.childId, r) : null,
+                                                  visualDensity: VisualDensity.compact,
+                                                ),
+                                              if (recs.isEmpty)
+                                                const Text('検温 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Icon(Icons.wc_rounded, size: 16, color: AppColors.skyBlue),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  toileting.isEmpty
+                                                      ? '排便 未記録'
+                                                      : toileting.map((t) => '${t.time} ${t.type}').join(' / '),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: toileting.isEmpty ? AppColors.textSecondary : AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ),

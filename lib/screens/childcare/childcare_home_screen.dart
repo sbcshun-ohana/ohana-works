@@ -134,7 +134,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
             _HomeTile(
               icon: Icons.thermostat_rounded,
               color: AppColors.punchClockOut,
-              label: '健康チェック(検温)',
+              label: '健康チェック',
               onTap: () => _push(TemperatureScreen(
                 service: widget.service,
                 officeId: office.officeId,
