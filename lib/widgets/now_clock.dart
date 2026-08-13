@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// 画面端(AppBar・上部コントロール行)に現在の日付・時刻をリアルタイム表示する時計(1秒更新)。
-/// デイリーボードで導入したものを共通化(連絡帳/クラス活動/午睡/健康チェック等でも表示)。
+/// 現在の日付・時刻(分まで)をリアルタイム表示する時計。
+/// 黒帯(SessionBanner)のログアウト横に常時表示する(俊指示: 秒は不要・分まで)。
 class NowClock extends StatefulWidget {
-  const NowClock({super.key});
+  const NowClock({super.key, this.color});
+
+  /// 文字色。未指定は textSecondary(明るい背景用)。黒帯では白を渡す。
+  final Color? color;
 
   @override
   State<NowClock> createState() => _NowClockState();
@@ -37,12 +40,13 @@ class _NowClockState extends State<NowClock> {
     final n = _now;
     String two(int v) => v.toString().padLeft(2, '0');
     final text = '${n.year}/${two(n.month)}/${two(n.day)}(${_wd[n.weekday - 1]}) '
-        '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
+        '${two(n.hour)}:${two(n.minute)}';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Center(
         child: Text(text,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600, color: widget.color ?? AppColors.textSecondary)),
       ),
     );
   }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/now_clock.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import 'child_detail_screen.dart' show showChildWeeklyScheduleSheet;
 
@@ -73,7 +72,6 @@ class _WeeklyScheduleListScreenState extends State<WeeklyScheduleListScreen> {
         toolbarHeight: 48,
         titleSpacing: 0,
         title: const Text('週次予定(標準保育時間)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        actions: const [NowClock()],
       ),
       body: Column(
         children: [

@@ -9,7 +9,6 @@ import '../../../services/childcare_active_office.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
-import '../../../widgets/now_clock.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
 import '../contacts/daily_contact_detail_screen.dart';
@@ -506,10 +505,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       ),
       body: Column(
         children: [
-          // クラス絞り込み・天気・現在時刻を1行に集約(施設切替は黒帯へ移設)。
+          // 2段目: クラス・天気(幅狭)・連絡帳一括ボタン。すべて左詰め(俊指示)。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Row(
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SizedBox(
                   width: 170,
@@ -519,15 +521,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                     onChanged: _onClassChanged,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather)),
-                const SizedBox(width: 10),
-                const NowClock(),
+                SizedBox(
+                  width: 150,
+                  child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
+                ),
+                _bulkGroup(),
               ],
             ),
           ),
           if (_napMissing.isNotEmpty) _NapMissingBanner(missing: _napMissing),
-          // サマリー・クイックリンク・連絡帳一括を同じ段(1本の帯)に集約(俊指示)。溢れは折返し。
+          // 3段目: サマリー+クイックリンク。左詰め(俊指示)。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
             child: Card(
@@ -545,7 +548,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                     _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen, onTap: _openFamilyReports),
                     _quickTile(Icons.thermostat_rounded, '健康チェック', null, preparing: true),
                     _quickTile(Icons.restaurant_rounded, '食事チェック', null, preparing: true),
-                    _bulkGroup(),
                   ],
                 ),
               ),

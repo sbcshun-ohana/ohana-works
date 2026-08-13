@@ -8,6 +8,7 @@ import '../screens/childcare/childcare_menu_screen.dart';
 import '../screens/childcare/pin_login_screen.dart';
 import '../screens/login_screen.dart';
 import '../services/childcare_service.dart';
+import '../services/root_navigator.dart';
 import '../theme/app_theme.dart';
 import '../widgets/inactivity_guard.dart';
 import '../widgets/session_banner.dart';
@@ -20,7 +21,8 @@ class ChildcareStaffApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final navigatorKey = GlobalKey<NavigatorState>();
+    // 共有キー(root_navigator.dart)。SessionBanner(黒帯)からのダイアログ表示にも使う。
+    final navigatorKey = rootNavigatorKey;
     return MaterialApp(
       title: 'Ohana Works 保育業務',
       debugShowCheckedModeBanner: false,

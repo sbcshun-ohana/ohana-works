@@ -4,7 +4,6 @@ import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/now_clock.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../family_daily_report_summary_view.dart';
 
@@ -219,7 +218,6 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
         leadingWidth: 200,
         toolbarHeight: 48,
         title: Text(widget.childNameLabel),
-        actions: const [NowClock()],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

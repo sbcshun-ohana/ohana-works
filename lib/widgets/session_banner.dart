@@ -7,6 +7,8 @@ import '../constants/role_display.dart';
 import '../models/childcare.dart';
 import '../services/childcare_active_office.dart';
 import '../services/push_service.dart';
+import '../services/root_navigator.dart';
+import 'now_clock.dart';
 import '../services/secure_device_store.dart';
 import '../services/session_identity.dart';
 import '../theme/app_theme.dart';
@@ -74,35 +76,70 @@ class _SessionBannerState extends State<SessionBanner> {
             },
           );
         }
+        // 黒帯は MaterialApp.builder で Navigator の外側に置かれるため DropdownButton の
+        // メニュー(Overlay必須)は開けない。rootNavigatorKey 経由のダイアログで施設を選択する。
         return ValueListenableBuilder<String?>(
           valueListenable: childcareActiveOfficeId,
           builder: (context, selectedId, _) {
-            final valid = offices.any((o) => o.officeId == selectedId) ? selectedId : offices.first.officeId;
-            return Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: DropdownButton<String>(
-                value: valid,
-                isDense: true,
-                underline: const SizedBox.shrink(),
-                dropdownColor: AppColors.textPrimary,
-                iconEnabledColor: Colors.white70,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
-                items: [
-                  for (final o in offices)
-                    DropdownMenuItem(value: o.officeId, child: Text(o.officeName)),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  final office = offices.firstWhere((o) => o.officeId == v);
-                  childcareActiveOfficeId.value = office.officeId;
-                  childcareActiveOfficeName.value = office.officeName;
-                },
+            final current = offices.firstWhere(
+              (o) => o.officeId == selectedId,
+              orElse: () => offices.first,
+            );
+            return InkWell(
+              onTap: () => _pickOffice(offices, current),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '/ ${current.officeName}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const Icon(Icons.arrow_drop_down_rounded, size: 20, color: Colors.white70),
+                  ],
+                ),
               ),
             );
           },
         );
       },
     );
+  }
+
+  /// 施設選択ダイアログ。バナー自身の context には Overlay が無いため rootNavigatorKey を使う。
+  Future<void> _pickOffice(List<ChildcareOffice> offices, ChildcareOffice current) async {
+    final navContext = rootNavigatorKey.currentContext;
+    if (navContext == null) return; // Navigator未生成(起動直後等)は何もしない
+    final picked = await showDialog<ChildcareOffice>(
+      context: navContext,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('施設を切り替え', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        children: [
+          for (final o in offices)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, o),
+              child: Row(
+                children: [
+                  Icon(
+                    o.officeId == current.officeId
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    size: 20,
+                    color: o.officeId == current.officeId ? AppColors.skyBlue : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(o.officeName, style: const TextStyle(fontSize: 15)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+    childcareActiveOfficeId.value = picked.officeId;
+    childcareActiveOfficeName.value = picked.officeName;
   }
 
   Future<void> _signOut() async {
@@ -140,6 +177,8 @@ class _SessionBannerState extends State<SessionBanner> {
                 ],
               ),
             ),
+            // 現在日時(分まで)。ログアウトの横に常時表示(俊指示)。
+            const NowClock(color: Colors.white),
             TextButton.icon(
               onPressed: _signOut,
               icon: const Icon(Icons.logout_rounded, size: 16, color: Colors.white),

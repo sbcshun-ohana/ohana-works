@@ -232,12 +232,11 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
             ),
           ];
 
+          // 施設選択はホームから撤去(黒帯の施設切替に集約。管理者以上のみ変更可・俊指示)。
           return Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Column(
               children: [
-                _selectorCard(offices),
-                const SizedBox(height: 10),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -270,43 +269,6 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _selectorCard(List<ChildcareOffice> offices) {
-    // 対象日はホームから撤去(各機能画面のヘッダーで選択)。ここは施設選択のみを小さくまとめる。
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          children: [
-            const Icon(Icons.apartment_rounded, size: 18, color: AppColors.textSecondary),
-            const SizedBox(width: 8),
-            const Text('施設', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DropdownButton<ChildcareOffice>(
-                isExpanded: true,
-                isDense: true,
-                underline: const SizedBox.shrink(),
-                value: _selectedOffice,
-                items: offices
-                    .map((office) => DropdownMenuItem(value: office, child: Text(office.officeName)))
-                    .toList(),
-                onChanged: (office) {
-                  if (office == null) return;
-                  setState(() => _selectedOffice = office);
-                  // 共通ヘッダー(黒帯)の施設名・IDを操作中施設に追随させる(Y4+黒帯切替)。
-                  childcareActiveOfficeName.value = office.officeName;
-                  childcareActiveOfficeId.value = office.officeId;
-                  _loadInternalNotesFlag();
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
