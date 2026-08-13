@@ -493,7 +493,6 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">クラス</th>
                 <th className="px-4 py-3">状態</th>
                 <th className="px-4 py-3">登降園</th>
-                <th className="px-4 py-3">最終イベント</th>
                 <th className="px-4 py-3">家庭連絡帳</th>
                 <th className="px-4 py-3">お迎え変更</th>
                 <th className="px-4 py-3">代理打刻(保護者通知あり)</th>
@@ -588,11 +587,6 @@ function ChildcareDailyBoardPageContent() {
                           </button>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {row.last_event_at
-                        ? `${row.last_event_type} (${new Date(row.last_event_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })})`
-                        : "—"}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {row.family_daily_report_status === "submitted" ? (
