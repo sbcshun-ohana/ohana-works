@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_theme.dart';
@@ -17,6 +18,14 @@ class KioskApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ohana Works キオスク',
       debugShowCheckedModeBanner: false,
+      // カレンダー(showDatePicker等)を日本語表示にする(俊指示 2026-08-13)。
+      locale: const Locale('ja', 'JP'),
+      supportedLocales: const [Locale('ja', 'JP')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: AppTheme.light,
       home: const _KioskRoot(),
     );

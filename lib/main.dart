@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'childcare_staff/childcare_staff_app.dart';
@@ -53,6 +54,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ohana Works',
       debugShowCheckedModeBanner: false,
+      // カレンダー(showDatePicker等)を日本語表示にする(俊指示 2026-08-13)。
+      locale: const Locale('ja', 'JP'),
+      supportedLocales: const [Locale('ja', 'JP')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: AppTheme.light,
       // 全画面共通の「ログイン中: 氏名(役職)」常時表示(職員個人スマホアプリ=Ohana Staff)。
       // 自動ログアウトは共有iPad(Ohana Kids)側のみ。
