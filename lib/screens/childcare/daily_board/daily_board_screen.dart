@@ -505,26 +505,25 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       ),
       body: Column(
         children: [
-          // 2段目: クラス・天気(幅狭)・連絡帳一括ボタン。すべて左詰め(俊指示)。
+          // 2段目: 1行固定(俊指示)。左=クラス・天気、右寄せ=連絡帳一括。横幅いっぱいを使う。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            child: Row(
               children: [
                 SizedBox(
-                  width: 170,
+                  width: 160,
                   child: _ClassFilterBar(
                     classes: _classes,
                     selectedClassId: _selectedClassId,
                     onChanged: _onClassChanged,
                   ),
                 ),
+                const SizedBox(width: 10),
                 SizedBox(
-                  width: 150,
+                  width: 140,
                   child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
                 ),
+                const Spacer(),
                 _bulkGroup(),
               ],
             ),
@@ -985,20 +984,26 @@ class _SummaryInline extends StatelessWidget {
       _SummaryItem('登園中', s?.presentNow, AppColors.leafGreen),
       _SummaryItem('欠席', s?.absent, AppColors.punchClockOut),
     ];
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final item in items) ...[
-          Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-          const SizedBox(width: 3),
-          Text(
-            item.value?.toString() ?? '—',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: item.color),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ],
-    );
+    // 項目の間に縦の区切り線を入れて視認性を上げる(俊指示)。
+    final children = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (i > 0) {
+        children.add(Container(
+          width: 1,
+          height: 18,
+          margin: const EdgeInsets.symmetric(horizontal: 10),
+          color: AppColors.textSecondary.withValues(alpha: 0.30),
+        ));
+      }
+      children.add(Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)));
+      children.add(const SizedBox(width: 4));
+      children.add(Text(
+        item.value?.toString() ?? '—',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: item.color),
+      ));
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
 }
 
