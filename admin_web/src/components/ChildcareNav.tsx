@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ChildcareOffice } from "@/lib/types";
 
 const THERAPY_HREF = "/childcare/therapy-records";
+const SUPPORT_HREF = "/childcare/support-childcare";
 
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
@@ -32,29 +33,49 @@ export function ChildcareNav() {
   // ときのみ表示(園児マスタの療育設定ボタン/デイリーボードのバッジと判定を揃える)。
   // 全施設OFFなら非表示。判定できるまで(初期)は安全側で非表示。
   const [therapyVisible, setTherapyVisible] = useState(false);
+  // 全保育施設と支援保育の対象施設。支援保育タブは「選択中施設が対象施設に含まれるとき」だけ表示する。
+  // 対象施設リスト(supportOffices)は null=未取得/取得失敗 を意味し、その場合は安全側でタブを表示する。
+  const [childcareOffices, setChildcareOffices] = useState<ChildcareOffice[]>([]);
+  const [supportOffices, setSupportOffices] = useState<ChildcareOffice[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function resolveTherapyVisibility() {
+    async function resolveVisibility() {
       const supabase = createClient();
       const { data } = await supabase.rpc("fetch_my_childcare_offices");
       const offices = (data ?? []) as ChildcareOffice[];
-      if (offices.length === 0) return;
-      const checks = await Promise.all(
-        offices.map((o) => supabase.rpc("is_therapy_outing_enabled_for_office", { p_office_id: o.office_id })),
-      );
-      if (!cancelled) setTherapyVisible(checks.some((c) => c.data === true));
+      if (!cancelled) setChildcareOffices(offices);
+      if (offices.length > 0) {
+        const checks = await Promise.all(
+          offices.map((o) => supabase.rpc("is_therapy_outing_enabled_for_office", { p_office_id: o.office_id })),
+        );
+        if (!cancelled) setTherapyVisible(checks.some((c) => c.data === true));
+      }
+      // 支援保育の対象施設。取得失敗時は null のまま(=タブ表示側に倒す)。
+      const { data: supData, error: supErr } = await supabase.rpc("fetch_my_support_childcare_offices");
+      if (!cancelled) setSupportOffices(supErr ? null : ((supData ?? []) as ChildcareOffice[]));
     }
-    void resolveTherapyVisibility();
+    void resolveVisibility();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const items = CHILDCARE_NAV_ITEMS.filter((item) => item.href !== THERAPY_HREF || therapyVisible);
-
   // タブ切替後も選択中の施設(?office=)とクラス(?class=)を引き継ぐ。
   const office = searchParams.get("office");
+  // 現在の実効施設(ヘッダーの selectedOffice 導出と一致): ?office= が有効ならそれ、無ければ先頭施設。
+  const effectiveOffice =
+    office && childcareOffices.some((o) => o.office_id === office)
+      ? office
+      : childcareOffices[0]?.office_id ?? office ?? null;
+  // 支援保育タブ: 対象施設リスト未取得/失敗(null)なら表示、取得済みなら実効施設が対象に含まれるときのみ表示。
+  const supportVisible =
+    supportOffices === null ? true : effectiveOffice ? supportOffices.some((o) => o.office_id === effectiveOffice) : true;
+
+  const items = CHILDCARE_NAV_ITEMS.filter(
+    (item) => (item.href !== THERAPY_HREF || therapyVisible) && (item.href !== SUPPORT_HREF || supportVisible),
+  );
+
   const cls = searchParams.get("class");
   const params = new URLSearchParams();
   if (office) params.set("office", office);

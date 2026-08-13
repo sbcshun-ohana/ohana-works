@@ -11,7 +11,8 @@ import { currentDate } from "@/lib/datetime";
 import type { DailyContactRow } from "@/lib/types";
 
 function ChildcareContactsCopyPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
 
   const [businessDate, setBusinessDate] = useState(currentDate());
@@ -101,20 +102,6 @@ function ChildcareContactsCopyPageContent() {
         </p>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => setSelectedOffice(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((office) => (
-                <option key={office.office_id} value={office.office_id}>
-                  {office.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
             <select

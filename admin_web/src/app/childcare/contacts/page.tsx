@@ -34,7 +34,8 @@ const AI_ACTIONS: { key: string; label: string }[] = [
 ];
 
 function ChildcareContactsPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
@@ -78,6 +79,14 @@ function ChildcareContactsPageContent() {
     .sort((a, b) =>
       compareByClassThenName(classOrder, a.class_name, a.child_display_name, b.class_name, b.child_display_name),
     );
+
+  // 施設がヘッダーで切り替わったら園児選択をリセットする(旧: 施設selectのonChangeで実施していた)。
+  useEffect(() => {
+    function resetSelectionOnOfficeChange() {
+      setSelectedChildId(null);
+    }
+    resetSelectionOnOfficeChange();
+  }, [selectedOffice]);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
   // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
@@ -466,23 +475,6 @@ function ChildcareContactsPageContent() {
         <h2 className="text-lg font-bold text-slate-800">連絡帳 一覧・承認・差し戻し</h2>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => {
-                setSelectedOffice(e.target.value);
-                setSelectedChildId(null);
-              }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((office) => (
-                <option key={office.office_id} value={office.office_id}>
-                  {office.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
             <select

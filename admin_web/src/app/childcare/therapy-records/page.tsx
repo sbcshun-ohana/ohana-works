@@ -88,7 +88,8 @@ function monthRange(ym: string): { start: string; end: string } {
 }
 
 function ChildcareTherapyRecordsContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const [enabled, setEnabled] = useState(false);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [childFilter, setChildFilter] = useState("");
@@ -218,14 +219,6 @@ function ChildcareTherapyRecordsContent() {
         <h2 className="text-lg font-bold text-slate-800">療育外出 記録</h2>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select value={selectedOffice} onChange={(e) => setSelectedOffice(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              {offices?.map((o) => (
-                <option key={o.office_id} value={o.office_id}>{o.office_name}</option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">月</label>
             <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />

@@ -6,15 +6,14 @@ import { createClient } from "@/lib/supabase/client";
 import type { ChildcareOffice } from "@/lib/types";
 
 /**
- * 保育業務系ページ共通の施設選択。タブ(ページ)を切り替えても選択中の施設が
- * リセットされないよう、URLクエリパラメータ(?office=)で状態を引き継ぐ。
- * rpcNameを指定すると、機能フラグが異なる施設一覧RPC(例: 支援保育専用の
- * fetch_my_support_childcare_offices)に差し替えられる。
+ * 保育業務系ページ共通の施設選択。施設名の表示・選択はヘッダー(AppHeader)に集約し、
+ * 各ページは選択中施設(selectedOffice)を本フックから受け取る。
+ * 選択状態は URL クエリパラメータ(?office=)を正とし、タブ(ページ)を切り替えても
+ * 施設が保持される/URL共有で同じ施設が開く。rpcNameで施設一覧RPCを差し替えられる。
  */
 export function useChildcareOffices(rpcName: "fetch_my_childcare_offices" | "fetch_my_support_childcare_offices" = "fetch_my_childcare_offices") {
   const [offices, setOffices] = useState<ChildcareOffice[] | null>(null);
   const [officesError, setOfficesError] = useState<string | null>(null);
-  const [selectedOffice, setSelectedOfficeState] = useState<string>("");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -26,18 +25,23 @@ export function useChildcareOffices(rpcName: "fetch_my_childcare_offices" | "fet
         setOfficesError(error.message);
         return;
       }
-      const list = (data ?? []) as ChildcareOffice[];
-      setOffices(list);
-      const fromUrl = searchParams.get("office");
-      const initial = fromUrl && list.some((o) => o.office_id === fromUrl) ? fromUrl : (list[0]?.office_id ?? "");
-      setSelectedOfficeState(initial);
+      setOffices((data ?? []) as ChildcareOffice[]);
     });
-    // 初回マウント時のみ実行(officeパラメータの変化で再取得はしない)
+    // 施設一覧(RPC)は初回マウント時のみ取得する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 選択中施設は URL(?office=) から導出する(内部stateを持たない)。ヘッダーの施設プルダウンが
+  // ?office= を更新すると、このフックを使う全ページの selectedOffice が同じ値へ即追随する。
+  // 一覧が未取得の間は空文字。URLに無い/一覧に無い場合は先頭施設を既定にする。
+  const fromUrl = searchParams.get("office");
+  const selectedOffice = offices
+    ? fromUrl && offices.some((o) => o.office_id === fromUrl)
+      ? fromUrl
+      : offices[0]?.office_id ?? ""
+    : "";
+
   function setSelectedOffice(officeId: string) {
-    setSelectedOfficeState(officeId);
     const params = new URLSearchParams(searchParams.toString());
     params.set("office", officeId);
     router.replace(`${pathname}?${params.toString()}`);

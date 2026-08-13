@@ -1,12 +1,14 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import type {
+  ChildcareOffice,
   SupportChildcareAgencyLink,
   SupportChildcareApplicationDetail,
   SupportChildcareApplicationReview,
@@ -120,10 +122,24 @@ function statusBadgeClass(status: string | null) {
 }
 
 function SupportChildcarePageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices(
-    "fetch_my_support_childcare_offices",
-  );
-  const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
+  // 施設選択はヘッダーに集約(全保育施設・?office= 追随)。支援保育の対象施設かは別RPCで別途判定する(方針C)。
+  const { officesError, selectedOffice } = useChildcareOffices();
+  const [supportOffices, setSupportOffices] = useState<ChildcareOffice[] | null>(null);
+  useEffect(() => {
+    createClient()
+      .rpc("fetch_my_support_childcare_offices")
+      .then(({ data }) => setSupportOffices((data ?? []) as ChildcareOffice[]));
+  }, []);
+  // ヘッダーで選択中の施設が支援保育の対象か。対象なら isManager もそこから取る。
+  const supportOffice = supportOffices?.find((o) => o.office_id === selectedOffice) ?? null;
+  const isManager = supportOffice?.is_manager ?? false;
+
+  // ヘッダーで対象外施設に切り替えられたら、支援保育タブが消えて袋小路になるためデイリーボードへ自動遷移する。
+  const router = useRouter();
+  const notSupported = !!(supportOffices && selectedOffice && !supportOffice);
+  useEffect(() => {
+    if (notSupported) router.replace(`/childcare/daily-board?office=${selectedOffice}`);
+  }, [notSupported, selectedOffice, router]);
 
   const [programOfficeId, setProgramOfficeId] = useState<string>("");
   const [programOptions, setProgramOptions] = useState<{ program_office_id: string; label: string }[]>([]);
@@ -692,23 +708,23 @@ function SupportChildcarePageContent() {
   const behaviorItems = checkItems.filter((c) => c.check_group === "child_behavior");
   const behaviorCategories = Array.from(new Set(behaviorItems.map((b) => b.category ?? "")));
 
+  // 対象外施設のときは上の useEffect でデイリーボードへ遷移する。遷移するまでの間は本体を描画しない。
+  if (notSupported) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <AppHeader />
+        <ChildcareNav />
+        <main className="flex-1 p-6" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <AppHeader />
       <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={selectedOffice}
-            onChange={(e) => setSelectedOffice(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-          >
-            {offices?.map((office) => (
-              <option key={office.office_id} value={office.office_id}>
-                {office.office_name}
-              </option>
-            ))}
-          </select>
           <select
             value={programOfficeId}
             onChange={(e) => {

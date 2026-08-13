@@ -9,7 +9,8 @@ import type { ParentRequestRow } from "@/lib/types";
 import { PARENT_REQUEST_TYPE_LABELS, ABSENCE_KIND_LABELS } from "@/lib/types";
 
 function ChildcareParentRequestsPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
 
   const [requests, setRequests] = useState<ParentRequestRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,23 +95,6 @@ function ChildcareParentRequestsPageContent() {
       <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
         <h2 className="text-lg font-bold text-slate-800">保護者からの連絡の承認</h2>
-
-        <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => setSelectedOffice(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((office) => (
-                <option key={office.office_id} value={office.office_id}>
-                  {office.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
 

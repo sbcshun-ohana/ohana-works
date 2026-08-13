@@ -41,7 +41,8 @@ function bowel(count: number | null, condition: string | null): string {
 }
 
 function ChildcareFamilyReportsPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const [businessDate, setBusinessDate] = useState(currentDate());
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -109,20 +110,6 @@ function ChildcareFamilyReportsPageContent() {
         <h2 className="text-lg font-bold text-slate-800">家庭での様子一覧</h2>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => setSelectedOffice(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((o) => (
-                <option key={o.office_id} value={o.office_id}>
-                  {o.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
             <input

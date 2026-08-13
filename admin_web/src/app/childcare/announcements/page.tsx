@@ -7,7 +7,6 @@ import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import {
   GUARDIAN_NOTICE_STATUS_LABELS,
-  roleDisplayName,
   type GuardianNoticePreview,
   type GuardianNoticeReadSummary,
   type GuardianNoticeRow,
@@ -51,7 +50,8 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 function AnnouncementsPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
   const [identity, setIdentity] = useState<SessionIdentity | null>(null);
@@ -99,6 +99,14 @@ function AnnouncementsPageContent() {
         if (!error && Array.isArray(data) && data.length > 0) setIdentity(data[0] as SessionIdentity);
       });
   }, []);
+
+  // 施設がヘッダーで切り替わったら選択中のお知らせをリセットする(旧: 施設selectのonChangeで実施していた)。
+  useEffect(() => {
+    function resetSelectionOnOfficeChange() {
+      setSelectedId(null);
+    }
+    resetSelectionOnOfficeChange();
+  }, [selectedOffice]);
 
   // 施設のクラス・園児(宛先ピッカー用)。class/child は選択中施設の範囲で指定する。
   useEffect(() => {
@@ -415,31 +423,6 @@ function AnnouncementsPageContent() {
           <p className="mt-1 text-xs text-slate-500">
             保護者アプリへ一斉配信します。職員向けの連絡は上部メニューの「お知らせ(職員向け)」を使用してください。
           </p>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => {
-                setSelectedOffice(e.target.value);
-                setSelectedId(null);
-              }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((office) => (
-                <option key={office.office_id} value={office.office_id}>
-                  {office.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {identity && (
-            <div className="text-xs text-slate-500">
-              操作者: <span className="font-semibold text-slate-700">{identity.name}</span>({roleDisplayName(identity.role_code)})
-            </div>
-          )}
         </div>
 
         {actionError && <div className="rounded-lg bg-rose-50 px-4 py-2 text-sm text-rose-600">{actionError}</div>}

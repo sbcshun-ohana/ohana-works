@@ -16,7 +16,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function ChildcareClassActivitiesPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
   const [businessDate, setBusinessDate] = useState(currentDate());
@@ -38,6 +39,14 @@ function ChildcareClassActivitiesPageContent() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const selectedRow = rows.find((r) => r.class_id === selectedClassId) ?? null;
+
+  // 施設がヘッダーで切り替わったらクラス選択をリセットする(旧: 施設selectのonChangeで実施していた)。
+  useEffect(() => {
+    function resetSelectionOnOfficeChange() {
+      setSelectedClassId(null);
+    }
+    resetSelectionOnOfficeChange();
+  }, [selectedOffice]);
 
   useEffect(() => {
     function loadRows() {
@@ -222,23 +231,6 @@ function ChildcareClassActivitiesPageContent() {
         <h2 className="text-lg font-bold text-slate-800">クラス活動 入力・申請・承認</h2>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => {
-                setSelectedOffice(e.target.value);
-                setSelectedClassId(null);
-              }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((office) => (
-                <option key={office.office_id} value={office.office_id}>
-                  {office.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
             <input

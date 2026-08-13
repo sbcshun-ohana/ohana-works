@@ -32,7 +32,8 @@ function absencePeriodText(a: {
 }
 
 function ChildcareDailyBoardPageContent() {
-  const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
   const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice);
 
@@ -103,31 +104,34 @@ function ChildcareDailyBoardPageContent() {
 
   // 198: 承認済み欠席(期間)を別RPCで取得し child_id→期間 のMapを作る(付加情報・失敗時は非表示)。
   useEffect(() => {
-    if (!selectedOffice) {
-      setAbsenceByChild({});
-      return;
+    function loadAbsencePeriods() {
+      if (!selectedOffice) {
+        setAbsenceByChild({});
+        return;
+      }
+      createClient()
+        .rpc("fetch_board_absence_periods_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
+        .then(({ data, error }) => {
+          if (error) {
+            setAbsenceByChild({});
+            return;
+          }
+          const map: Record<
+            string,
+            { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" }
+          > = {};
+          for (const r of (data ?? []) as {
+            child_id: string;
+            start_date: string;
+            end_date: string;
+            absence_kind: "sick_absence" | "personal_absence";
+          }[]) {
+            map[r.child_id] = { start_date: r.start_date, end_date: r.end_date, absence_kind: r.absence_kind };
+          }
+          setAbsenceByChild(map);
+        });
     }
-    createClient()
-      .rpc("fetch_board_absence_periods_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
-      .then(({ data, error }) => {
-        if (error) {
-          setAbsenceByChild({});
-          return;
-        }
-        const map: Record<
-          string,
-          { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" }
-        > = {};
-        for (const r of (data ?? []) as {
-          child_id: string;
-          start_date: string;
-          end_date: string;
-          absence_kind: "sick_absence" | "personal_absence";
-        }[]) {
-          map[r.child_id] = { start_date: r.start_date, end_date: r.end_date, absence_kind: r.absence_kind };
-        }
-        setAbsenceByChild(map);
-      });
+    loadAbsencePeriods();
   }, [selectedOffice, businessDate, reloadToken]);
 
   // 在籍登園状況サマリー。クラス絞り込み(selectedClass=class_id)に連動し、
@@ -328,20 +332,6 @@ function ChildcareDailyBoardPageContent() {
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">施設</label>
-            <select
-              value={selectedOffice}
-              onChange={(e) => setSelectedOffice(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {offices?.map((office) => (
-                <option key={office.office_id} value={office.office_id}>
-                  {office.office_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
             <select
               value={selectedClass}
@@ -365,6 +355,9 @@ function ChildcareDailyBoardPageContent() {
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             />
           </div>
+          {/* 天気入力(天気/気温/湿度/保存)は同じ上段に並べる。区切りに細い縦線を挟む。 */}
+          <div className="mx-1 h-9 w-px self-end bg-slate-200" />
+          <WeatherBar weather={weather} onSave={saveWeather} error={weatherError} />
         </div>
 
         {napMissing.length > 0 && (
@@ -377,54 +370,83 @@ function ChildcareDailyBoardPageContent() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {(
-            [
-              { key: "enrolled", label: "在籍", tone: "text-slate-700" },
-              { key: "expected", label: "登園予定", tone: "text-sky-700" },
-              { key: "attended", label: "出席", tone: "text-emerald-700" },
-              { key: "present_now", label: "登園中", tone: "text-emerald-700" },
-              { key: "absent", label: "欠席", tone: "text-red-600" },
-            ] as const
-          ).map((item) => (
-            <div key={item.key} className="rounded-2xl bg-white p-4 text-center shadow-sm">
-              <p className="text-xs font-medium text-slate-500">{item.label}</p>
-              <p className={`mt-1 text-2xl font-bold ${item.tone}`}>{summary ? summary[item.key] : "—"}</p>
+        {/* サマリー(左・小型の表)と 連絡帳一括(右)を同じ行に置き、園児一覧の表示領域を最大化する。 */}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* 在籍登園状況サマリー: 5列コンパクト表。数字はRPC集計をそのまま表示(Realtime更新は setSummary 経由)。 */}
+          <table className="border-collapse text-center text-sm">
+            <thead>
+              <tr>
+                {(
+                  [
+                    { key: "enrolled", label: "在籍", tone: "text-slate-700" },
+                    { key: "expected", label: "登園予定", tone: "text-sky-700" },
+                    { key: "attended", label: "出席", tone: "text-emerald-700" },
+                    { key: "present_now", label: "登園中", tone: "text-emerald-700" },
+                    { key: "absent", label: "欠席", tone: "text-red-600" },
+                  ] as const
+                ).map((item) => (
+                  <th
+                    key={item.key}
+                    className="border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500"
+                  >
+                    {item.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {(
+                  [
+                    { key: "enrolled", tone: "text-slate-700" },
+                    { key: "expected", tone: "text-sky-700" },
+                    { key: "attended", tone: "text-emerald-700" },
+                    { key: "present_now", tone: "text-emerald-700" },
+                    { key: "absent", tone: "text-red-600" },
+                  ] as const
+                ).map((item) => (
+                  <td
+                    key={item.key}
+                    className={`border border-slate-200 bg-white px-3 py-1 text-base font-bold tabular-nums ${item.tone}`}
+                  >
+                    {summary ? summary[item.key] : "—"}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+
+          {/* 連絡帳一括(承認済み・未公開が対象)。同じ行の右側に配置。 */}
+          <div className="ml-auto flex flex-wrap items-center gap-2 rounded-2xl bg-white px-4 py-2 shadow-sm">
+            <span className="text-sm font-semibold text-slate-700">
+              連絡帳 {selectedClass === "" ? "施設一括" : "クラス一括"}
+            </span>
+            <span className="text-xs text-slate-400">(承認済み・未公開が対象)</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() =>
+                  setScheduleTarget({
+                    contactIds: bulkEligibleContactIds(),
+                    label: selectedClass === "" ? "施設一括" : "クラス一括",
+                  })
+                }
+                className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+              >
+                17時公開予約
+              </button>
+              <button
+                onClick={() => publishContactsNow(bulkEligibleContactIds())}
+                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+              >
+                今すぐ公開
+              </button>
+              <button
+                onClick={() => cancelContactSchedule(bulkEligibleContactIds())}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                予約取消
+              </button>
             </div>
-          ))}
-        </div>
-
-        <WeatherBar weather={weather} onSave={saveWeather} error={weatherError} />
-
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-4 shadow-sm">
-          <span className="text-sm font-semibold text-slate-700">
-            連絡帳 {selectedClass === "" ? "施設一括" : "クラス一括"}
-          </span>
-          <span className="text-xs text-slate-400">(承認済み・未公開が対象)</span>
-          <div className="ml-auto flex gap-2">
-            <button
-              onClick={() =>
-                setScheduleTarget({
-                  contactIds: bulkEligibleContactIds(),
-                  label: selectedClass === "" ? "施設一括" : "クラス一括",
-                })
-              }
-              className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100"
-            >
-              17時公開予約
-            </button>
-            <button
-              onClick={() => publishContactsNow(bulkEligibleContactIds())}
-              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-            >
-              今すぐ公開
-            </button>
-            <button
-              onClick={() => cancelContactSchedule(bulkEligibleContactIds())}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              予約取消
-            </button>
           </div>
         </div>
 
@@ -1297,8 +1319,9 @@ function WeatherBar({
   }, [weather]);
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2">
+    // デイリーボード上段(クラス・対象日)と同じ行に並べるため、外側カードは持たずインライン要素を返す。
+    <>
+      <div className="flex items-center gap-2 self-end pb-2">
         <span className="text-sm font-semibold text-slate-700">天気</span>
         {weather === null && (
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-400">未入力</span>
@@ -1350,8 +1373,8 @@ function WeatherBar({
       >
         保存
       </button>
-      {error && <span className="text-xs font-medium text-red-500">{error}</span>}
-    </div>
+      {error && <span className="self-end pb-2 text-xs font-medium text-red-500">{error}</span>}
+    </>
   );
 }
 

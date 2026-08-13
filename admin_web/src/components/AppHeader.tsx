@@ -2,11 +2,10 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { roleDisplayName, type SessionIdentity } from "@/lib/types";
-
-type OfficeOption = { office_id: string; office_name: string };
 
 const NAV_ITEMS = [
   { href: "/attendance", label: "施設別勤怠" },
@@ -23,22 +22,14 @@ const NAV_ITEMS = [
 function AppHeaderInner() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  // 保育業務メニューは機能フラグが有効な施設が1つでもある場合のみ表示する(既定OFF)。
-  const [showChildcare, setShowChildcare] = useState(false);
-  // ログイン中の氏名(役職)と、現在の操作対象施設を常時表示する(複数施設管理時の取り違え防止)。
+  // 保育業務系ページの施設選択はヘッダーに集約する。選択は useChildcareOffices の
+  // ?office= 機構(URL同期)を駆動し、各ページの selectedOffice へ伝播する。
+  const { offices, selectedOffice, setSelectedOffice } = useChildcareOffices();
+  // ログイン中の氏名(役職)を常時表示する(複数施設管理時の取り違え防止)。
   const [identity, setIdentity] = useState<SessionIdentity | null>(null);
-  const [offices, setOffices] = useState<OfficeOption[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.rpc("fetch_my_childcare_offices").then(({ data, error }) => {
-      const list = (data ?? []) as OfficeOption[];
-      if (!error && list.length > 0) {
-        setShowChildcare(true);
-        setOffices(list);
-      }
-    });
     supabase.rpc("fetch_my_session_identity").then(({ data, error }) => {
       if (!error && Array.isArray(data) && data.length > 0) {
         setIdentity(data[0] as SessionIdentity);
@@ -46,12 +37,10 @@ function AppHeaderInner() {
     });
   }, []);
 
-  // 現在の操作対象施設: 画面の施設プルダウンが URL ?office= に同期しているのでそれを読む。
-  // 施設選択が無い画面(?office= 無し)は所属施設をフォールバック表示する。
-  const selectedOfficeId = searchParams.get("office");
-  const currentOfficeName = selectedOfficeId
-    ? offices.find((o) => o.office_id === selectedOfficeId)?.office_name ?? null
-    : null;
+  // 保育業務メニュー/施設プルダウンは、機能フラグが有効な施設が1つでもある場合のみ表示(既定OFF)。
+  const showChildcare = (offices?.length ?? 0) > 0;
+  // 施設プルダウンは保育業務(/childcare)配下でのみ表示する。他ドメイン(勤怠/シフト等)は対象外。
+  const isChildcarePage = pathname.startsWith("/childcare");
 
   const navItems = showChildcare
     ? [...NAV_ITEMS, { href: "/childcare/attendance", label: "保育業務" }]
@@ -88,20 +77,32 @@ function AppHeaderInner() {
         </nav>
       </div>
       <div className="flex items-center gap-3">
+        {/* 保育業務配下: 施設選択プルダウン(全ページ共通)。各ページ本文の施設選択は廃止しここへ集約。 */}
+        {isChildcarePage && showChildcare && (
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            施設:
+            <select
+              value={selectedOffice}
+              onChange={(e) => setSelectedOffice(e.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-800 focus:border-sky-400 focus:outline-none"
+            >
+              {offices?.map((office) => (
+                <option key={office.office_id} value={office.office_id}>
+                  {office.office_name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {identity && (
           <span className="text-sm text-slate-600">
             ログイン中: <span className="font-semibold text-slate-800">{identity.name}</span>
             <span className="text-slate-500">({roleDisplayName(identity.role_code)})</span>
-            {currentOfficeName ? (
-              <span className="ml-2 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
-                施設: {currentOfficeName}
+            {/* 保育業務以外の画面では所属施設をフォールバック表示(施設プルダウンが無いため)。 */}
+            {!isChildcarePage && identity.home_office_name && (
+              <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                所属: {identity.home_office_name}
               </span>
-            ) : (
-              identity.home_office_name && (
-                <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                  所属: {identity.home_office_name}
-                </span>
-              )
             )}
           </span>
         )}
