@@ -13,6 +13,7 @@ import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
 import '../contacts/daily_contact_detail_screen.dart';
 import '../family_report/family_report_list_screen.dart';
+import '../health/temperature_screen.dart';
 
 /// 保護者アプリ・後続保育機能 Phase A: デイリーボード(iPad中心)。
 /// 登降園は保護者アプリ・キオスク端末など複数端末から記録されるため、Realtimeで即時反映する。
@@ -471,6 +472,18 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     ));
   }
 
+  // 健康チェック(6タブ: 検温/排便/ミルク/おやつ/昼食)へ。199 UI実装で準備中タイルを結線。
+  void _openHealthCheck() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TemperatureScreen(
+        service: widget.service,
+        officeId: _officeId,
+        businessDate: _businessDate,
+        isManager: _isManager,
+      ),
+    ));
+  }
+
   void _openChildDetail(DailyBoardRow row) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -550,7 +563,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                       _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen,
                           onTap: _openFamilyReports),
                       const SizedBox(width: 8),
-                      _quickTile(Icons.thermostat_rounded, '健康チェック', null, preparing: true),
+                      _quickTile(Icons.thermostat_rounded, '健康チェック', AppColors.punchClockOut, onTap: _openHealthCheck),
                     ],
                   ),
                 ),
