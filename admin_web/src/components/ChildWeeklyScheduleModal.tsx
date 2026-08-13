@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ChildMasterRow } from "@/lib/types";
 
 // 週次標準保育時間(184)。曜日は ISO-8601 = 1:月..7:日(Dart DateTime.weekday と一致)。
+// 運営日=月〜土のため、UIは月〜土の6行のみ表示する(DBは1〜7のまま。日曜=7 は読み書き対象外)。
 // 取得=担当施設の職員 / 設定・削除=主任以上(manages_childcare)。
 // 「その曜日は通わない」= 開始・終了とも空で保存 → delete_child_weekly_schedule。
 const WEEKDAYS: { n: number; label: string }[] = [
@@ -14,7 +15,6 @@ const WEEKDAYS: { n: number; label: string }[] = [
   { n: 4, label: "木" },
   { n: 5, label: "金" },
   { n: 6, label: "土" },
-  { n: 7, label: "日" },
 ];
 
 type Props = {

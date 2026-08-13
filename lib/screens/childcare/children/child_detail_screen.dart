@@ -165,7 +165,8 @@ class _WeeklyScheduleSheet extends StatefulWidget {
 }
 
 class _WeeklyScheduleSheetState extends State<_WeeklyScheduleSheet> {
-  static const _labels = {1: '月', 2: '火', 3: '水', 4: '木', 5: '金', 6: '土', 7: '日'};
+  // 運営日=月〜土のため、UIは月〜土の6曜日のみ扱う(DBは1:月..7:日のまま。日曜=7 は読み書き対象外)。
+  static const _labels = {1: '月', 2: '火', 3: '水', 4: '木', 5: '金', 6: '土'};
   bool _loading = true;
   final Map<int, ({TimeOfDay? start, TimeOfDay? end})> _sched = {};
 
@@ -188,12 +189,12 @@ class _WeeklyScheduleSheetState extends State<_WeeklyScheduleSheet> {
     try {
       final m = await widget.service.fetchChildWeeklySchedule(widget.childId);
       _sched.clear();
-      for (var wd = 1; wd <= 7; wd++) {
+      for (var wd = 1; wd <= 6; wd++) {
         final e = m[wd];
         _sched[wd] = (start: _fromDb(e?.start), end: _fromDb(e?.end));
       }
     } catch (_) {
-      for (var wd = 1; wd <= 7; wd++) {
+      for (var wd = 1; wd <= 6; wd++) {
         _sched[wd] = (start: null, end: null);
       }
     }
@@ -254,7 +255,7 @@ class _WeeklyScheduleSheetState extends State<_WeeklyScheduleSheet> {
                   const Text('曜日ごとの標準の登降園予定。設定/削除は主任以上。日別の変更はデイリーボードの出欠編集で。',
                       style: TextStyle(fontSize: 12, color: Colors.black54)),
                   const SizedBox(height: 12),
-                  for (var wd = 1; wd <= 7; wd++)
+                  for (var wd = 1; wd <= 6; wd++)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(
