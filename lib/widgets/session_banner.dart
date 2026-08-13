@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/role_display.dart';
+import '../services/childcare_active_office.dart';
 import '../services/push_service.dart';
 import '../services/secure_device_store.dart';
 import '../services/session_identity.dart';
@@ -71,11 +72,18 @@ class _SessionBannerState extends State<SessionBanner> {
             const Icon(Icons.account_circle_rounded, size: 20, color: Colors.white),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                'ログイン中: ${identity.name}(${roleDisplayName(identity.roleCode)})'
-                '${_officeName != null ? ' / $_officeName' : ''}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
-                overflow: TextOverflow.ellipsis,
+              // 施設名は childcare操作中施設(あれば)を優先し、なければ端末/所属施設にフォールバック(Y4)。
+              child: ValueListenableBuilder<String?>(
+                valueListenable: childcareActiveOfficeName,
+                builder: (context, activeOffice, _) {
+                  final officeName = activeOffice ?? _officeName;
+                  return Text(
+                    'ログイン中: ${identity.name}(${roleDisplayName(identity.roleCode)})'
+                    '${officeName != null ? ' / $officeName' : ''}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
               ),
             ),
             TextButton.icon(

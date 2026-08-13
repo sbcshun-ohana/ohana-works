@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/childcare.dart';
+import '../../services/childcare_active_office.dart';
 import '../../services/childcare_service.dart';
 import '../../services/pin_auth_service.dart';
 import '../../theme/app_theme.dart';
@@ -35,6 +36,13 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   void initState() {
     super.initState();
     _officesFuture = widget.service.fetchMyChildcareOffices();
+  }
+
+  @override
+  void dispose() {
+    // childcareモードを離脱(ログアウト等)する際は共通ヘッダーの操作中施設をクリアする。
+    childcareActiveOfficeName.value = null;
+    super.dispose();
   }
 
   Future<void> _loadInternalNotesFlag() async {
@@ -81,7 +89,11 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
           }
           if (_selectedOffice == null) {
             _selectedOffice = offices.first;
-            WidgetsBinding.instance.addPostFrameCallback((_) => _loadInternalNotesFlag());
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              // build中のNotifier更新を避けフレーム後に反映(共通ヘッダーの操作中施設)。
+              childcareActiveOfficeName.value = offices.first.officeName;
+              _loadInternalNotesFlag();
+            });
           }
           final office = _selectedOffice!;
 
@@ -263,6 +275,8 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 onChanged: (office) {
                   if (office == null) return;
                   setState(() => _selectedOffice = office);
+                  // 共通ヘッダー(黒帯)の施設名を操作中施設に追随させる(Y4)。
+                  childcareActiveOfficeName.value = office.officeName;
                   _loadInternalNotesFlag();
                 },
               ),
