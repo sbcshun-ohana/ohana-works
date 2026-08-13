@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
@@ -415,6 +416,38 @@ function ChildcareDailyBoardPageContent() {
               </tr>
             </tbody>
           </table>
+
+          {/* クイックリンク: 各操作画面への導線タイル。?office= を引き継ぐ。未実装は準備中(disabled)。 */}
+          <div className="flex flex-wrap items-stretch gap-2">
+            <Link
+              href={`/childcare/daily-board?office=${selectedOffice}`}
+              className="flex min-w-[104px] flex-col items-center justify-center gap-0.5 rounded-xl border border-sky-100 bg-sky-50 px-4 py-2 text-sky-700 transition hover:bg-sky-100"
+            >
+              <span className="text-xl leading-none">📋</span>
+              <span className="text-sm font-semibold">出席簿</span>
+            </Link>
+            <Link
+              href={`/childcare/family-reports?office=${selectedOffice}`}
+              className="flex min-w-[104px] flex-col items-center justify-center gap-0.5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-emerald-700 transition hover:bg-emerald-100"
+            >
+              <span className="text-xl leading-none">🏠</span>
+              <span className="text-sm font-semibold">家庭での様子</span>
+            </Link>
+            <div className="relative flex min-w-[104px] cursor-not-allowed flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-slate-400">
+              <span className="text-xl leading-none opacity-60">🌡️</span>
+              <span className="text-sm font-semibold">健康チェック</span>
+              <span className="absolute right-1 top-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                準備中
+              </span>
+            </div>
+            <div className="relative flex min-w-[104px] cursor-not-allowed flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-slate-400">
+              <span className="text-xl leading-none opacity-60">🍚</span>
+              <span className="text-sm font-semibold">食事チェック</span>
+              <span className="absolute right-1 top-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                準備中
+              </span>
+            </div>
+          </div>
 
           {/* 連絡帳一括(承認済み・未公開が対象)。同じ行の右側に配置。 */}
           <div className="ml-auto flex flex-wrap items-center gap-2 rounded-2xl bg-white px-4 py-2 shadow-sm">
