@@ -285,6 +285,17 @@ function ChildcareDailyBoardPageContent() {
     .slice()
     .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
 
+  // 欠席児童は本表(出席・出席予定)から外し、下部の「欠席児童一覧」にクラス別でまとめる。
+  const presentRows = filteredRows.filter((r) => effectiveBoardStatus(r) !== "absent");
+  const absentRows = filteredRows.filter((r) => effectiveBoardStatus(r) === "absent");
+  // absentRows は既にクラス順→氏名順に整列済み。連続する同一クラスをまとめてグループ化する。
+  const absentByClass: { class_id: string; class_name: string; rows: DailyBoardRow[] }[] = [];
+  for (const r of absentRows) {
+    const last = absentByClass[absentByClass.length - 1];
+    if (last && last.class_id === r.class_id) last.rows.push(r);
+    else absentByClass.push({ class_id: r.class_id, class_name: r.class_name, rows: [r] });
+  }
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -480,20 +491,20 @@ function ChildcareDailyBoardPageContent() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 10 : 9} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 8 : 7} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
-              {!isLoading && filteredRows.length === 0 && (
+              {!isLoading && presentRows.length === 0 && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 10 : 9} className="px-4 py-6 text-center text-slate-400">
-                    在籍園児がいません
+                  <td colSpan={internalNotesEnabled ? 8 : 7} className="px-4 py-6 text-center text-slate-400">
+                    出席・登園予定の園児はいません
                   </td>
                 </tr>
               )}
               {!isLoading &&
-                filteredRows.map((row) => (
+                presentRows.map((row) => (
                   <tr key={row.child_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {row.display_name}
@@ -619,6 +630,40 @@ function ChildcareDailyBoardPageContent() {
             </tbody>
           </table>
         </div>
+
+        {/* 欠席児童一覧: 本表(出席・出席予定)から外した欠席児をクラス別にまとめる。 */}
+        {!isLoading && absentRows.length > 0 && (
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-bold text-slate-700">
+              欠席児童一覧 <span className="text-xs font-normal text-slate-400">({absentRows.length}名)</span>
+            </h3>
+            <div className="space-y-3">
+              {absentByClass.map((grp) => (
+                <div key={grp.class_id}>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">{grp.class_name}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {grp.rows.map((row) => (
+                      <button
+                        key={row.child_id}
+                        onClick={() => setAttendanceTarget(row)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1 text-sm text-red-700 transition hover:bg-red-100"
+                        title="出欠編集"
+                      >
+                        {row.display_name}
+                        {row.honorific_suffix ?? ""}
+                        {(row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence") && (
+                          <span className="text-[10px] font-semibold text-red-500">
+                            {ATTENDANCE_KIND_LABELS[row.attendance_kind]}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
 
       {internalNotesChild && (
