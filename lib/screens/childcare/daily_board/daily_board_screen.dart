@@ -1067,30 +1067,34 @@ class _SummaryBar extends StatelessWidget {
       _SummaryItem('登園中', s?.presentNow, AppColors.leafGreen),
       _SummaryItem('欠席', s?.absent, AppColors.punchClockOut),
     ];
+    // 園児一覧の表示領域を最大化するため、5枚の大カード→1本の細いバーに圧縮。
+    // 縦向きでも溢れないよう Wrap で折り返す。ラベル・色・数字・Realtime更新は不変。
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Row(
-        children: [
-          for (final item in items)
-            Expanded(
-              child: Card(
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    children: [
-                      Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                      const SizedBox(height: 1),
-                      Text(
-                        item.value?.toString() ?? '—',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: item.color),
-                      ),
-                    ],
-                  ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final item in items)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(item.label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    const SizedBox(width: 4),
+                    Text(
+                      item.value?.toString() ?? '—',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: item.color),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
