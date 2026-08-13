@@ -48,9 +48,6 @@ function ChildcareDailyBoardPageContent() {
   const [absenceByChild, setAbsenceByChild] = useState<
     Record<string, { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" }>
   >({});
-  const [proxyTarget, setProxyTarget] = useState<{ row: DailyBoardRow; eventType: "drop_off" | "pick_up" } | null>(
-    null,
-  );
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
@@ -201,25 +198,6 @@ function ChildcareDailyBoardPageContent() {
       return;
     }
     setReloadToken((t) => t + 1);
-  }
-
-  // 代理登降園の登録。時刻(HH:MM)は対象日 + JST(+09:00)で timestamptz を組み立てて渡す。
-  async function recordProxyAttendance(
-    row: DailyBoardRow,
-    eventType: "drop_off" | "pick_up",
-    time: string,
-    notifyGuardian: boolean,
-  ): Promise<boolean> {
-    const occurredAt = `${businessDate}T${time}:00+09:00`;
-    const { error } = await createClient().rpc("record_staff_manual_attendance", {
-      p_child_id: row.child_id,
-      p_event_type: eventType,
-      p_occurred_at: occurredAt,
-      p_notify_guardian: notifyGuardian,
-    });
-    if (error) return false;
-    setReloadToken((t) => t + 1);
-    return true;
   }
 
   // 連絡帳の公開操作(§2.4)。対象は approved かつ未公開の contact_id 群。
@@ -495,7 +473,6 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">登降園</th>
                 <th className="px-4 py-3">家庭連絡帳</th>
                 <th className="px-4 py-3">お迎え変更</th>
-                <th className="px-4 py-3">代理打刻(保護者通知あり)</th>
                 <th className="px-4 py-3">連絡帳公開</th>
                 {internalNotesEnabled && <th className="px-4 py-3">園内記録</th>}
               </tr>
@@ -608,25 +585,6 @@ function ChildcareDailyBoardPageContent() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {row.status === "present" ? (
-                        <button
-                          onClick={() => setProxyTarget({ row, eventType: "pick_up" })}
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                        >
-                          降園を登録
-                        </button>
-                      ) : row.status === "not_arrived" || row.status === "absent" ? (
-                        <button
-                          onClick={() => setProxyTarget({ row, eventType: "drop_off" })}
-                          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"
-                        >
-                          登園を登録
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
                       <ContactPublishCell
                         row={row}
                         onSchedule17={() => row.contact_id && scheduleContacts([row.contact_id], "17:00")}
@@ -669,14 +627,6 @@ function ChildcareDailyBoardPageContent() {
           childName={internalNotesChild.name}
           officeId={selectedOffice}
           onClose={() => setInternalNotesChild(null)}
-        />
-      )}
-
-      {proxyTarget && (
-        <ProxyAttendanceModal
-          target={proxyTarget}
-          onClose={() => setProxyTarget(null)}
-          onSubmit={recordProxyAttendance}
         />
       )}
 
@@ -828,83 +778,6 @@ function ContactScheduleModal({
             className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
           >
             {saving ? "設定中…" : "予約"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 代理登降園の登録モーダル。時刻(既定=現在時刻・手入力可)+ 保護者通知トグル(既定ON)。 */
-function ProxyAttendanceModal({
-  target,
-  onClose,
-  onSubmit,
-}: {
-  target: { row: DailyBoardRow; eventType: "drop_off" | "pick_up" };
-  onClose: () => void;
-  onSubmit: (
-    row: DailyBoardRow,
-    eventType: "drop_off" | "pick_up",
-    time: string,
-    notifyGuardian: boolean,
-  ) => Promise<boolean>;
-}) {
-  const now = new Date();
-  const defaultTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  const [time, setTime] = useState(defaultTime);
-  const [notify, setNotify] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const actionLabel = target.eventType === "drop_off" ? "登園" : "降園";
-  const childName = `${target.row.display_name}${target.row.honorific_suffix ?? ""}`;
-
-  async function handleSubmit() {
-    setSaving(true);
-    setError(null);
-    const ok = await onSubmit(target.row, target.eventType, time, notify);
-    if (!ok) {
-      setSaving(false);
-      setError("登録に失敗しました(主任以上のみ登録できます)");
-      return;
-    }
-    onClose();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <h3 className="text-base font-bold text-slate-800">
-          {childName} の{actionLabel}を登録
-        </h3>
-        <div className="mt-4">
-          <label className="mb-1 block text-xs font-medium text-slate-500">{actionLabel}時刻</label>
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-          />
-        </div>
-        <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-          保護者へ通知する
-        </label>
-        {error && <p className="mt-3 text-xs font-medium text-red-500">{error}</p>}
-        <div className="mt-6 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            キャンセル
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
-          >
-            {saving ? "登録中…" : "登録"}
           </button>
         </div>
       </div>
