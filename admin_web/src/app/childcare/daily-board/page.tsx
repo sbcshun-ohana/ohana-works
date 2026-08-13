@@ -21,6 +21,30 @@ function effectiveBoardStatus(row: DailyBoardRow): DailyBoardRow["status"] {
   return row.status;
 }
 
+// 画面端に現在の日付・時刻をリアルタイム表示する時計(1秒更新)。SSRとの不一致回避のため初回はnull。
+function NowClock() {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    function tick() {
+      setNow(new Date());
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!now) return null;
+  const text = now.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  return <span className="text-sm font-medium tabular-nums text-slate-500">{text}</span>;
+}
+
 // 198: 承認済み欠席(期間)の行内バッジ文言。期間「MM/DD〜MM/DD 欠席予定(病欠)」・単日「MM/DD 欠席予定(...)」。
 function absencePeriodText(a: {
   start_date: string;
@@ -358,7 +382,10 @@ function ChildcareDailyBoardPageContent() {
       <AppHeader />
       <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
-        <h2 className="text-lg font-bold text-slate-800">デイリーボード</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-slate-800">デイリーボード</h2>
+          <NowClock />
+        </div>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
           <div>
@@ -378,12 +405,20 @@ function ChildcareDailyBoardPageContent() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
-            <input
-              type="date"
-              value={businessDate}
-              onChange={(e) => setBusinessDate(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={businessDate}
+                onChange={(e) => setBusinessDate(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+              />
+              <button
+                onClick={() => setBusinessDate(currentDate())}
+                className="rounded-lg border border-sky-300 bg-sky-50 px-2.5 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+              >
+                本日
+              </button>
+            </div>
           </div>
           {/* 天気入力(天気/気温/湿度/保存)は同じ上段に並べる。区切りに細い縦線を挟む。 */}
           <div className="mx-1 h-9 w-px self-end bg-slate-200" />
