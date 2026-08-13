@@ -7,6 +7,7 @@ import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
 import '../../../models/nap.dart';
 import '../../../widgets/time_dropdown_picker.dart';
+import '../../../services/childcare_active_office.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
@@ -38,6 +39,10 @@ class DailyBoardScreen extends StatefulWidget {
 
 class _DailyBoardScreenState extends State<DailyBoardScreen> {
   late DateTime _businessDate = widget.businessDate;
+  // 施設切替(俊要望): デイリーボード内で操作施設を変更できるようにする。widget値を初期値にする。
+  late String _officeId = widget.officeId;
+  late bool _isManager = widget.isManager;
+  List<ChildcareOffice> _offices = const [];
   late Future<List<DailyBoardRow>> _rowsFuture;
   RealtimeChannel? _channel;
 
@@ -56,17 +61,53 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadOffices();
     _loadClasses();
     _loadSummary();
     _loadWeather();
     _loadNapMissing();
     _loadAbsencePeriods();
-    _channel = widget.service.watchDailyChildStatus(widget.officeId, () {
+    _subscribe();
+  }
+
+  void _subscribe() {
+    _channel = widget.service.watchDailyChildStatus(_officeId, () {
       if (!mounted) return;
       setState(_load);
       _loadSummary();
       _loadAbsencePeriods();
     });
+  }
+
+  // 施設切替UI(俊要望): 自分がアクセス可能な保育施設の一覧を取得。
+  Future<void> _loadOffices() async {
+    try {
+      final offices = await widget.service.fetchMyChildcareOffices();
+      if (mounted) setState(() => _offices = offices);
+    } catch (_) {
+      // 取得失敗時は切替UIを出さない(現施設のまま)。
+    }
+  }
+
+  // 施設を切り替える。クラス選択をリセットし、Realtime購読を張り直し、全データを再取得。
+  // 共通ヘッダー(黒帯)の施設名も追随させる。
+  void _onOfficeChanged(ChildcareOffice office) {
+    if (office.officeId == _officeId) return;
+    if (_channel != null) Supabase.instance.client.removeChannel(_channel!);
+    setState(() {
+      _officeId = office.officeId;
+      _isManager = office.isManager;
+      _selectedClassId = null;
+      _classes = const [];
+      _load();
+    });
+    childcareActiveOfficeName.value = office.officeName;
+    _loadClasses();
+    _loadSummary();
+    _loadWeather();
+    _loadNapMissing();
+    _loadAbsencePeriods();
+    _subscribe();
   }
 
   @override
@@ -76,7 +117,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   void _load() {
-    _rowsFuture = widget.service.fetchDailyBoardForOffice(widget.officeId, _businessDate).then((rows) {
+    _rowsFuture = widget.service.fetchDailyBoardForOffice(_officeId, _businessDate).then((rows) {
       _allRows = rows; // 一括操作の対象抽出用に保持
       return rows;
     });
@@ -129,13 +170,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   Future<void> _loadClasses() async {
-    final classes = await widget.service.fetchChildcareClasses(widget.officeId);
+    final classes = await widget.service.fetchChildcareClasses(_officeId);
     if (mounted) setState(() => _classes = classes);
   }
 
   Future<void> _loadSummary() async {
     final summary = await widget.service.fetchDailyBoardSummary(
-      widget.officeId,
+      _officeId,
       _businessDate,
       classId: _selectedClassId,
     );
@@ -143,7 +184,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   Future<void> _loadWeather() async {
-    final weather = await widget.service.fetchDailyWeather(widget.officeId, _businessDate);
+    final weather = await widget.service.fetchDailyWeather(_officeId, _businessDate);
     if (mounted) {
       setState(() {
         _weather = weather;
@@ -155,7 +196,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // §3.4: 午睡チェックの記入漏れ警告バナー用。
   Future<void> _loadNapMissing() async {
     try {
-      final missing = await widget.service.fetchNapMissingSlots(widget.officeId, _businessDate);
+      final missing = await widget.service.fetchNapMissingSlots(_officeId, _businessDate);
       if (mounted) setState(() => _napMissing = missing);
     } catch (_) {
       // 取得失敗時はバナー非表示(安全側)。
@@ -165,7 +206,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // 198: 承認済み欠席(期間)を取得。付加情報のため失敗は握りつぶし(バッジ非表示=安全側)。
   Future<void> _loadAbsencePeriods() async {
     try {
-      final m = await widget.service.fetchBoardAbsencePeriodsForOffice(widget.officeId, _businessDate);
+      final m = await widget.service.fetchBoardAbsencePeriodsForOffice(_officeId, _businessDate);
       if (mounted) setState(() => _absenceByChild = m);
     } catch (_) {
       // 取得失敗時は前回値のまま/非表示。
@@ -180,34 +221,45 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     await _rowsFuture;
   }
 
-  // 198: 承認済み欠席(期間)の行内バッジ。期間「MM/DD〜MM/DD 欠席予定(病欠/都合欠)」・単日「MM/DD 欠席予定(...)」。
-  Widget _absencePeriodBadge(({DateTime start, DateTime end, String kind}) p) {
-    String md(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
-    final kindLabel = p.kind == 'sick_absence' ? '病欠' : p.kind == 'personal_absence' ? '都合欠' : '欠席';
-    final sameDay = p.start.year == p.end.year && p.start.month == p.end.month && p.start.day == p.end.day;
-    final range = sameDay ? md(p.start) : '${md(p.start)}〜${md(p.end)}';
+  // 右40%カラムの操作アイコン(ツールチップ付きの小ボタン)。日誌・連絡帳/出欠編集/欠席トグル。
+  Widget _actionIcon(IconData icon, String tooltip, Color color, VoidCallback onTap) {
+    return IconButton(
+      onPressed: onTap,
+      icon: Icon(icon, size: 20, color: color),
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+    );
+  }
+
+  // 右40%カラムの小バッジ(お迎え変更/療育外出中 等)。列幅内に収め溢れは省略。
+  Widget _miniBadge(IconData icon, String label, Color color) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.punchClockOut.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
-          const Icon(Icons.event_busy_rounded, size: 18, color: AppColors.punchClockOut),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
           Expanded(
-            child: Text(
-              '$range 欠席予定($kindLabel)',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.punchClockOut),
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(label,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color), overflow: TextOverflow.ellipsis),
           ),
         ],
       ),
     );
+  }
+
+  // 198: 承認済み欠席(期間)の小バッジ。期間/単日を短く表示。
+  Widget _miniAbsenceBadge(({DateTime start, DateTime end, String kind}) p) {
+    String md(DateTime d) => '${d.month}/${d.day}';
+    final kindLabel = p.kind == 'sick_absence' ? '病欠' : p.kind == 'personal_absence' ? '都合欠' : '欠席';
+    final sameDay = p.start.year == p.end.year && p.start.month == p.end.month && p.start.day == p.end.day;
+    final range = sameDay ? md(p.start) : '${md(p.start)}〜${md(p.end)}';
+    return _miniBadge(Icons.event_busy_rounded, '$range 欠席予定($kindLabel)', AppColors.punchClockOut);
   }
 
   // K5(i): デイリーボード行から欠席登録/取消(簡易)。種別/メモ付きの本格編集は後続の出欠モーダル(K7)で。
@@ -253,7 +305,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       isScrollControlled: true,
       builder: (_) => _WeatherEditSheet(
         service: widget.service,
-        officeId: widget.officeId,
+        officeId: _officeId,
         businessDate: _businessDate,
         initial: _weather,
       ),
@@ -282,11 +334,11 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => DailyContactDetailScreen(
         service: widget.service,
-        officeId: widget.officeId,
+        officeId: _officeId,
         childId: row.childId,
         childNameLabel: row.nameLabel,
         businessDate: _businessDate,
-        isManager: widget.isManager,
+        isManager: _isManager,
       ),
     ));
     if (mounted) {
@@ -304,7 +356,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         service: widget.service,
         row: row,
         businessDate: _businessDate,
-        isManager: widget.isManager,
+        isManager: _isManager,
       ),
     );
     if (saved == true && mounted) {
@@ -318,7 +370,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => FamilyReportListScreen(
         service: widget.service,
-        officeId: widget.officeId,
+        officeId: _officeId,
         businessDate: _businessDate,
       ),
     ));
@@ -331,7 +383,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           service: widget.service,
           childId: row.childId,
           childName: row.nameLabel,
-          officeId: widget.officeId,
+          officeId: _officeId,
           businessDate: _businessDate,
         ),
       ),
@@ -348,7 +400,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         titleSpacing: 0,
         title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         actions: [
-          const _NowClock(),
           TextButton.icon(
             onPressed: _openFamilyReports,
             icon: const Icon(Icons.family_restroom_rounded, size: 16),
@@ -364,13 +415,20 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       ),
       body: Column(
         children: [
-          // クラス絞り込みと天気を1行に集約(縦の占有を減らし園児リスト領域を広げる)。
+          // 施設切替・クラス絞り込み・天気・現在時刻を1行に集約(縦の占有を減らし園児リスト領域を広げる)。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
               children: [
+                if (_offices.length > 1) ...[
+                  SizedBox(
+                    width: 180,
+                    child: _OfficeFilterBar(offices: _offices, officeId: _officeId, onChanged: _onOfficeChanged),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 SizedBox(
-                  width: 200,
+                  width: 170,
                   child: _ClassFilterBar(
                     classes: _classes,
                     selectedClassId: _selectedClassId,
@@ -379,6 +437,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather)),
+                const SizedBox(width: 10),
+                const _NowClock(),
               ],
             ),
           ),
@@ -416,152 +476,90 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final row = rows[index];
+                      // 60/40レイアウト: 左=氏名/クラス+登降園タイムバー(約60%)、右=状態/操作/バッジ(約40%)。
                       return Card(
-                        child: Column(
-                          children: [
-                            ListTile(
-                              contentPadding: const EdgeInsets.all(16),
-                              onTap: () => _openChildDetail(row),
-                              title: Text(row.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(row.className, style: const TextStyle(color: AppColors.textSecondary)),
-                                  const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 14,
-                                    runSpacing: 2,
+                        margin: EdgeInsets.zero,
+                        child: InkWell(
+                          onTap: () => _openChildDetail(row),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // 左 約60%: 氏名/クラス + タイムバー
+                                Expanded(
+                                  flex: 6,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      InkWell(
-                                        onTap: () => _openContact(row),
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: const Padding(
-                                          padding: EdgeInsets.symmetric(vertical: 2),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.menu_book_rounded, size: 15, color: AppColors.skyBlue),
-                                              SizedBox(width: 4),
-                                              Text('日誌・連絡帳',
-                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.skyBlue)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      InkWell(
-                                        onTap: () => _openAttendanceEdit(row),
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: const Padding(
-                                          padding: EdgeInsets.symmetric(vertical: 2),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.edit_calendar_rounded, size: 15, color: AppColors.warmOrange),
-                                              SizedBox(width: 4),
-                                              Text('出欠編集',
-                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warmOrange)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      InkWell(
-                                    onTap: () => _toggleAbsence(row),
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                      Row(
                                         children: [
-                                          Icon(
-                                            row.status == 'absent' ? Icons.undo_rounded : Icons.event_busy_rounded,
-                                            size: 15,
-                                            color: row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
+                                          Flexible(
+                                            child: Text(row.nameLabel,
+                                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                                                overflow: TextOverflow.ellipsis),
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
+                                          const SizedBox(width: 8),
+                                          Text(row.className, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      _AttendanceTimeBar(row: row),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                // 右 約40%: 状態チップ + 操作アイコン + 補足バッジ + 連絡帳公開
+                                Expanded(
+                                  flex: 4,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Wrap(
+                                        alignment: WrapAlignment.end,
+                                        spacing: 2,
+                                        runSpacing: 0,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: [
+                                          _StatusChip(status: effectiveBoardStatus(row)),
+                                          _actionIcon(Icons.menu_book_rounded, '日誌・連絡帳', AppColors.skyBlue, () => _openContact(row)),
+                                          _actionIcon(Icons.edit_calendar_rounded, '出欠編集', AppColors.warmOrange, () => _openAttendanceEdit(row)),
+                                          _actionIcon(
+                                            row.status == 'absent' ? Icons.undo_rounded : Icons.event_busy_rounded,
                                             row.status == 'absent' ? '出席に戻す' : '欠席にする',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
-                                            ),
+                                            row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
+                                            () => _toggleAbsence(row),
                                           ),
                                         ],
                                       ),
-                                    ),
+                                      if (row.hasPickupChange)
+                                        _miniBadge(Icons.person_pin_circle_rounded,
+                                            'お迎え変更: ${row.pickupPersonName ?? ''}'
+                                            '${row.pickupTimeFrom != null ? '(${row.pickupTimeFrom}〜${row.pickupTimeTo})' : ''}',
+                                            AppColors.warmOrange),
+                                      if (row.onTherapyOuting)
+                                        _miniBadge(Icons.directions_walk_rounded,
+                                            '療育外出中'
+                                            '${row.therapyOutAt != null ? '(${row.therapyOutAt!.toLocal().hour.toString().padLeft(2, '0')}:${row.therapyOutAt!.toLocal().minute.toString().padLeft(2, '0')})' : ''}',
+                                            const Color(0xFF7A5FC0)),
+                                      if (_absenceByChild[row.childId] != null)
+                                        _miniAbsenceBadge(_absenceByChild[row.childId]!),
+                                      _ContactPublishRow(
+                                        row: row,
+                                        onSchedule17: () => _scheduleContacts([row.contactId!], hour: 17, minute: 0),
+                                        onPickTime: () => _pickAndSchedule([row.contactId!]),
+                                        onPublishNow: () => _publishContactsNow([row.contactId!]),
+                                        onCancel: () => _cancelContacts([row.contactId!]),
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                              trailing: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  _StatusChip(status: effectiveBoardStatus(row)),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                            _AttendanceTimeBar(row: row),
-                            if (row.hasPickupChange)
-                              Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.warmOrange.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.person_pin_circle_rounded, size: 18, color: AppColors.warmOrange),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        'お迎え変更あり: ${row.pickupPersonName}'
-                                        '${row.pickupTimeFrom != null ? '(${row.pickupTimeFrom}〜${row.pickupTimeTo})' : ''}',
-                                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            if (row.onTherapyOuting)
-                              Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF9B7EDE).withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.directions_walk_rounded, size: 18, color: Color(0xFF7A5FC0)),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        '療育外出中'
-                                        '${row.therapyOutAt != null ? '(${row.therapyOutAt!.toLocal().hour.toString().padLeft(2, '0')}:${row.therapyOutAt!.toLocal().minute.toString().padLeft(2, '0')})' : ''}'
-                                        '${row.therapyProviderName != null ? ' ${row.therapyProviderName}' : ''}',
-                                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF7A5FC0)),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            if (_absenceByChild[row.childId] != null)
-                              _absencePeriodBadge(_absenceByChild[row.childId]!),
-                            _ContactPublishRow(
-                              row: row,
-                              onSchedule17: () => _scheduleContacts([row.contactId!], hour: 17, minute: 0),
-                              onPickTime: () => _pickAndSchedule([row.contactId!]),
-                              onPublishNow: () => _publishContactsNow([row.contactId!]),
-                              onCancel: () => _cancelContacts([row.contactId!]),
-                            ),
-                          ],
+                          ),
                         ),
                       );
                     },
@@ -699,8 +697,14 @@ class _ContactPublishRow extends StatelessWidget {
         ];
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: children),
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 6,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: children,
+      ),
     );
   }
 }
@@ -775,6 +779,36 @@ class _ClassFilterBar extends StatelessWidget {
           DropdownMenuItem<String?>(value: c.classId, child: Text(c.className)),
       ],
       onChanged: onChanged,
+    );
+  }
+}
+
+/// 施設切替(俊要望)。アクセス可能な保育施設が2つ以上あるときだけ表示する。
+class _OfficeFilterBar extends StatelessWidget {
+  const _OfficeFilterBar({required this.offices, required this.officeId, required this.onChanged});
+
+  final List<ChildcareOffice> offices;
+  final String officeId;
+  final ValueChanged<ChildcareOffice> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: officeId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: '施設',
+        isDense: true,
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        for (final o in offices) DropdownMenuItem<String>(value: o.officeId, child: Text(o.officeName)),
+      ],
+      onChanged: (v) {
+        if (v == null) return;
+        final o = offices.firstWhere((e) => e.officeId == v);
+        onChanged(o);
+      },
     );
   }
 }
@@ -951,30 +985,28 @@ class _SummaryBar extends StatelessWidget {
     ];
     // 園児一覧の表示領域を最大化するため、5枚の大カード→1本の細いバーに圧縮。
     // 縦向きでも溢れないよう Wrap で折り返す。ラベル・色・数字・Realtime更新は不変。
+    // さらに小型化: ラベル小さめ・数字を横に密に並べ、横1行で多くのステータスを表示。溢れは横スクロール。
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final item in items)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(item.label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    const SizedBox(width: 4),
-                    Text(
-                      item.value?.toString() ?? '—',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: item.color),
-                    ),
-                  ],
-                ),
-            ],
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final item in items) ...[
+                  Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                  const SizedBox(width: 3),
+                  Text(
+                    item.value?.toString() ?? '—',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: item.color),
+                  ),
+                  const SizedBox(width: 14),
+                ],
+              ],
+            ),
           ),
         ),
       ),
