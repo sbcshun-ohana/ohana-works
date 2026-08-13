@@ -131,7 +131,9 @@ class ChildcareService {
   Future<ClassActivity> fetchClassActivityDetail(String activityId) async {
     final row = await _client
         .from('class_daily_activities')
-        .select('*, childcare_classes(class_name), employees(name)')
+        // employees への FK が複数(assignee/approved_by)あるため、埋め込みは FK 名で明示する
+        // (無指定だと PostgREST が曖昧エラーを返し、詳細取得→claim後の再読込が失敗する)。
+        .select('*, childcare_classes(class_name), employees!class_daily_activities_assignee_employee_id_fkey(name)')
         .eq('id', activityId)
         .single();
     final classInfo = row['childcare_classes'] as Map<String, dynamic>?;
@@ -222,7 +224,8 @@ class ChildcareService {
   Future<DailyContact> fetchDailyContactDetail(String contactId) async {
     final row = await _client
         .from('child_daily_contacts')
-        .select('*, children(display_name, honorific_suffix), employees(name)')
+        // employees への FK が複数(assignee/approved_by/copied_by)あるため FK 名で明示(曖昧エラー防止)。
+        .select('*, children(display_name, honorific_suffix), employees!child_daily_contacts_assignee_employee_id_fkey(name)')
         .eq('id', contactId)
         .single();
     final child = row['children'] as Map<String, dynamic>?;

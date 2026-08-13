@@ -329,6 +329,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     );
   }
 
+  // DBのtime文字列('HH:MM:SS')をHH:MMへ整形。
+  String _hm5(String? s) => s == null ? '' : (s.length >= 5 ? s.substring(0, 5) : s);
+
   // 右40%カラムの小バッジ(お迎え変更/療育外出中 等)。列幅内に収め溢れは省略。
   Widget _miniBadge(IconData icon, String label, Color color) {
     return Container(
@@ -547,25 +550,29 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
               margin: EdgeInsets.zero,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _quickTile(Icons.today_rounded, '本日', AppColors.skyBlue,
-                          onTap: () => _onDateChanged(DateTime.now())),
-                      const SizedBox(width: 4),
-                      BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
-                      const SizedBox(width: 8),
-                      _SummaryInline(summary: _summary),
-                      const SizedBox(width: 14),
-                      _quickTile(Icons.fact_check_rounded, '出席簿', AppColors.skyBlue, current: true),
-                      const SizedBox(width: 8),
-                      _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen,
-                          onTap: _openFamilyReports),
-                      const SizedBox(width: 8),
-                      _quickTile(Icons.thermostat_rounded, '健康チェック', AppColors.punchClockOut, onTap: _openHealthCheck),
-                    ],
-                  ),
+                // 配置バランス(俊指示): 本日・日付=左寄せ / 在籍〜欠席=中央寄せ / タイル3枚=右寄せ。
+                // 中央のサマリーは幅不足時に FittedBox で縮小し1行を維持する。
+                child: Row(
+                  children: [
+                    _quickTile(Icons.today_rounded, '本日', AppColors.skyBlue,
+                        onTap: () => _onDateChanged(DateTime.now())),
+                    const SizedBox(width: 4),
+                    BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
+                    Expanded(
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _SummaryInline(summary: _summary),
+                        ),
+                      ),
+                    ),
+                    _quickTile(Icons.fact_check_rounded, '出席簿', AppColors.skyBlue, current: true),
+                    const SizedBox(width: 8),
+                    _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen,
+                        onTap: _openFamilyReports),
+                    const SizedBox(width: 8),
+                    _quickTile(Icons.thermostat_rounded, '健康チェック', AppColors.punchClockOut, onTap: _openHealthCheck),
+                  ],
                 ),
               ),
             ),
@@ -656,11 +663,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                         ],
                                       ),
                                       // お迎え変更: 氏名+続柄+時間帯を表示(admin_webのお迎え変更列と同等の情報量)。
+                                      // 時刻はDBのtime('HH:MM:SS')をHH:MMへ整形。toが無ければfromのみ表示。
                                       if (row.hasPickupChange)
-                                        _miniBadge(Icons.person_pin_circle_rounded,
+                                        _miniBadge(
+                                            Icons.person_pin_circle_rounded,
                                             'お迎え変更: ${row.pickupPersonName ?? ''}'
                                             '${row.pickupPersonRelationship != null && row.pickupPersonRelationship!.isNotEmpty ? '(${row.pickupPersonRelationship})' : ''}'
-                                            '${row.pickupTimeFrom != null ? ' ${row.pickupTimeFrom}〜${row.pickupTimeTo}' : ''}',
+                                            '${row.pickupTimeFrom != null ? ' ${_hm5(row.pickupTimeFrom)}${row.pickupTimeTo != null ? '〜${_hm5(row.pickupTimeTo)}' : ''}' : ''}',
                                             AppColors.warmOrange),
                                       if (row.onTherapyOuting)
                                         _miniBadge(Icons.directions_walk_rounded,
