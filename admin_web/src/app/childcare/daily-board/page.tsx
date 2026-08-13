@@ -48,6 +48,8 @@ function ChildcareDailyBoardPageContent() {
   const [absenceByChild, setAbsenceByChild] = useState<
     Record<string, { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" }>
   >({});
+  // 欠席児童一覧の「保護者からの連絡」用。承認済み欠席申請の details['理由'] を child_id→コメントで保持(DB変更なし・RLSでstaff select可)。
+  const [absenceCommentByChild, setAbsenceCommentByChild] = useState<Record<string, string>>({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
@@ -130,6 +132,44 @@ function ChildcareDailyBoardPageContent() {
         });
     }
     loadAbsencePeriods();
+  }, [selectedOffice, businessDate, reloadToken]);
+
+  // 欠席児童一覧の「保護者からの連絡」: 承認済み欠席申請(parent_requests)の details['理由'] を取得する。
+  // RLSで担当施設の職員はselect可。対象日が期間内(target_date<=対象日<=end_date、単日はend=target)の承認済み欠席のみ。
+  useEffect(() => {
+    function loadAbsenceComments() {
+      if (!selectedOffice) {
+        setAbsenceCommentByChild({});
+        return;
+      }
+      createClient()
+        .from("parent_requests")
+        .select("child_id, details, target_date, end_date, children!inner(office_id)")
+        .eq("children.office_id", selectedOffice)
+        .eq("status", "approved")
+        .eq("request_type", "absence")
+        .lte("target_date", businessDate)
+        .then(({ data, error }) => {
+          if (error || !data) {
+            setAbsenceCommentByChild({});
+            return;
+          }
+          const map: Record<string, string> = {};
+          for (const r of data as {
+            child_id: string;
+            details: Record<string, unknown> | null;
+            target_date: string;
+            end_date: string | null;
+          }[]) {
+            const end = r.end_date ?? r.target_date; // 単日は end=target
+            if (end < businessDate) continue; // 対象日が期間を過ぎていれば除外
+            const reason = r.details && typeof r.details["理由"] === "string" ? (r.details["理由"] as string) : "";
+            if (reason) map[r.child_id] = reason;
+          }
+          setAbsenceCommentByChild(map);
+        });
+    }
+    loadAbsenceComments();
   }, [selectedOffice, businessDate, reloadToken]);
 
   // 在籍登園状況サマリー。クラス絞り込み(selectedClass=class_id)に連動し、
@@ -637,27 +677,60 @@ function ChildcareDailyBoardPageContent() {
             <h3 className="mb-3 text-sm font-bold text-slate-700">
               欠席児童一覧 <span className="text-xs font-normal text-slate-400">({absentRows.length}名)</span>
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {absentByClass.map((grp) => (
                 <div key={grp.class_id}>
                   <div className="mb-1 text-xs font-semibold text-slate-500">{grp.class_name}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {grp.rows.map((row) => (
-                      <button
-                        key={row.child_id}
-                        onClick={() => setAttendanceTarget(row)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1 text-sm text-red-700 transition hover:bg-red-100"
-                        title="出欠編集"
-                      >
-                        {row.display_name}
-                        {row.honorific_suffix ?? ""}
-                        {(row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence") && (
-                          <span className="text-[10px] font-semibold text-red-500">
-                            {ATTENDANCE_KIND_LABELS[row.attendance_kind]}
-                          </span>
-                        )}
-                      </button>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                          <th className="px-3 py-2">園児</th>
+                          <th className="px-3 py-2">欠席期間</th>
+                          <th className="px-3 py-2">種別</th>
+                          <th className="px-3 py-2">保護者からの連絡</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grp.rows.map((row) => {
+                          const period = absenceByChild[row.child_id];
+                          // 欠席期間: 承認済み期間欠席は終了日基準。対象日で終わるなら「本日まで」、以降は「M/Dまで」。無ければ本日単日。
+                          const endDate = period ? period.end_date : businessDate;
+                          const periodText =
+                            endDate === businessDate
+                              ? "本日まで"
+                              : `${Number(endDate.slice(5, 7))}/${Number(endDate.slice(8, 10))}まで`;
+                          const comment = absenceCommentByChild[row.child_id];
+                          return (
+                            <tr key={row.child_id} className="border-b border-slate-100 last:border-0">
+                              <td className="px-3 py-2">
+                                <button
+                                  onClick={() => setAttendanceTarget(row)}
+                                  className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-500"
+                                  title="出欠編集"
+                                >
+                                  {row.display_name}
+                                  {row.honorific_suffix ?? ""}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">{periodText}</td>
+                              <td className="px-3 py-2">
+                                {row.attendance_kind === "sick_absence" || row.attendance_kind === "personal_absence" ? (
+                                  <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
+                                    {ATTENDANCE_KIND_LABELS[row.attendance_kind]}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 whitespace-pre-wrap text-slate-600">
+                                {comment ? comment : <span className="text-slate-300">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               ))}
