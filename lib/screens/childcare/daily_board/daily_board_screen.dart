@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -11,6 +9,7 @@ import '../../../services/childcare_active_office.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
+import '../../../widgets/now_clock.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
 import '../contacts/daily_contact_detail_screen.dart';
@@ -523,7 +522,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                 const SizedBox(width: 10),
                 Expanded(child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather)),
                 const SizedBox(width: 10),
-                const _NowClock(),
+                const NowClock(),
               ],
             ),
           ),
@@ -776,48 +775,6 @@ class _ContactPublishRow extends StatelessWidget {
         runSpacing: 2,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: children,
-      ),
-    );
-  }
-}
-
-/// 画面端(AppBar右)に現在の日付・時刻をリアルタイム表示する時計(1秒更新)。
-class _NowClock extends StatefulWidget {
-  const _NowClock();
-
-  @override
-  State<_NowClock> createState() => _NowClockState();
-}
-
-class _NowClockState extends State<_NowClock> {
-  DateTime _now = DateTime.now();
-  Timer? _timer;
-  static const _wd = ['月', '火', '水', '木', '金', '土', '日'];
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final n = _now;
-    String two(int v) => v.toString().padLeft(2, '0');
-    final text = '${n.year}/${two(n.month)}/${two(n.day)}(${_wd[n.weekday - 1]}) '
-        '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Center(
-        child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
       ),
     );
   }

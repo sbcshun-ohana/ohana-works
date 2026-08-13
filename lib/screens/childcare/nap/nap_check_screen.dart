@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../models/nap.dart';
 import '../../../services/childcare_service.dart';
+import '../../../widgets/now_clock.dart';
 import '../../../widgets/time_dropdown_picker.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
@@ -382,7 +383,7 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
         titleSpacing: 0,
         toolbarHeight: 48,
         title: const Text('午睡チェック', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
+        actions: [const NowClock(), BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: Column(
         children: [

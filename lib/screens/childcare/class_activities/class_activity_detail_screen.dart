@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/now_clock.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 
 /// §8 クラス活動の入力・申請(職員)と承認・差し戻し(管理者)。
@@ -168,6 +169,7 @@ class _ClassActivityDetailScreenState extends State<ClassActivityDetailScreen> {
         leadingWidth: 200,
         toolbarHeight: 48,
         title: Text(widget.className),
+        actions: const [NowClock()],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

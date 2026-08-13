@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/now_clock.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import 'class_activity_detail_screen.dart';
@@ -61,7 +62,7 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
         leadingWidth: 148,
         toolbarHeight: 48,
         title: const Text('クラス活動'),
-        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
+        actions: [const NowClock(), BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: RefreshIndicator(
         onRefresh: _reload,

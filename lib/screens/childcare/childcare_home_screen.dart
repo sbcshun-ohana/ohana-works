@@ -10,6 +10,7 @@ import '../../widgets/ohana_logo_home_button.dart';
 import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
+import 'children/weekly_schedule_list_screen.dart';
 import 'daily_board/daily_board_screen.dart';
 import 'health/temperature_screen.dart';
 import 'nap/nap_check_screen.dart';
@@ -179,18 +180,15 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 isManager: office.isManager,
               )),
             ),
-            // 週次予定(標準保育時間・園児単位)。発見性のため home に導線を新設(俊確定)。
-            // 園内記録と同じく新規画面は作らず、デイリーボード→園児行→園児詳細(AppBar 週次アイコン)の
-            // 既存導線に乗せる。デイリーボードで対象園児を選ぶ。
+            // 週次予定(標準保育時間・園児単位)。専用の園児一覧画面から直接シートを開く
+            // (旧: デイリーボード経由の遠回り導線を俊指示で改善)。
             _HomeTile(
               icon: Icons.event_repeat_rounded,
               color: AppColors.leafGreen,
               label: '週次予定',
-              onTap: () => _push(DailyBoardScreen(
+              onTap: () => _push(WeeklyScheduleListScreen(
                 service: widget.service,
                 officeId: office.officeId,
-                businessDate: _businessDate,
-                isManager: office.isManager,
               )),
             ),
             _HomeTile(

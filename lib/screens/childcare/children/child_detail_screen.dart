@@ -151,6 +151,20 @@ class _FamilyDailyReportTabState extends State<_FamilyDailyReportTab> {
   }
 }
 
+/// 週次保育時間シートを開く公開ヘルパ(ホームの「週次予定」一覧画面からも再利用する)。
+Future<void> showChildWeeklyScheduleSheet(
+  BuildContext context, {
+  required ChildcareService service,
+  required String childId,
+  required String childName,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _WeeklyScheduleSheet(service: service, childId: childId, childName: childName),
+  );
+}
+
 /// 週次標準保育時間(184)の編集。曜日=1:月..7:日。設定/削除は主任以上(サーバー側ゲート)。
 /// 予定の既定値。日別の変更はデイリーボードの出欠モーダル(登降園予定override)で行う。
 class _WeeklyScheduleSheet extends StatefulWidget {
