@@ -28,6 +28,7 @@ class ChildcareHomeScreen extends StatefulWidget {
 
 class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   late Future<List<ChildcareOffice>> _officesFuture;
+  List<ChildcareOffice> _officesCache = const [];
   ChildcareOffice? _selectedOffice;
   final DateTime _businessDate = DateTime.now();
   bool _internalNotesEnabled = false;
@@ -36,12 +37,35 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   void initState() {
     super.initState();
     _officesFuture = widget.service.fetchMyChildcareOffices();
+    // 施設一覧を黒帯(SessionBanner)の施設プルダウンへ供給し、黒帯からの切替に追随する。
+    _officesFuture.then((offices) {
+      if (!mounted) return;
+      _officesCache = offices;
+      childcareOfficeList.value = offices;
+    });
+    childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
+  }
+
+  // 黒帯の施設プルダウン変更に追随(ホームのタイル遷移先officeIdも切り替わる)。
+  void _onSharedOfficeChanged() {
+    final id = childcareActiveOfficeId.value;
+    if (id == null || !mounted || _selectedOffice?.officeId == id) return;
+    for (final o in _officesCache) {
+      if (o.officeId == id) {
+        setState(() => _selectedOffice = o);
+        _loadInternalNotesFlag();
+        return;
+      }
+    }
   }
 
   @override
   void dispose() {
-    // childcareモードを離脱(ログアウト等)する際は共通ヘッダーの操作中施設をクリアする。
+    // childcareモードを離脱(ログアウト等)する際は共通ヘッダーの操作中施設・一覧をクリアする。
+    childcareActiveOfficeId.removeListener(_onSharedOfficeChanged);
     childcareActiveOfficeName.value = null;
+    childcareActiveOfficeId.value = null;
+    childcareOfficeList.value = const [];
     super.dispose();
   }
 
@@ -92,6 +116,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               // build中のNotifier更新を避けフレーム後に反映(共通ヘッダーの操作中施設)。
               childcareActiveOfficeName.value = offices.first.officeName;
+              childcareActiveOfficeId.value = offices.first.officeId;
               _loadInternalNotesFlag();
             });
           }
@@ -275,8 +300,9 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 onChanged: (office) {
                   if (office == null) return;
                   setState(() => _selectedOffice = office);
-                  // 共通ヘッダー(黒帯)の施設名を操作中施設に追随させる(Y4)。
+                  // 共通ヘッダー(黒帯)の施設名・IDを操作中施設に追随させる(Y4+黒帯切替)。
                   childcareActiveOfficeName.value = office.officeName;
+                  childcareActiveOfficeId.value = office.officeId;
                   _loadInternalNotesFlag();
                 },
               ),

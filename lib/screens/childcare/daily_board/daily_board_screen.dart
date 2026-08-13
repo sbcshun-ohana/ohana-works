@@ -68,6 +68,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadNapMissing();
     _loadAbsencePeriods();
     _subscribe();
+    childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
   }
 
   void _subscribe() {
@@ -79,13 +80,29 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     });
   }
 
-  // 施設切替UI(俊要望): 自分がアクセス可能な保育施設の一覧を取得。
+  // 施設切替(俊指示): 切替UIは黒帯(SessionBanner)へ集約。ここでは一覧を共有状態へ供給し、
+  // 黒帯での変更(childcareActiveOfficeId)を listen して追随する。
   Future<void> _loadOffices() async {
     try {
       final offices = await widget.service.fetchMyChildcareOffices();
-      if (mounted) setState(() => _offices = offices);
+      if (!mounted) return;
+      setState(() => _offices = offices);
+      childcareOfficeList.value = offices;
+      childcareActiveOfficeId.value ??= _officeId;
     } catch (_) {
       // 取得失敗時は切替UIを出さない(現施設のまま)。
+    }
+  }
+
+  // 黒帯の施設プルダウン変更に追随する。
+  void _onSharedOfficeChanged() {
+    final id = childcareActiveOfficeId.value;
+    if (id == null || id == _officeId || !mounted) return;
+    for (final o in _offices) {
+      if (o.officeId == id) {
+        _onOfficeChanged(o);
+        return;
+      }
     }
   }
 
@@ -112,6 +129,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
 
   @override
   void dispose() {
+    childcareActiveOfficeId.removeListener(_onSharedOfficeChanged);
     if (_channel != null) Supabase.instance.client.removeChannel(_channel!);
     super.dispose();
   }
@@ -219,6 +237,85 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadWeather();
     _loadAbsencePeriods();
     await _rowsFuture;
+  }
+
+  // クイックリンクタイル(Web版のタイル思想)。current=この画面(枠線強調・タップなし)、preparing=準備中(disabled)。
+  Widget _quickTile(IconData icon, String label, Color? color, {VoidCallback? onTap, bool current = false, bool preparing = false}) {
+    final c = preparing ? AppColors.textSecondary : (color ?? AppColors.skyBlue);
+    return InkWell(
+      onTap: preparing ? null : onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: preparing ? 0.08 : 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: current ? Border.all(color: c, width: 1.2) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: c),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c)),
+            if (preparing) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.textSecondary.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text('準備中', style: TextStyle(fontSize: 9, color: AppColors.textSecondary)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 連絡帳一括(施設/クラス)。色+アイコン付きの視覚的に分かりやすいボタン群(俊指示)。
+  Widget _bulkGroup() {
+    final scopeLabel = _selectedClassId == null ? '施設一括' : 'クラス一括';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('連絡帳 $scopeLabel', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        const SizedBox(width: 6),
+        _bulkButton('17時公開予約', Icons.schedule_rounded, AppColors.skyBlue,
+            () => _scheduleContacts(_bulkEligibleContactIds(), hour: 17, minute: 0)),
+        const SizedBox(width: 4),
+        _bulkButton('今すぐ公開', Icons.send_rounded, AppColors.leafGreen,
+            () => _publishContactsNow(_bulkEligibleContactIds())),
+        const SizedBox(width: 4),
+        _bulkButton('予約取消', Icons.cancel_schedule_send_rounded, AppColors.punchClockOut,
+            () => _cancelContacts(_bulkEligibleContactIds())),
+      ],
+    );
+  }
+
+  Widget _bulkButton(String label, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          border: Border.all(color: color.withValues(alpha: 0.55)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+          ],
+        ),
+      ),
+    );
   }
 
   // 右40%カラムの操作アイコン(ツールチップ付きの小ボタン)。日誌・連絡帳/出欠編集/欠席トグル。
@@ -400,11 +497,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         titleSpacing: 0,
         title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         actions: [
-          TextButton.icon(
-            onPressed: _openFamilyReports,
-            icon: const Icon(Icons.family_restroom_rounded, size: 16),
-            label: const Text('家庭での様子', style: TextStyle(fontSize: 13)),
-          ),
           // 「本日」ボタン: 対象日を本日に戻す。
           TextButton(
             onPressed: () => _onDateChanged(DateTime.now()),
@@ -415,18 +507,11 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       ),
       body: Column(
         children: [
-          // 施設切替・クラス絞り込み・天気・現在時刻を1行に集約(縦の占有を減らし園児リスト領域を広げる)。
+          // クラス絞り込み・天気・現在時刻を1行に集約(施設切替は黒帯へ移設)。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
               children: [
-                if (_offices.length > 1) ...[
-                  SizedBox(
-                    width: 180,
-                    child: _OfficeFilterBar(offices: _offices, officeId: _officeId, onChanged: _onOfficeChanged),
-                  ),
-                  const SizedBox(width: 10),
-                ],
                 SizedBox(
                   width: 170,
                   child: _ClassFilterBar(
@@ -443,12 +528,29 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
             ),
           ),
           if (_napMissing.isNotEmpty) _NapMissingBanner(missing: _napMissing),
-          _SummaryBar(summary: _summary),
-          _ContactBulkBar(
-            scopeLabel: _selectedClassId == null ? '施設一括' : 'クラス一括',
-            onSchedule17: () => _scheduleContacts(_bulkEligibleContactIds(), hour: 17, minute: 0),
-            onPublishNow: () => _publishContactsNow(_bulkEligibleContactIds()),
-            onCancel: () => _cancelContacts(_bulkEligibleContactIds()),
+          // サマリー・クイックリンク・連絡帳一括を同じ段(1本の帯)に集約(俊指示)。溢れは折返し。
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _SummaryInline(summary: _summary),
+                    // クイックリンク(Web版と同構成)。出席簿=この画面(現在地)。健康/食事チェックは準備中。
+                    _quickTile(Icons.fact_check_rounded, '出席簿', AppColors.skyBlue, current: true),
+                    _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen, onTap: _openFamilyReports),
+                    _quickTile(Icons.thermostat_rounded, '健康チェック', null, preparing: true),
+                    _quickTile(Icons.restaurant_rounded, '食事チェック', null, preparing: true),
+                    _bulkGroup(),
+                  ],
+                ),
+              ),
+            ),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -535,10 +637,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                           ),
                                         ],
                                       ),
+                                      // お迎え変更: 氏名+続柄+時間帯を表示(admin_webのお迎え変更列と同等の情報量)。
                                       if (row.hasPickupChange)
                                         _miniBadge(Icons.person_pin_circle_rounded,
                                             'お迎え変更: ${row.pickupPersonName ?? ''}'
-                                            '${row.pickupTimeFrom != null ? '(${row.pickupTimeFrom}〜${row.pickupTimeTo})' : ''}',
+                                            '${row.pickupPersonRelationship != null && row.pickupPersonRelationship!.isNotEmpty ? '(${row.pickupPersonRelationship})' : ''}'
+                                            '${row.pickupTimeFrom != null ? ' ${row.pickupTimeFrom}〜${row.pickupTimeTo}' : ''}',
                                             AppColors.warmOrange),
                                       if (row.onTherapyOuting)
                                         _miniBadge(Icons.directions_walk_rounded,
@@ -609,38 +713,6 @@ class _NapMissingBanner extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// 連絡帳公開の一括バー(表示中=クラス選択中ならクラス一括、全クラスなら施設一括)。
-class _ContactBulkBar extends StatelessWidget {
-  const _ContactBulkBar({
-    required this.scopeLabel,
-    required this.onSchedule17,
-    required this.onPublishNow,
-    required this.onCancel,
-  });
-
-  final String scopeLabel;
-  final VoidCallback onSchedule17;
-  final VoidCallback onPublishNow;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Row(
-        children: [
-          Text('連絡帳 $scopeLabel',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
-          const Spacer(),
-          TextButton(onPressed: onSchedule17, child: const Text('17時予約')),
-          TextButton(onPressed: onPublishNow, child: const Text('今すぐ公開')),
-          TextButton(onPressed: onCancel, child: const Text('取消')),
-        ],
       ),
     );
   }
@@ -779,36 +851,6 @@ class _ClassFilterBar extends StatelessWidget {
           DropdownMenuItem<String?>(value: c.classId, child: Text(c.className)),
       ],
       onChanged: onChanged,
-    );
-  }
-}
-
-/// 施設切替(俊要望)。アクセス可能な保育施設が2つ以上あるときだけ表示する。
-class _OfficeFilterBar extends StatelessWidget {
-  const _OfficeFilterBar({required this.offices, required this.officeId, required this.onChanged});
-
-  final List<ChildcareOffice> offices;
-  final String officeId;
-  final ValueChanged<ChildcareOffice> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: officeId,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: '施設',
-        isDense: true,
-        border: OutlineInputBorder(),
-      ),
-      items: [
-        for (final o in offices) DropdownMenuItem<String>(value: o.officeId, child: Text(o.officeName)),
-      ],
-      onChanged: (v) {
-        if (v == null) return;
-        final o = offices.firstWhere((e) => e.officeId == v);
-        onChanged(o);
-      },
     );
   }
 }
@@ -967,9 +1009,10 @@ class _WeatherEditSheetState extends State<_WeatherEditSheet> {
   }
 }
 
-/// 在籍登園状況サマリー(在籍/登園予定/出席/登園中/欠席)。数字はRPC集計を表示するのみ。
-class _SummaryBar extends StatelessWidget {
-  const _SummaryBar({required this.summary});
+/// 在籍登園状況サマリー(在籍/登園予定/出席/登園中/欠席)のインライン表示。数字はRPC集計のまま。
+/// クイックリンク・連絡帳一括と同じ帯(Wrap)に置くため、外枠(Card)は持たない小型Row。
+class _SummaryInline extends StatelessWidget {
+  const _SummaryInline({required this.summary});
 
   final DailyBoardSummary? summary;
 
@@ -983,33 +1026,19 @@ class _SummaryBar extends StatelessWidget {
       _SummaryItem('登園中', s?.presentNow, AppColors.leafGreen),
       _SummaryItem('欠席', s?.absent, AppColors.punchClockOut),
     ];
-    // 園児一覧の表示領域を最大化するため、5枚の大カード→1本の細いバーに圧縮。
-    // 縦向きでも溢れないよう Wrap で折り返す。ラベル・色・数字・Realtime更新は不変。
-    // さらに小型化: ラベル小さめ・数字を横に密に並べ、横1行で多くのステータスを表示。溢れは横スクロール。
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final item in items) ...[
-                  Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                  const SizedBox(width: 3),
-                  Text(
-                    item.value?.toString() ?? '—',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: item.color),
-                  ),
-                  const SizedBox(width: 14),
-                ],
-              ],
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final item in items) ...[
+          Text(item.label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+          const SizedBox(width: 3),
+          Text(
+            item.value?.toString() ?? '—',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: item.color),
           ),
-        ),
-      ),
+          const SizedBox(width: 12),
+        ],
+      ],
     );
   }
 }
@@ -1147,6 +1176,33 @@ class _AttendanceTimeBar extends StatelessWidget {
                 children.add(seg(arr, actEnd, AppColors.skyBlue, 5, 10));
               }
             }
+
+            // 始点(登園)・終点(降園)の濃色丸マーカー(俊指示)。降園済みの園児は終点の丸が付くため、
+            // 誰が帰ったかを時間軸だけで視覚的に区別できる(在園中は終点マーカーなし)。
+            const dotColor = Color(0xFF2F7FA6); // skyBlueより濃い青
+            Widget dot(int m) {
+              final cx = frac(m) * w;
+              return Positioned(
+                left: (cx - 5).clamp(0.0, (w - 10).clamp(0.0, double.infinity)),
+                top: 3,
+                width: 10,
+                height: 14,
+                child: Center(
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: dotColor,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            if (arr != null) children.add(dot(arr));
+            if (dep != null) children.add(dot(dep));
             return SizedBox(height: 20, width: w, child: Stack(children: children));
           }),
           if (schedS != null || schedE != null)
