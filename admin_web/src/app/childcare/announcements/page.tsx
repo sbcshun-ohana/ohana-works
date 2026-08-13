@@ -88,6 +88,14 @@ function AnnouncementsPageContent() {
   const [returnDialog, setReturnDialog] = useState<{ noticeId: string; reason: string } | null>(null);
   const [revokeDialog, setRevokeDialog] = useState<{ noticeId: string; reason: string } | null>(null);
 
+  // 案b: 右一覧=作業中(未確定)、下=配信履歴(確定実績)に振り分け二重表示を排除する。
+  //  確定 = 取消済み(revoked_at) または 配信済み(approved かつ sent_at)。作業中 = それ以外の全状態。
+  const workingNotices = notices.filter((n) => !n.revoked_at && !(n.status === "approved" && n.sent_at));
+  const finalizedHistory = history.filter((h) => !!h.revoked_at || !!h.sent_at);
+  // 詳細パネルで予定変更/予約取消を出す条件(承認済み・未配信=配信予約中)。履歴表からは予約中を除外するため。
+  const isScheduledUnsent =
+    !!selectedNotice && selectedNotice.status === "approved" && !selectedNotice.sent_at && !selectedNotice.revoked_at;
+
   // 詳細(承認済み)の既読集計・未読世帯
   const [readSummary, setReadSummary] = useState<GuardianNoticeReadSummary | null>(null);
   const [unreadList, setUnreadList] = useState<GuardianNoticeUnreadRecipient[]>([]);
@@ -563,14 +571,16 @@ function AnnouncementsPageContent() {
             </section>
           )}
 
-          {/* 一覧 */}
+          {/* 一覧(作業中のみ: 下書き・申請中・差し戻し・承認済み未配信)。配信済み/取消済みは配信履歴へ。 */}
           <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-700">この施設の一斉配信</h3>
+            <h3 className="text-sm font-bold text-slate-700">作業中のお知らせ</h3>
             {isLoading && <p className="text-sm text-slate-400">読み込み中…</p>}
             {listError && <p className="text-sm text-rose-500">{listError}</p>}
-            {!isLoading && notices.length === 0 && <p className="text-sm text-slate-400">一斉配信はまだありません。</p>}
+            {!isLoading && workingNotices.length === 0 && (
+              <p className="text-sm text-slate-400">作業中のお知らせはありません。</p>
+            )}
             <ul className="space-y-2">
-              {notices.map((n) => (
+              {workingNotices.map((n) => (
                 <li key={n.id}>
                   <button
                     onClick={() => setSelectedId(n.id === selectedId ? null : n.id)}
@@ -599,8 +609,8 @@ function AnnouncementsPageContent() {
           {/* 配信履歴(いつ・何時に・誰に・何世帯)+ 予約の予定変更/取消 */}
           <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
             <h3 className="text-sm font-bold text-slate-700">配信履歴</h3>
-            {history.length === 0 && <p className="text-sm text-slate-400">履歴はまだありません。</p>}
-            {history.length > 0 && (
+            {finalizedHistory.length === 0 && <p className="text-sm text-slate-400">履歴はまだありません。</p>}
+            {finalizedHistory.length > 0 && (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
@@ -614,7 +624,7 @@ function AnnouncementsPageContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map((h) => {
+                    {finalizedHistory.map((h) => {
                       const scheduledUnsent = h.status === "approved" && !h.sent_at && !!h.scheduled_send_at && !h.revoked_at;
                       return (
                         <tr key={h.notice_id} className="border-b border-slate-100 last:border-0">
@@ -755,6 +765,25 @@ function AnnouncementsPageContent() {
                 >
                   取り消し
                 </button>
+              )}
+              {/* 承認済み未配信(配信予約中)の予定変更/取消。履歴表から予約中を外したため詳細に集約。 */}
+              {isScheduledUnsent && (
+                <>
+                  <button
+                    onClick={() => handleReschedule(selectedNotice.id)}
+                    disabled={isBusy}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    予定変更
+                  </button>
+                  <button
+                    onClick={() => handleCancelSchedule(selectedNotice.id)}
+                    disabled={isBusy}
+                    className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                  >
+                    予約取消
+                  </button>
+                </>
               )}
             </div>
           </section>
