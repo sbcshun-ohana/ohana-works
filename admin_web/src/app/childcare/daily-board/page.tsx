@@ -20,6 +20,17 @@ function effectiveBoardStatus(row: DailyBoardRow): DailyBoardRow["status"] {
   return row.status;
 }
 
+// 198: 承認済み欠席(期間)の行内バッジ文言。期間「MM/DD〜MM/DD 欠席予定(病欠)」・単日「MM/DD 欠席予定(...)」。
+function absencePeriodText(a: {
+  start_date: string;
+  end_date: string;
+  absence_kind: "sick_absence" | "personal_absence";
+}): string {
+  const md = (d: string) => d.slice(5, 10).replace("-", "/"); // 'YYYY-MM-DD' → 'MM/DD'
+  const range = a.start_date === a.end_date ? md(a.start_date) : `${md(a.start_date)}〜${md(a.end_date)}`;
+  return `${range} 欠席予定(${ATTENDANCE_KIND_LABELS[a.absence_kind]})`;
+}
+
 function ChildcareDailyBoardPageContent() {
   const { offices, officesError, selectedOffice, setSelectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
@@ -31,6 +42,10 @@ function ChildcareDailyBoardPageContent() {
   const [weather, setWeather] = useState<WeatherRecord | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [napMissing, setNapMissing] = useState<NapMissing[]>([]);
+  // 198: 承認済み欠席(期間)の行内バッジ用。child_id→期間情報。fetch_daily_board_for_officeとは別RPC。
+  const [absenceByChild, setAbsenceByChild] = useState<
+    Record<string, { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" }>
+  >({});
   const [proxyTarget, setProxyTarget] = useState<{ row: DailyBoardRow; eventType: "drop_off" | "pick_up" } | null>(
     null,
   );
@@ -83,6 +98,35 @@ function ChildcareDailyBoardPageContent() {
           return;
         }
         setRows((data ?? []) as DailyBoardRow[]);
+      });
+  }, [selectedOffice, businessDate, reloadToken]);
+
+  // 198: 承認済み欠席(期間)を別RPCで取得し child_id→期間 のMapを作る(付加情報・失敗時は非表示)。
+  useEffect(() => {
+    if (!selectedOffice) {
+      setAbsenceByChild({});
+      return;
+    }
+    createClient()
+      .rpc("fetch_board_absence_periods_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
+      .then(({ data, error }) => {
+        if (error) {
+          setAbsenceByChild({});
+          return;
+        }
+        const map: Record<
+          string,
+          { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" }
+        > = {};
+        for (const r of (data ?? []) as {
+          child_id: string;
+          start_date: string;
+          end_date: string;
+          absence_kind: "sick_absence" | "personal_absence";
+        }[]) {
+          map[r.child_id] = { start_date: r.start_date, end_date: r.end_date, absence_kind: r.absence_kind };
+        }
+        setAbsenceByChild(map);
       });
   }, [selectedOffice, businessDate, reloadToken]);
 
@@ -445,6 +489,11 @@ function ChildcareDailyBoardPageContent() {
                           {row.therapy_out_at
                             ? `(${new Date(row.therapy_out_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })})`
                             : ""}
+                        </span>
+                      )}
+                      {absenceByChild[row.child_id] && (
+                        <span className="ml-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
+                          {absencePeriodText(absenceByChild[row.child_id])}
                         </span>
                       )}
                     </td>

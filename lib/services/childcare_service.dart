@@ -460,6 +460,27 @@ class ChildcareService {
     return (rows as List).map((row) => DailyBoardRow.fromJson(row as Map<String, dynamic>)).toList();
   }
 
+  /// 198: デイリーボードの欠席期間表示。承認済み欠席(期間・absence_kind非NULL)のうち
+  /// 対象営業日が期間内のものを園児あたり1件返す(在籍クリップ済)。childId→(start,end,kind)。
+  /// fetch_daily_board_for_office とは別RPC(ボードRPCは不変)。行内バッジ表示の付加情報。
+  Future<Map<String, ({DateTime start, DateTime end, String kind})>> fetchBoardAbsencePeriodsForOffice(
+      String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_board_absence_periods_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    final map = <String, ({DateTime start, DateTime end, String kind})>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      map[m['child_id'] as String] = (
+        start: DateTime.parse(m['start_date'] as String),
+        end: DateTime.parse(m['end_date'] as String),
+        kind: (m['absence_kind'] as String?) ?? '',
+      );
+    }
+    return map;
+  }
+
   /// 在籍登園状況サマリー。classId=null で施設全体、指定でそのクラス単位。
   /// 集計はRPC側に一任し、admin_web/Ohana Kidsで数字を一致させる。
   Future<DailyBoardSummary> fetchDailyBoardSummary(

@@ -47,6 +47,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   bool _weatherLoaded = false;
   List<DailyBoardRow> _allRows = const [];
   List<NapMissing> _napMissing = const [];
+  // 198: 承認済み欠席(期間)を行内に表示するための childId→(start,end,kind)。付加情報。
+  Map<String, ({DateTime start, DateTime end, String kind})> _absenceByChild = const {};
 
   @override
   void initState() {
@@ -56,10 +58,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadSummary();
     _loadWeather();
     _loadNapMissing();
+    _loadAbsencePeriods();
     _channel = widget.service.watchDailyChildStatus(widget.officeId, () {
       if (!mounted) return;
       setState(_load);
       _loadSummary();
+      _loadAbsencePeriods();
     });
   }
 
@@ -156,11 +160,52 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  // 198: 承認済み欠席(期間)を取得。付加情報のため失敗は握りつぶし(バッジ非表示=安全側)。
+  Future<void> _loadAbsencePeriods() async {
+    try {
+      final m = await widget.service.fetchBoardAbsencePeriodsForOffice(widget.officeId, _businessDate);
+      if (mounted) setState(() => _absenceByChild = m);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+  }
+
   Future<void> _reload() async {
     setState(_load);
     _loadSummary();
     _loadWeather();
+    _loadAbsencePeriods();
     await _rowsFuture;
+  }
+
+  // 198: 承認済み欠席(期間)の行内バッジ。期間「MM/DD〜MM/DD 欠席予定(病欠/都合欠)」・単日「MM/DD 欠席予定(...)」。
+  Widget _absencePeriodBadge(({DateTime start, DateTime end, String kind}) p) {
+    String md(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
+    final kindLabel = p.kind == 'sick_absence' ? '病欠' : p.kind == 'personal_absence' ? '都合欠' : '欠席';
+    final sameDay = p.start.year == p.end.year && p.start.month == p.end.month && p.start.day == p.end.day;
+    final range = sameDay ? md(p.start) : '${md(p.start)}〜${md(p.end)}';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.punchClockOut.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.event_busy_rounded, size: 18, color: AppColors.punchClockOut),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '$range 欠席予定($kindLabel)',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.punchClockOut),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // K5(i): デイリーボード行から欠席登録/取消(簡易)。種別/メモ付きの本格編集は後続の出欠モーダル(K7)で。
@@ -245,6 +290,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadSummary();
     _loadWeather();
     _loadNapMissing();
+    _loadAbsencePeriods();
   }
 
   // K5(iii)/Phase A: 園児行から当日の連絡帳(園側 日誌・連絡帳)へ。既存詳細画面を再利用。
@@ -525,6 +571,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                   ],
                                 ),
                               ),
+                            if (_absenceByChild[row.childId] != null)
+                              _absencePeriodBadge(_absenceByChild[row.childId]!),
                             _ProxyAttendanceButton(row: row, onTap: _recordProxyAttendance),
                             _ContactPublishRow(
                               row: row,
