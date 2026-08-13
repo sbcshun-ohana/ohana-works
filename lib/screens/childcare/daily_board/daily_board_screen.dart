@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -245,24 +247,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
-  Future<void> _recordProxyAttendance(DailyBoardRow row, String eventType) async {
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _ProxyAttendanceSheet(
-        service: widget.service,
-        childId: row.childId,
-        childName: row.nameLabel,
-        eventType: eventType,
-        businessDate: _businessDate,
-      ),
-    );
-    if (result == true && mounted) {
-      setState(_load);
-      _loadSummary();
-    }
-  }
-
   Future<void> _editWeather() async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -364,10 +348,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         titleSpacing: 0,
         title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         actions: [
+          const _NowClock(),
           TextButton.icon(
             onPressed: _openFamilyReports,
             icon: const Icon(Icons.family_restroom_rounded, size: 16),
             label: const Text('家庭での様子', style: TextStyle(fontSize: 13)),
+          ),
+          // 「本日」ボタン: 対象日を本日に戻す。
+          TextButton(
+            onPressed: () => _onDateChanged(DateTime.now()),
+            child: const Text('本日', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
           ),
           BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
         ],
@@ -509,15 +499,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   _StatusChip(status: effectiveBoardStatus(row)),
-                                  if (row.lastEventAt != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        '${row.lastEventAt!.hour.toString().padLeft(2, '0')}:'
-                                        '${row.lastEventAt!.minute.toString().padLeft(2, '0')}',
-                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
@@ -573,7 +554,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                               ),
                             if (_absenceByChild[row.childId] != null)
                               _absencePeriodBadge(_absenceByChild[row.childId]!),
-                            _ProxyAttendanceButton(row: row, onTap: _recordProxyAttendance),
                             _ContactPublishRow(
                               row: row,
                               onSchedule17: () => _scheduleContacts([row.contactId!], hour: 17, minute: 0),
@@ -725,141 +705,43 @@ class _ContactPublishRow extends StatelessWidget {
   }
 }
 
-/// 状態に応じた代理登録ボタン(未登園/欠席→登園を登録、登園中→降園を登録、降園済み→なし)。
-class _ProxyAttendanceButton extends StatelessWidget {
-  const _ProxyAttendanceButton({required this.row, required this.onTap});
-
-  final DailyBoardRow row;
-  final Future<void> Function(DailyBoardRow row, String eventType) onTap;
+/// 画面端(AppBar右)に現在の日付・時刻をリアルタイム表示する時計(1秒更新)。
+class _NowClock extends StatefulWidget {
+  const _NowClock();
 
   @override
-  Widget build(BuildContext context) {
-    final String? eventType;
-    final String label;
-    switch (row.status) {
-      case 'present':
-        eventType = 'pick_up';
-        label = '降園を代理打刻(保護者通知あり)';
-      case 'not_arrived':
-      case 'absent':
-        eventType = 'drop_off';
-        label = '登園を代理打刻(保護者通知あり)';
-      default:
-        eventType = null;
-        label = '';
-    }
-    if (eventType == null) return const SizedBox.shrink();
-    final resolvedEventType = eventType;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: OutlinedButton.icon(
-          onPressed: () => onTap(row, resolvedEventType),
-          icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-          label: Text(label),
-        ),
-      ),
-    );
-  }
+  State<_NowClock> createState() => _NowClockState();
 }
 
-/// 代理登降園の登録シート。時刻(既定=現在時刻・手入力可)+ 保護者通知トグル(既定ON)。
-class _ProxyAttendanceSheet extends StatefulWidget {
-  const _ProxyAttendanceSheet({
-    required this.service,
-    required this.childId,
-    required this.childName,
-    required this.eventType,
-    required this.businessDate,
-  });
-
-  final ChildcareService service;
-  final String childId;
-  final String childName;
-  final String eventType; // 'drop_off' | 'pick_up'
-  final DateTime businessDate;
+class _NowClockState extends State<_NowClock> {
+  DateTime _now = DateTime.now();
+  Timer? _timer;
+  static const _wd = ['月', '火', '水', '木', '金', '土', '日'];
 
   @override
-  State<_ProxyAttendanceSheet> createState() => _ProxyAttendanceSheetState();
-}
-
-class _ProxyAttendanceSheetState extends State<_ProxyAttendanceSheet> {
-  late TimeOfDay _time = TimeOfDay.now();
-  bool _notify = true;
-  bool _saving = false;
-
-  String get _actionLabel => widget.eventType == 'drop_off' ? '登園' : '降園';
-
-  Future<void> _pickTime() async {
-    final picked = await showTimeDropdownPicker(context: context, initialTime: _time);
-    if (picked != null) setState(() => _time = picked);
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
   }
 
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    // 対象日 + 手入力時刻(JST壁時計)を UTC 実時刻へ変換して渡す(端末TZに依存しない)。
-    final occurredAt = DateTime.utc(
-      widget.businessDate.year,
-      widget.businessDate.month,
-      widget.businessDate.day,
-      _time.hour,
-      _time.minute,
-    ).subtract(const Duration(hours: 9));
-    try {
-      await widget.service.recordStaffManualAttendance(
-        childId: widget.childId,
-        eventType: widget.eventType,
-        occurredAt: occurredAt,
-        notifyGuardian: _notify,
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('登録に失敗しました(主任以上のみ登録できます)')),
-        );
-      }
-    }
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hh = _time.hour.toString().padLeft(2, '0');
-    final mm = _time.minute.toString().padLeft(2, '0');
+    final n = _now;
+    String two(int v) => v.toString().padLeft(2, '0');
+    final text = '${n.year}/${two(n.month)}/${two(n.day)}(${_wd[n.weekday - 1]}) '
+        '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${widget.childName} の$_actionLabelを登録',
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text('$_actionLabel時刻', style: const TextStyle(color: AppColors.textSecondary)),
-              const SizedBox(width: 12),
-              OutlinedButton(onPressed: _pickTime, child: Text('$hh:$mm')),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('保護者へ通知する'),
-            value: _notify,
-            onChanged: (v) => setState(() => _notify = v),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? '登録中…' : '登録'),
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Center(
+        child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
       ),
     );
   }
