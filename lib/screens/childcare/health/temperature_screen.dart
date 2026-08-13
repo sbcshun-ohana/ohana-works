@@ -8,8 +8,10 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 
-/// 健康チェック(検温)。園児ごとに日中の検温を複数回 記録/削除する(188)。
-/// 過去日はサーバー側で主任以上に限定(record/delete)。UIでも当日以外・非主任は操作不可を明示。
+/// 健康チェック(188検温+194排便+199ミルク/食事)。6タブ構成(俊確定 2026-08-13):
+/// 検温/排便/ミルク/午前おやつ/昼食/午後おやつ。縦=園児一覧、タブごとに一覧のまま連続入力できる。
+/// 年齢絞り込み(UI側): ミルク=生後18ヶ月未満、おやつ/昼食=0・1・2歳児(実年齢3歳未満)。
+/// 過去日はサーバー側で主任以上に限定。UIでも当日以外・非主任は操作不可を明示。
 class TemperatureScreen extends StatefulWidget {
   const TemperatureScreen({
     super.key,
@@ -28,15 +30,33 @@ class TemperatureScreen extends StatefulWidget {
   State<TemperatureScreen> createState() => _TemperatureScreenState();
 }
 
+/// タブ定義。key はDBのスロット名/内部識別子。
+const List<({String key, String label})> _healthTabs = [
+  (key: 'temp', label: '検温'),
+  (key: 'toileting', label: '排便'),
+  (key: 'milk', label: 'ミルク'),
+  (key: 'am_snack', label: '午前おやつ'),
+  (key: 'lunch', label: '昼食'),
+  (key: 'pm_snack', label: '午後おやつ'),
+];
+
 class _TemperatureScreenState extends State<TemperatureScreen> {
   late DateTime _businessDate = widget.businessDate;
   List<ChildcareClass> _classes = const [];
   String? _selectedClassId;
+  String _tab = 'temp';
   bool _loading = true;
   List<({String childId, String nameLabel, String className})> _roster = const [];
   Map<String, List<ChildTemperatureRecord>> _byChild = const {};
-  // 当日の排便記録を園児ごとに行内表示(194 fetch_toileting_records)。childId→時刻順の(time,type)。
-  Map<String, List<({String time, String type})>> _toiletingByChild = const {};
+  // 199一括取得: childId→(birthDate, 排便, ミルク, 食事)。
+  Map<String,
+          ({
+            DateTime birthDate,
+            List<({String time, String type})> toileting,
+            List<({String time, int amountMl})> milk,
+            Map<String, String> meals
+          })>
+      _healthByChild = const {};
 
   bool get _canEdit {
     final today = DateTime.now();
@@ -60,6 +80,7 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
     setState(() => _loading = true);
     try {
       final records = await widget.service.fetchChildTemperaturesForOffice(widget.officeId, _businessDate);
+      final health = await widget.service.fetchHealthCheckForOffice(widget.officeId, _businessDate);
       final List<({String childId, String nameLabel, String className})> roster;
       if (_selectedClassId != null) {
         final className = _classes
@@ -80,27 +101,18 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
       for (final r in records) {
         byChild.putIfAbsent(r.childId, () => []).add(r);
       }
-      // 排便記録は園児ごとの取得(194に園全体RPCは無いためロスター分を並列取得)。
-      final toiletingLists = await Future.wait(
-        roster.map((c) => widget.service.fetchToiletingRecords(c.childId, _businessDate)),
-      );
-      final toiletingByChild = <String, List<({String time, String type})>>{};
-      for (var i = 0; i < roster.length; i++) {
-        final list = [...toiletingLists[i]]..sort((a, b) => a.time.compareTo(b.time));
-        toiletingByChild[roster[i].childId] = list;
-      }
       if (mounted) {
         setState(() {
           _roster = roster;
           _byChild = byChild;
-          _toiletingByChild = toiletingByChild;
+          _healthByChild = health;
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() => _loading = false);
-        _snack('検温情報の取得に失敗しました');
+        _snack('健康チェック情報の取得に失敗しました');
       }
     }
   }
@@ -116,7 +128,18 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
 
   String _hm(String dbTime) => dbTime.length >= 5 ? dbTime.substring(0, 5) : dbTime;
 
-  Future<void> _addRecord(({String childId, String nameLabel, String className}) child) async {
+  /// 対象日時点の月齢。ミルク=18ヶ月未満/食事=36ヶ月未満(0・1・2歳児)の絞り込みに使う。
+  int? _ageMonths(String childId) {
+    final b = _healthByChild[childId]?.birthDate;
+    if (b == null) return null;
+    var months = (_businessDate.year - b.year) * 12 + (_businessDate.month - b.month);
+    if (_businessDate.day < b.day) months -= 1;
+    return months;
+  }
+
+  // ---------------- 検温 ----------------
+
+  Future<void> _addTemperature(({String childId, String nameLabel, String className}) child) async {
     final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
     if (t == null || !mounted) return;
     final temp = await _pickTemperature();
@@ -157,27 +180,7 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
     );
   }
 
-  // 排便(排泄)記録の性状。連絡帳の排泄欄(admin_web TOILETING_TYPES)と同一。
-  static const List<String> _toiletingTypes = ['普通', '軟便', '硬便', '下痢便'];
-
-  // 排便記録シート: 当日の記録を fetch し、時/分+性状プルダウンで追記・削除(194 RPC)。
-  // データは連絡帳の toileting_records と同一実体(二重管理なし)。
-  Future<void> _openToiletingSheet(({String childId, String nameLabel, String className}) child) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => _ToiletingSheet(
-        service: widget.service,
-        childId: child.childId,
-        nameLabel: child.nameLabel,
-        businessDate: _businessDate,
-        canEdit: _canEdit,
-        toiletingTypes: _toiletingTypes,
-      ),
-    );
-  }
-
-  Future<void> _deleteRecord(String childId, ChildTemperatureRecord rec) async {
+  Future<void> _deleteTemperature(String childId, ChildTemperatureRecord rec) async {
     if (!await _confirm('${_hm(rec.measuredAt)} ${rec.temperature}℃ を削除しますか?')) return;
     try {
       await widget.service.deleteChildTemperature(childId, _businessDate, _hm(rec.measuredAt));
@@ -185,6 +188,123 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
     } catch (_) {
       _snack('削除に失敗しました(過去日は主任以上)');
     }
+  }
+
+  // ---------------- 排便 ----------------
+
+  // 排便(排泄)記録の性状。連絡帳の排泄欄(admin_web TOILETING_TYPES)と同一。
+  static const List<String> _toiletingTypes = ['普通', '軟便', '硬便', '下痢便'];
+
+  Future<void> _addToileting(({String childId, String nameLabel, String className}) child) async {
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null || !mounted) return;
+    final type = await _pickChoice('便の性状', _toiletingTypes);
+    if (type == null) return;
+    final hhmm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    try {
+      await widget.service.addToiletingRecord(child.childId, _businessDate, hhmm, type);
+      await _reload();
+    } catch (_) {
+      _snack('記録に失敗しました(過去日・公開後は主任以上)');
+    }
+  }
+
+  Future<void> _deleteToileting(String childId, int index, ({String time, String type}) rec) async {
+    if (!await _confirm('${rec.time} ${rec.type} を削除しますか?')) return;
+    try {
+      await widget.service.deleteToiletingRecord(childId, _businessDate, index);
+      await _reload();
+    } catch (_) {
+      _snack('削除に失敗しました(過去日・公開後は主任以上)');
+    }
+  }
+
+  // ---------------- ミルク ----------------
+
+  Future<void> _addMilk(({String childId, String nameLabel, String className}) child) async {
+    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
+    if (t == null || !mounted) return;
+    final amount = await _pickMilkAmount();
+    if (amount == null) return;
+    final hhmm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    try {
+      await widget.service.addMilkRecord(child.childId, _businessDate, hhmm, amount);
+      await _reload();
+    } catch (_) {
+      _snack('記録に失敗しました(過去日・公開後は主任以上)');
+    }
+  }
+
+  Future<int?> _pickMilkAmount() async {
+    // 飲んだ量は 10〜300ml を 10ml 刻みのプルダウンで選択(サーバー上限は500)。
+    final options = <int>[for (var v = 10; v <= 300; v += 10) v];
+    int selected = 100;
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('ミルクの量(ml)'),
+          content: DropdownButton<int>(
+            value: selected,
+            isExpanded: true,
+            items: [for (final v in options) DropdownMenuItem(value: v, child: Text('$v ml'))],
+            onChanged: (v) => setState(() => selected = v ?? selected),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, selected), child: const Text('記録')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteMilk(String childId, int index, ({String time, int amountMl}) rec) async {
+    if (!await _confirm('${rec.time} ${rec.amountMl}ml を削除しますか?')) return;
+    try {
+      await widget.service.deleteMilkRecord(childId, _businessDate, index);
+      await _reload();
+    } catch (_) {
+      _snack('削除に失敗しました(過去日・公開後は主任以上)');
+    }
+  }
+
+  // ---------------- 食事(おやつ/昼食) ----------------
+
+  // 食べた分量の選択肢(UI管理・DB非強制)。
+  static const List<String> _mealAmounts = ['完食', 'ほとんど', '半分', '少量', '食べず'];
+
+  Future<void> _setMeal(String childId, String slot, String? amount) async {
+    try {
+      await widget.service.setMealRecord(childId, _businessDate, slot, amount);
+      await _reload();
+    } catch (_) {
+      _snack('記録に失敗しました(過去日・公開後は主任以上)');
+    }
+  }
+
+  // ---------------- 共通 ----------------
+
+  Future<String?> _pickChoice(String title, List<String> options) {
+    String selected = options.first;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text(title),
+          content: DropdownButton<String>(
+            value: selected,
+            isExpanded: true,
+            items: [for (final t in options) DropdownMenuItem(value: t, child: Text(t))],
+            onChanged: (v) => setState(() => selected = v ?? selected),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, selected), child: const Text('記録')),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<bool> _confirm(String msg) async {
@@ -201,8 +321,29 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
     return r == true;
   }
 
+  /// タブごとの対象園児(年齢絞り込み)。birth_date 不明の児は安全側で表示する。
+  List<({String childId, String nameLabel, String className})> _visibleRoster() {
+    switch (_tab) {
+      case 'milk':
+        return _roster.where((c) {
+          final m = _ageMonths(c.childId);
+          return m == null || m < 18;
+        }).toList();
+      case 'am_snack':
+      case 'lunch':
+      case 'pm_snack':
+        return _roster.where((c) {
+          final m = _ageMonths(c.childId);
+          return m == null || m < 36;
+        }).toList();
+      default:
+        return _roster;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final rows = _visibleRoster();
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
@@ -219,7 +360,7 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
             child: Row(
               children: [
                 SizedBox(
-                  width: 220,
+                  width: 200,
                   child: DropdownButtonFormField<String?>(
                     initialValue: _selectedClassId,
                     isExpanded: true,
@@ -242,95 +383,48 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
               ],
             ),
           ),
+          // カテゴリ切替タブ(6タブ・横スクロール)。
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final t in _healthTabs)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(t.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: _tab == t.key ? Colors.white : AppColors.textPrimary,
+                              )),
+                          selected: _tab == t.key,
+                          selectedColor: AppColors.skyBlue,
+                          onSelected: (_) => setState(() => _tab = t.key),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _roster.isEmpty
+                : rows.isEmpty
                     ? const Center(child: Text('対象の園児がいません'))
                     : RefreshIndicator(
                         onRefresh: _reload,
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(12),
-                          itemCount: _roster.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
-                          itemBuilder: (context, i) {
-                            final child = _roster[i];
-                            final recs = _byChild[child.childId] ?? const [];
-                            final toileting = _toiletingByChild[child.childId] ?? const [];
-                            return Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: 140,
-                                      child: Text(child.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                    ),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Wrap(
-                                            spacing: 8,
-                                            runSpacing: 4,
-                                            crossAxisAlignment: WrapCrossAlignment.center,
-                                            children: [
-                                              for (final r in recs)
-                                                Chip(
-                                                  label: Text('${_hm(r.measuredAt)} ${r.temperature}℃'),
-                                                  onDeleted: _canEdit ? () => _deleteRecord(child.childId, r) : null,
-                                                  visualDensity: VisualDensity.compact,
-                                                ),
-                                              if (recs.isEmpty)
-                                                const Text('検温 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Icon(Icons.wc_rounded, size: 16, color: AppColors.skyBlue),
-                                              const SizedBox(width: 4),
-                                              Expanded(
-                                                child: Text(
-                                                  toileting.isEmpty
-                                                      ? '排便 未記録'
-                                                      : toileting.map((t) => '${t.time} ${t.type}').join(' / '),
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: toileting.isEmpty ? AppColors.textSecondary : AppColors.textPrimary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (_canEdit)
-                                          OutlinedButton.icon(
-                                            onPressed: () => _addRecord(child),
-                                            icon: const Icon(Icons.add, size: 16),
-                                            label: const Text('検温'),
-                                          ),
-                                        const SizedBox(height: 4),
-                                        OutlinedButton.icon(
-                                          onPressed: () => _openToiletingSheet(child),
-                                          icon: const Icon(Icons.wc_rounded, size: 16),
-                                          label: const Text('排便'),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
+                          itemCount: rows.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 6),
+                          itemBuilder: (context, i) => _buildRow(rows[i]),
                         ),
                       ),
           ),
@@ -338,145 +432,124 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
       ),
     );
   }
-}
 
-/// 排便記録シート(194 RPC)。当日の記録を一覧・時/分+性状プルダウンで追記・削除。
-/// データは連絡帳の child_daily_contacts.toileting_records と同一実体。
-class _ToiletingSheet extends StatefulWidget {
-  const _ToiletingSheet({
-    required this.service,
-    required this.childId,
-    required this.nameLabel,
-    required this.businessDate,
-    required this.canEdit,
-    required this.toiletingTypes,
-  });
-
-  final ChildcareService service;
-  final String childId;
-  final String nameLabel;
-  final DateTime businessDate;
-  final bool canEdit;
-  final List<String> toiletingTypes;
-
-  @override
-  State<_ToiletingSheet> createState() => _ToiletingSheetState();
-}
-
-class _ToiletingSheetState extends State<_ToiletingSheet> {
-  List<({String time, String type})> _records = const [];
-  bool _loading = true;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final r = await widget.service.fetchToiletingRecords(widget.childId, widget.businessDate);
-      if (mounted) setState(() { _records = r; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _snack(String m) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-  }
-
-  Future<void> _add() async {
-    final t = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.now());
-    if (t == null || !mounted) return;
-    final type = await _pickType();
-    if (type == null) return;
-    final hhmm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    setState(() => _busy = true);
-    try {
-      await widget.service.addToiletingRecord(widget.childId, widget.businessDate, hhmm, type);
-      await _load();
-    } catch (_) {
-      _snack('記録に失敗しました(過去日・公開後は主任以上)');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<String?> _pickType() {
-    String selected = widget.toiletingTypes.first;
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('便の性状'),
-          content: DropdownButton<String>(
-            value: selected,
-            isExpanded: true,
-            items: [for (final t in widget.toiletingTypes) DropdownMenuItem(value: t, child: Text(t))],
-            onChanged: (v) => setState(() => selected = v ?? selected),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, selected), child: const Text('記録')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _delete(int index) async {
-    setState(() => _busy = true);
-    try {
-      await widget.service.deleteToiletingRecord(widget.childId, widget.businessDate, index);
-      await _load();
-    } catch (_) {
-      _snack('削除に失敗しました(過去日・公開後は主任以上)');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  /// 園児1行。選択中タブに応じた記録列+追加操作を表示する。
+  Widget _buildRow(({String childId, String nameLabel, String className}) child) {
+    final Widget content;
+    final Widget? action;
+    switch (_tab) {
+      case 'temp':
+        final recs = _byChild[child.childId] ?? const [];
+        content = Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Row(
-              children: [
-                Expanded(child: Text('排便記録 — ${widget.nameLabel}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
-                if (widget.canEdit)
-                  FilledButton.icon(
-                    onPressed: _busy ? null : _add,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('追加'),
-                  ),
-              ],
+            for (final r in recs)
+              Chip(
+                label: Text('${_hm(r.measuredAt)} ${r.temperature}℃'),
+                onDeleted: _canEdit ? () => _deleteTemperature(child.childId, r) : null,
+                visualDensity: VisualDensity.compact,
+              ),
+            if (recs.isEmpty)
+              const Text('検温 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        );
+        action = _canEdit
+            ? OutlinedButton.icon(
+                onPressed: () => _addTemperature(child),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('検温'),
+              )
+            : null;
+      case 'toileting':
+        final recs = _healthByChild[child.childId]?.toileting ?? const [];
+        content = Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final e in recs.asMap().entries)
+              Chip(
+                label: Text('${e.value.time} ${e.value.type}'),
+                onDeleted: _canEdit ? () => _deleteToileting(child.childId, e.key, e.value) : null,
+                visualDensity: VisualDensity.compact,
+              ),
+            if (recs.isEmpty)
+              const Text('排便 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        );
+        action = _canEdit
+            ? OutlinedButton.icon(
+                onPressed: () => _addToileting(child),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('排便'),
+              )
+            : null;
+      case 'milk':
+        final recs = _healthByChild[child.childId]?.milk ?? const [];
+        content = Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final e in recs.asMap().entries)
+              Chip(
+                label: Text('${e.value.time} ${e.value.amountMl}ml'),
+                onDeleted: _canEdit ? () => _deleteMilk(child.childId, e.key, e.value) : null,
+                visualDensity: VisualDensity.compact,
+              ),
+            if (recs.isEmpty)
+              const Text('ミルク 未記録', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        );
+        action = _canEdit
+            ? OutlinedButton.icon(
+                onPressed: () => _addMilk(child),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('ミルク'),
+              )
+            : null;
+      default: // am_snack / lunch / pm_snack
+        final current = _healthByChild[child.childId]?.meals[_tab];
+        content = Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            for (final a in _mealAmounts)
+              ChoiceChip(
+                label: Text(a, style: TextStyle(fontSize: 12, color: current == a ? Colors.white : AppColors.textPrimary)),
+                selected: current == a,
+                selectedColor: AppColors.leafGreen,
+                visualDensity: VisualDensity.compact,
+                // 選択中を再タップで未記録に戻す(NULL)。
+                onSelected: _canEdit ? (_) => _setMeal(child.childId, _tab, current == a ? null : a) : null,
+              ),
+          ],
+        );
+        action = null;
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 150,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(child.nameLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(child.className, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            if (_loading)
-              const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
-            else if (_records.isEmpty)
-              const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('記録はありません', style: TextStyle(color: AppColors.textSecondary)))
-            else
-              ..._records.asMap().entries.map((e) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.wc_rounded, color: AppColors.skyBlue),
-                    title: Text('${e.value.time}  ${e.value.type}'),
-                    trailing: widget.canEdit
-                        ? IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                            onPressed: _busy ? null : () => _delete(e.key),
-                          )
-                        : null,
-                  )),
+            Expanded(child: content),
+            if (action != null) ...[const SizedBox(width: 8), action],
           ],
         ),
       ),

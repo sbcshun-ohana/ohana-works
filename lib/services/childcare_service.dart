@@ -717,6 +717,81 @@ class ChildcareService {
     });
   }
 
+  /// 健康チェック一括取得(199)。施設×日の全在籍園児の 排便/ミルク/食事 と birth_date。
+  /// childId→(birthDate, toileting, milk, meals)。排便のper-child並列取得(N+1)をこれで置換。
+  Future<Map<String,
+          ({
+            DateTime birthDate,
+            List<({String time, String type})> toileting,
+            List<({String time, int amountMl})> milk,
+            Map<String, String> meals
+          })>>
+      fetchHealthCheckForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_health_check_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    final map = <String,
+        ({
+          DateTime birthDate,
+          List<({String time, String type})> toileting,
+          List<({String time, int amountMl})> milk,
+          Map<String, String> meals
+        })>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      final toileting = ((m['toileting_records'] as List?) ?? const [])
+          .map((e) => (time: (e['time'] as String?) ?? '', type: (e['type'] as String?) ?? ''))
+          .toList();
+      final milk = ((m['milk_records'] as List?) ?? const [])
+          .map((e) => (time: (e['time'] as String?) ?? '', amountMl: (e['amount_ml'] as num?)?.toInt() ?? 0))
+          .toList();
+      final meals = <String, String>{};
+      final mealsRaw = m['meal_records'] as Map<String, dynamic>?;
+      if (mealsRaw != null) {
+        for (final e in mealsRaw.entries) {
+          if (e.value is String) meals[e.key] = e.value as String;
+        }
+      }
+      map[m['child_id'] as String] = (
+        birthDate: DateTime.parse(m['birth_date'] as String),
+        toileting: toileting,
+        milk: milk,
+        meals: meals,
+      );
+    }
+    return map;
+  }
+
+  /// ミルク記録の追加(199 add_milk_record)。timeは "HH:MM"、amountMlは1〜500。
+  Future<void> addMilkRecord(String childId, DateTime businessDate, String time, int amountMl) async {
+    await _client.rpc('add_milk_record', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_time': time,
+      'p_amount_ml': amountMl,
+    });
+  }
+
+  /// ミルク記録の削除(199 delete_milk_record)。indexは milk_records 配列の位置。
+  Future<void> deleteMilkRecord(String childId, DateTime businessDate, int index) async {
+    await _client.rpc('delete_milk_record', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_index': index,
+    });
+  }
+
+  /// 食事分量の設定(199 set_meal_record)。slot=am_snack/lunch/pm_snack。amount=nullで未記録に戻す。
+  Future<void> setMealRecord(String childId, DateTime businessDate, String slot, String? amount) async {
+    await _client.rpc('set_meal_record', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_slot': slot,
+      'p_amount': amount,
+    });
+  }
+
   /// 排便記録の取得(194 fetch_toileting_records)。連絡帳の toileting_records と同一実体。
   Future<List<({String time, String type})>> fetchToiletingRecords(String childId, DateTime businessDate) async {
     final data = await _client.rpc('fetch_toileting_records', params: {
