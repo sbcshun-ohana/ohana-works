@@ -209,7 +209,7 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
         leadingWidth: 148,
         toolbarHeight: 48,
         titleSpacing: 0,
-        title: const Text('健康チェック(検温)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        title: const Text('健康チェック', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
       ),
       body: Column(
