@@ -494,18 +494,10 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         toolbarHeight: 48,
         titleSpacing: 0,
         title: const Text('デイリーボード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        actions: [
-          // 「本日」ボタン: 対象日を本日に戻す。
-          TextButton(
-            onPressed: () => _onDateChanged(DateTime.now()),
-            child: const Text('本日', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-          ),
-          BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
-        ],
       ),
       body: Column(
         children: [
-          // 2段目: 1行固定(俊指示)。左=クラス・天気、右寄せ=連絡帳一括。横幅いっぱいを使う。
+          // 2段目: 1行固定(俊指示)。左=クラス・天気(1行表示・右の一括群に干渉しない可変幅)、右寄せ=連絡帳一括。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
@@ -519,35 +511,48 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                SizedBox(
-                  width: 140,
-                  child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300),
+                      child: _WeatherBar(weather: _weather, loaded: _weatherLoaded, onTap: _editWeather),
+                    ),
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 10),
                 _bulkGroup(),
               ],
             ),
           ),
           if (_napMissing.isNotEmpty) _NapMissingBanner(missing: _napMissing),
-          // 3段目: サマリー+クイックリンク。左詰め(俊指示)。
+          // 3段目(俊指示の並び): 本日/日付/在籍〜欠席/出席簿/家庭での様子/健康チェック。
+          // 1行固定(溢れは横スクロール)。食事チェックは健康チェックへ統合予定のためタイル廃止。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
             child: Card(
               margin: EdgeInsets.zero,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _SummaryInline(summary: _summary),
-                    // クイックリンク(Web版と同構成)。出席簿=この画面(現在地)。健康/食事チェックは準備中。
-                    _quickTile(Icons.fact_check_rounded, '出席簿', AppColors.skyBlue, current: true),
-                    _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen, onTap: _openFamilyReports),
-                    _quickTile(Icons.thermostat_rounded, '健康チェック', null, preparing: true),
-                    _quickTile(Icons.restaurant_rounded, '食事チェック', null, preparing: true),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _quickTile(Icons.today_rounded, '本日', AppColors.skyBlue,
+                          onTap: () => _onDateChanged(DateTime.now())),
+                      const SizedBox(width: 4),
+                      BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
+                      const SizedBox(width: 8),
+                      _SummaryInline(summary: _summary),
+                      const SizedBox(width: 14),
+                      _quickTile(Icons.fact_check_rounded, '出席簿', AppColors.skyBlue, current: true),
+                      const SizedBox(width: 8),
+                      _quickTile(Icons.family_restroom_rounded, '家庭での様子', AppColors.leafGreen,
+                          onTap: _openFamilyReports),
+                      const SizedBox(width: 8),
+                      _quickTile(Icons.thermostat_rounded, '健康チェック', null, preparing: true),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -848,6 +853,8 @@ class _WeatherBar extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
