@@ -56,6 +56,21 @@ function absencePeriodText(a: {
   return `${range} 欠席予定(${ATTENDANCE_KIND_LABELS[a.absence_kind]})`;
 }
 
+// 俊指摘(2026-08-14): 当日が実際には欠席でない(出欠編集で外した/登園した)園児には
+// 当日を欠席予定として見せない。期間が明日以降に続く場合は開始日を明日へ読み替え、
+// 当日のみなら非表示(null)。本表の行=欠席でない園児のみのため、常にこの読み替えを通す。
+function clampAbsencePeriodToFuture(
+  a: { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" } | undefined,
+  businessDate: string,
+): { start_date: string; end_date: string; absence_kind: "sick_absence" | "personal_absence" } | null {
+  if (!a) return null;
+  if (a.end_date <= businessDate) return null;
+  const d = new Date(`${businessDate}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  const tomorrow = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { ...a, start_date: a.start_date < tomorrow ? tomorrow : a.start_date };
+}
+
 function ChildcareDailyBoardPageContent() {
   // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
   const { offices, officesError, selectedOffice } = useChildcareOffices();
@@ -689,9 +704,9 @@ function ChildcareDailyBoardPageContent() {
                             : ""}
                         </span>
                       )}
-                      {absenceByChild[row.child_id] && (
+                      {clampAbsencePeriodToFuture(absenceByChild[row.child_id], businessDate) && (
                         <span className="ml-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
-                          {absencePeriodText(absenceByChild[row.child_id])}
+                          {absencePeriodText(clampAbsencePeriodToFuture(absenceByChild[row.child_id], businessDate)!)}
                         </span>
                       )}
                       {medicationByChild[row.child_id] && (

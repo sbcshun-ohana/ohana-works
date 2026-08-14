@@ -504,6 +504,21 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     );
   }
 
+  // 198+俊指摘(2026-08-14): 承認済み欠席期間のうち、当日が実際には欠席でない
+  // (出欠編集で外した/登園した)園児には当日を欠席予定として見せない。
+  // 期間が明日以降に続く場合は開始日を明日へ読み替え、当日のみなら非表示(null)。
+  ({DateTime start, DateTime end, String kind})? _displayAbsencePeriod(DailyBoardRow row) {
+    final p = _absenceByChild[row.childId];
+    if (p == null) return null;
+    if (effectiveBoardStatus(row) == 'absent') return p;
+    final tomorrow = DateTime(_businessDate.year, _businessDate.month, _businessDate.day)
+        .add(const Duration(days: 1));
+    final endDay = DateTime(p.end.year, p.end.month, p.end.day);
+    if (endDay.isBefore(tomorrow)) return null;
+    final startDay = DateTime(p.start.year, p.start.month, p.start.day);
+    return (start: startDay.isBefore(tomorrow) ? tomorrow : startDay, end: p.end, kind: p.kind);
+  }
+
   // 198: 承認済み欠席(期間)の小バッジ。期間/単日を短く表示。
   Widget _miniAbsenceBadge(({DateTime start, DateTime end, String kind}) p) {
     String md(DateTime d) => '${d.month}/${d.day}';
@@ -830,8 +845,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             '療育外出中'
                                             '${row.therapyOutAt != null ? '(${row.therapyOutAt!.toLocal().hour.toString().padLeft(2, '0')}:${row.therapyOutAt!.toLocal().minute.toString().padLeft(2, '0')})' : ''}',
                                             const Color(0xFF7A5FC0)),
-                                      if (_absenceByChild[row.childId] != null)
-                                        _miniAbsenceBadge(_absenceByChild[row.childId]!),
+                                      if (_displayAbsencePeriod(row) != null)
+                                        _miniAbsenceBadge(_displayAbsencePeriod(row)!),
                                       // 202: 承認済みお迎え変更(申請・連絡由来)。複数申請はバッジを重ねて表示。
                                       for (final pc in _pickupChangeByChild[row.childId] ?? const [])
                                         _pickupChangeBadge(row, pc),
