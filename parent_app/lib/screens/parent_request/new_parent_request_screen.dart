@@ -39,6 +39,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   final _pickupNameController = TextEditingController();
   final _pickupRelationController = TextEditingController();
   final _pickupPhoneController = TextEditingController();
+  // 登園・お迎え時間(任意)。連絡帳から移設(俊指示 2026-08-14)。details(日本語キー)に格納。
+  TimeOfDay? _pickupArriveTime;
+  TimeOfDay? _pickupLeaveTime;
 
   bool _isInfectiousAbsence = false;
   final Set<String> _selectedDiseaseNames = {};
@@ -110,6 +113,23 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     if (picked != null) setState(() => _time = picked);
   }
 
+  Future<void> _pickPickupTime({required bool isArrive}) async {
+    final current = isArrive ? _pickupArriveTime : _pickupLeaveTime;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: current ?? (isArrive ? const TimeOfDay(hour: 9, minute: 0) : const TimeOfDay(hour: 17, minute: 0)),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isArrive) {
+          _pickupArriveTime = picked;
+        } else {
+          _pickupLeaveTime = picked;
+        }
+      });
+    }
+  }
+
   String _formatTimeOfDay(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Map<String, dynamic> _buildDetails() {
@@ -129,6 +149,8 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           'お迎えの方の氏名': _pickupNameController.text.trim(),
           '続柄': _pickupRelationController.text.trim(),
           if (_pickupPhoneController.text.trim().isNotEmpty) '電話番号': _pickupPhoneController.text.trim(),
+          if (_pickupArriveTime != null) '登園時間': _formatTimeOfDay(_pickupArriveTime!),
+          if (_pickupLeaveTime != null) 'お迎え時間': _formatTimeOfDay(_pickupLeaveTime!),
           if (_reasonController.text.trim().isNotEmpty) '備考': _reasonController.text.trim(),
         };
       case 'medication':
@@ -295,6 +317,28 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           const Text('電話番号(任意)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
           TextField(controller: _pickupPhoneController, keyboardType: TextInputType.phone),
+          const SizedBox(height: 20),
+          const Text('登園・お迎え時間(任意)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickPickupTime(isArrive: true),
+                  icon: const Icon(Icons.login_rounded, size: 18),
+                  label: Text(_pickupArriveTime == null ? '登園時間' : '登園 ${_formatTimeOfDay(_pickupArriveTime!)}'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickPickupTime(isArrive: false),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: Text(_pickupLeaveTime == null ? 'お迎え時間' : 'お迎え ${_formatTimeOfDay(_pickupLeaveTime!)}'),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           _reasonField('備考(任意)'),
         ];

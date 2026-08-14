@@ -46,8 +46,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
   String? _sleepEndAt;
   String? _dinnerAt;
   String? _breakfastAt;
-  String? _pickupTimeFrom;
-  String? _pickupTimeTo;
 
   @override
   void initState() {
@@ -91,8 +89,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
       _breakfastAt = _matchTimeOption(report?.breakfastAt, _breakfastTimeOptions);
       _dinnerContentController.text = report?.dinnerContent ?? '';
       _breakfastContentController.text = report?.breakfastContent ?? '';
-      _pickupTimeFrom = _matchTimeOption(report?.pickupTimeFrom, _pickupTimeOptions);
-      _pickupTimeTo = _matchTimeOption(report?.pickupTimeTo, _pickupTimeOptions);
       _isLoading = false;
     });
   }
@@ -126,8 +122,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
   static final List<String> _dinnerTimeOptions = _timeRange(17, 0, 21, 0);
   static final List<String> _breakfastTimeOptions = _timeRange(6, 0, 9, 0);
   // 登園/お迎え時刻(俊指示 2026-08-14: 「お迎え時間帯(から/まで)」を登園時間とお迎え時間に区別)。
-  // DB列は互換のため pickup_time_from=登園時間 / pickup_time_to=お迎え時間 として使う。
-  static final List<String> _pickupTimeOptions = _timeRange(7, 0, 19, 0);
   static const List<int> _bowelCountOptions = <int>[0, 1, 2, 3, 4, 5];
 
   /// DBの"HH:mm:ss"表記を選択肢の"HH:mm"表記に正規化し、選択肢に無ければnullを返す
@@ -215,12 +209,12 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
         breakfastContent:
             _breakfastContentController.text.trim().isEmpty ? null : _breakfastContentController.text.trim(),
         breakfastAt: _breakfastAt,
-        // お迎えの方の変更は申請・連絡(pickup_person_change)に一本化(俊指示 2026-08-14)。
-        // 連絡帳からは常にnullを送り、旧下書きに残る値もクリアする。
+        // お迎えの方の変更と登園・お迎え時間は申請・連絡(pickup_person_change)に一本化
+        // (俊指示 2026-08-14)。連絡帳からは常にnullを送り、旧下書きに残る値もクリアする。
         pickupPersonName: null,
         pickupPersonRelationship: null,
-        pickupTimeFrom: _pickupTimeFrom,
-        pickupTimeTo: _pickupTimeTo,
+        pickupTimeFrom: null,
+        pickupTimeTo: null,
       );
       final saved = await widget.guardianService.fetchFamilyDailyReport(widget.child.childId, _today);
       if (andSubmit && saved != null) {
@@ -541,30 +535,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
                   value: _breakfastAt,
                   options: _breakfastTimeOptions,
                   onChanged: (v) => setState(() => _breakfastAt = v),
-                ),
-                const SizedBox(height: 24),
-                _sectionLabel('登園・お迎え時間(任意)'),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _timeDropdown(
-                        label: '登園時間',
-                        value: _pickupTimeFrom,
-                        options: _pickupTimeOptions,
-                        onChanged: (v) => setState(() => _pickupTimeFrom = v),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _timeDropdown(
-                        label: 'お迎え時間',
-                        value: _pickupTimeTo,
-                        options: _pickupTimeOptions,
-                        onChanged: (v) => setState(() => _pickupTimeTo = v),
-                      ),
-                    ),
-                  ],
                 ),
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
