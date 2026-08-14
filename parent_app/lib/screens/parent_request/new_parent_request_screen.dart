@@ -616,7 +616,11 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           const SizedBox(height: 12),
           CheckboxListTile(
             value: _isInfectiousAbsence,
-            onChanged: (v) => setState(() => _isInfectiousAbsence = v ?? false),
+            onChanged: (v) => setState(() {
+              _isInfectiousAbsence = v ?? false;
+              // 感染症による欠席は種別を自動で「病気」に(俊確定 2026-08-14: (b)案)。
+              if (_isInfectiousAbsence) _absenceKind = 'sick_absence';
+            }),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
             title: const Text('感染症により欠席'),

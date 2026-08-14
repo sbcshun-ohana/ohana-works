@@ -632,6 +632,7 @@ function ChildcareDailyBoardPageContent() {
                     { key: "attended", label: "出席", tone: "text-emerald-700" },
                     { key: "present_now", label: "登園中", tone: "text-emerald-700" },
                     { key: "absent", label: "欠席", tone: "text-red-600" },
+                    { key: "infection", label: "感染症", tone: "text-red-700" },
                   ] as const
                 ).map((item) => (
                   <th
@@ -652,13 +653,18 @@ function ChildcareDailyBoardPageContent() {
                     { key: "attended", tone: "text-emerald-700" },
                     { key: "present_now", tone: "text-emerald-700" },
                     { key: "absent", tone: "text-red-600" },
+                    { key: "infection", tone: "text-red-700" },
                   ] as const
                 ).map((item) => (
                   <td
                     key={item.key}
                     className={`border border-slate-200 bg-white px-3 py-1 text-base font-bold tabular-nums ${item.tone}`}
                   >
-                    {summary ? summary[item.key] : "—"}
+                    {item.key === "infection"
+                      ? absentRows.filter((r) => (infectionByChild[r.child_id] ?? []).length > 0).length
+                      : summary
+                        ? summary[item.key]
+                        : "—"}
                   </td>
                 ))}
               </tr>
@@ -1002,6 +1008,27 @@ function ChildcareDailyBoardPageContent() {
                                 ) : (
                                   <span className="text-xs text-slate-400">—</span>
                                 )}
+                                {/* 206+俊指示: 欠席児童一覧でも感染症の内容(病名+書類状態)を残す */}
+                                {(infectionByChild[row.child_id] ?? []).map((ic, i) => (
+                                  <span
+                                    key={i}
+                                    className="ml-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700"
+                                  >
+                                    感染症: {ic.disease_name ?? ""}
+                                    {ic.required_document === "opinion_letter"
+                                      ? " 許可書"
+                                      : ic.required_document === "return_form"
+                                        ? " 登園届"
+                                        : ""}
+                                    {ic.document_state === "required_not_submitted"
+                                      ? "待ち"
+                                      : ic.document_state === "submitted_electronically"
+                                        ? "提出済み"
+                                        : ic.document_state === "received_on_paper"
+                                          ? "紙受領済み"
+                                          : ""}
+                                  </span>
+                                ))}
                               </td>
                               <td className="px-3 py-2 whitespace-pre-wrap text-slate-600">
                                 {comment ? comment : <span className="text-slate-300">—</span>}

@@ -17,6 +17,22 @@ function ChildcareParentRequestsPageContent() {
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+  // 俊指示(2026-08-14): 承認/差し戻し済みも履歴としてこの画面に残す(直近50件・RLS直接select)。
+  const [history, setHistory] = useState<
+    {
+      id: string;
+      request_type: string;
+      status: "approved" | "rejected";
+      target_date: string;
+      end_date: string | null;
+      absence_kind: string | null;
+      details: Record<string, unknown> | null;
+      created_at: string;
+      approved_at: string | null;
+      decision_reason: string | null;
+      children: { display_name: string };
+    }[]
+  >([]);
   // 202: 身分証画像の署名付きURL(request_id単位・表示ボタン押下時に発行)
   const [docUrlByRequest, setDocUrlByRequest] = useState<Record<string, string>>({});
 
@@ -39,6 +55,18 @@ function ChildcareParentRequestsPageContent() {
           return;
         }
         setRequests((data ?? []) as ParentRequestRow[]);
+      });
+    supabase
+      .from("parent_requests")
+      .select(
+        "id, request_type, status, target_date, end_date, absence_kind, details, created_at, approved_at, decision_reason, children!inner(display_name, office_id)",
+      )
+      .eq("children.office_id", selectedOffice)
+      .in("status", ["approved", "rejected"])
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(({ data, error }) => {
+        if (!error) setHistory((data ?? []) as unknown as typeof history);
       });
   }, [selectedOffice, reloadToken]);
 
@@ -213,6 +241,58 @@ function ChildcareParentRequestsPageContent() {
             </div>
           ))}
         </div>
+
+        {/* 承認/差し戻し履歴(直近50件)。俊指示(2026-08-14): 処理後もこの画面に残す */}
+        {history.length > 0 && (
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-bold text-slate-700">
+              処理済みの履歴 <span className="text-xs font-normal text-slate-400">(直近{history.length}件)</span>
+            </h3>
+            <div className="space-y-2">
+              {history.map((h) => (
+                <div
+                  key={h.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 px-4 py-2 text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-slate-800">{h.children.display_name}</span>
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                      {PARENT_REQUEST_TYPE_LABELS[h.request_type as keyof typeof PARENT_REQUEST_TYPE_LABELS] ??
+                        h.request_type}
+                    </span>
+                    {h.request_type === "absence" && h.details?.["感染症により欠席"] != null && (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                        感染症{h.details?.["感染症の種類"] ? `: ${String(h.details["感染症の種類"])}` : ""}
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-500">
+                      対象日: {h.target_date}
+                      {h.end_date ? `〜${h.end_date}` : ""}
+                      {h.absence_kind ? ` ・${ABSENCE_KIND_LABELS[h.absence_kind as "sick_absence" | "personal_absence"]}` : ""}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {h.status === "approved" ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                        承認済み
+                      </span>
+                    ) : (
+                      <span
+                        className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700"
+                        title={h.decision_reason ?? undefined}
+                      >
+                        差し戻し{h.decision_reason ? `(${h.decision_reason})` : ""}
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-400">
+                      {h.approved_at ? new Date(h.approved_at).toLocaleString("ja-JP") : ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

@@ -615,6 +615,25 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
                       ),
+                      // 206+俊指示: 欠席児童一覧でも感染症の内容(病名+書類状態)を残す
+                      for (final ic in _infectionByChild[row.childId] ?? const [])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.punchClockOut.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '感染症: ${ic.diseaseName ?? ''}'
+                              '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
+                              '${ic.documentState == 'required_not_submitted' ? '待ち' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.punchClockOut),
+                            ),
+                          ),
+                        ),
                       Expanded(
                         child: Text(
                           _absenceCommentByChild[row.childId] ?? '—',
@@ -841,7 +860,15 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                       child: Center(
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
-                          child: _SummaryInline(summary: _summary),
+                          child: _SummaryInline(
+                            summary: _summary,
+                            infectionAbsent: _allRows
+                                .where((r) =>
+                                    (_selectedClassId == null || r.classId == _selectedClassId) &&
+                                    effectiveBoardStatus(r) == 'absent' &&
+                                    (_infectionByChild[r.childId]?.isNotEmpty ?? false))
+                                .length,
+                          ),
                         ),
                       ),
                     ),
@@ -1307,9 +1334,11 @@ class _WeatherEditSheetState extends State<_WeatherEditSheet> {
 /// 在籍登園状況サマリー(在籍/登園予定/出席/登園中/欠席)のインライン表示。数字はRPC集計のまま。
 /// クイックリンク・連絡帳一括と同じ帯(Wrap)に置くため、外枠(Card)は持たない小型Row。
 class _SummaryInline extends StatelessWidget {
-  const _SummaryInline({required this.summary});
+  const _SummaryInline({required this.summary, this.infectionAbsent});
 
   final DailyBoardSummary? summary;
+  // 欠席のうち感染症案件のある人数(206・俊指示 2026-08-14)。クライアント算出。
+  final int? infectionAbsent;
 
   @override
   Widget build(BuildContext context) {
@@ -1320,6 +1349,7 @@ class _SummaryInline extends StatelessWidget {
       _SummaryItem('出席', s?.attended, AppColors.leafGreen),
       _SummaryItem('登園中', s?.presentNow, AppColors.leafGreen),
       _SummaryItem('欠席', s?.absent, AppColors.punchClockOut),
+      _SummaryItem('感染症', infectionAbsent, AppColors.punchClockOut),
     ];
     // 項目の間に縦の区切り線を入れて視認性を上げる(俊指示)。
     final children = <Widget>[];

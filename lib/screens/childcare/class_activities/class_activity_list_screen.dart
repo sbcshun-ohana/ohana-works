@@ -27,6 +27,9 @@ class ClassActivityListScreen extends StatefulWidget {
 }
 
 class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
+  // クラス絞り込み(俊指示 2026-08-14)。null=全クラス。選択肢は取得済み一覧のクラス名から作る。
+  String? _selectedClassId;
+
   late DateTime _businessDate = widget.businessDate;
   late Future<List<ClassActivity>> _activitiesFuture;
 
@@ -61,7 +64,30 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
         leadingWidth: 148,
         toolbarHeight: 48,
         title: const Text('クラス活動'),
-        actions: [BusinessDateAction(date: _businessDate, onChanged: _onDateChanged)],
+        actions: [
+          // クラス絞り込みプルダウン(デイリーボードと同じ規約: 全クラス+クラス名)
+          FutureBuilder<List<ClassActivity>>(
+            future: _activitiesFuture,
+            builder: (context, snapshot) {
+              final activities = snapshot.data ?? const [];
+              if (activities.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: DropdownButton<String?>(
+                  value: _selectedClassId,
+                  underline: const SizedBox.shrink(),
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('全クラス')),
+                    for (final a in activities)
+                      DropdownMenuItem<String?>(value: a.classId, child: Text(a.className)),
+                  ],
+                  onChanged: (v) => setState(() => _selectedClassId = v),
+                ),
+              );
+            },
+          ),
+          BusinessDateAction(date: _businessDate, onChanged: _onDateChanged),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _reload,
@@ -71,7 +97,9 @@ class _ClassActivityListScreenState extends State<ClassActivityListScreen> {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
-            final activities = snapshot.data ?? const [];
+            final all = snapshot.data ?? const <ClassActivity>[];
+            final activities =
+                _selectedClassId == null ? all : all.where((a) => a.classId == _selectedClassId).toList();
             if (activities.isEmpty) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
