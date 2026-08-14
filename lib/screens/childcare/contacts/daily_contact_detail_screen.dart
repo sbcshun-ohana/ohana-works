@@ -103,6 +103,51 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
 
   bool get _canSubmit => _isAssignee && (_contact?.status == 'draft' || _contact?.status == 'rejected');
 
+  // 207: 担当者変更ダイアログ。施設の在籍職員一覧から1タップで担当を渡す。
+  Future<void> _changeAssignee() async {
+    final List<ChildcareStaffMember> staff;
+    try {
+      staff = await widget.service.fetchChildcareOfficeStaff(widget.officeId);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || staff.isEmpty) return;
+    final selected = await showDialog<ChildcareStaffMember>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('担当者を選択', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        children: staff
+            .map(
+              (m) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, m),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        m.employeeId == _contact?.assigneeEmployeeId
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        size: 18,
+                        color: AppColors.skyBlue,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(m.name, style: const TextStyle(fontSize: 15)),
+                    ],
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (selected == null || _contact?.contactId == null) return;
+    await _run(
+      () => widget.service.setDailyContactAssignee(_contact!.contactId!, selected.employeeId),
+      successMessage: '担当を${selected.name}さんに変更しました',
+    );
+  }
+
   Future<void> _run(Future<void> Function() action, {String? successMessage}) async {
     setState(() {
       _isBusy = true;
@@ -239,6 +284,15 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                               : () => _run(() => widget.service.claimDailyContact(_contact!.contactId!),
                                   successMessage: '担当になりました'),
                           child: const Text('自分を担当にする'),
+                        ),
+                      ],
+                      // 207+俊指示(2026-08-14): 担当を他の職員へ渡す(下書き/差し戻し中のみ)。
+                      if (_contact?.contactId != null &&
+                          (_contact?.status == 'draft' || _contact?.status == 'rejected')) ...[
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed: _isBusy ? null : _changeAssignee,
+                          child: const Text('変更'),
                         ),
                       ],
                     ],

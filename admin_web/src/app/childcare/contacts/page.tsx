@@ -68,6 +68,40 @@ function ChildcareContactsPageContent() {
     setToast(m);
     window.setTimeout(() => setToast((c) => (c === m ? null : c)), 3500);
   }
+
+  // 207: 担当者変更。施設の在籍職員一覧から番号で選択(最小UI)。
+  async function changeAssignee(row: DailyContactRow) {
+    if (!selectedOffice || !row.contact_id) return;
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("fetch_childcare_office_staff", {
+      p_office_id: selectedOffice,
+    });
+    if (error || !data?.length) {
+      showToast(`職員一覧の取得に失敗しました${error ? `: ${error.message}` : ""}`);
+      return;
+    }
+    const staff = data as { employee_id: string; name: string }[];
+    const input = window.prompt(
+      `担当者の番号を入力してください\n${staff.map((m, i) => `${i + 1}. ${m.name}`).join("\n")}`,
+    );
+    if (!input) return;
+    const idx = Number(input) - 1;
+    const target = staff[idx];
+    if (!target) {
+      showToast("番号が正しくありません");
+      return;
+    }
+    const { error: setErr } = await supabase.rpc("set_child_daily_contact_assignee", {
+      p_contact_id: row.contact_id,
+      p_employee_id: target.employee_id,
+    });
+    if (setErr) {
+      showToast(`担当の変更に失敗しました: ${setErr.message}`);
+      return;
+    }
+    showToast(`担当を${target.name}さんに変更しました`);
+    setReloadToken((t) => t + 1);
+  }
   const [familyDailyReport, setFamilyDailyReport] = useState<FamilyDailyReportSummary | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [internalNotesOpen, setInternalNotesOpen] = useState(false);
@@ -581,6 +615,16 @@ function ChildcareContactsPageContent() {
                       </button>
                     )}
                     <span className="text-xs text-slate-500">担当: {selectedRow.assignee_name ?? "未割当"}</span>
+                    {/* 207+俊指示(2026-08-14): 担当を他の職員へ渡す(下書き/差し戻し中のみ) */}
+                    {selectedRow.contact_id &&
+                      (selectedRow.status === "draft" || selectedRow.status === "rejected") && (
+                        <button
+                          onClick={() => changeAssignee(selectedRow)}
+                          className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                        >
+                          変更
+                        </button>
+                      )}
                   </div>
                 </div>
 

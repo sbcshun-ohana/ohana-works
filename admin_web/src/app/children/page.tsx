@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
-import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
@@ -113,7 +112,6 @@ function ChildcareChildrenPageContent() {
   return (
     <div className="flex flex-1 flex-col">
       <AppHeader />
-      <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

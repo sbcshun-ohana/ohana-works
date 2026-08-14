@@ -988,6 +988,14 @@ class ChildcareService {
     return map;
   }
 
+  /// 連絡帳の担当者変更(207)。下書き/差し戻し中のみ・施設在籍職員へ。
+  Future<void> setDailyContactAssignee(String contactId, String employeeId) async {
+    await _client.rpc('set_child_daily_contact_assignee', params: {
+      'p_contact_id': contactId,
+      'p_employee_id': employeeId,
+    });
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});
