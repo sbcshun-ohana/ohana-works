@@ -704,8 +704,9 @@ function ChildcareDailyBoardPageContent() {
                             : ""}
                         </span>
                       )}
+                      {/* 予告(当日は欠席でない)はグレーで控えめに。欠席当日の赤の強調は欠席児童一覧が担う(俊指示 2026-08-14) */}
                       {clampAbsencePeriodToFuture(absenceByChild[row.child_id], businessDate) && (
-                        <span className="ml-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
+                        <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
                           {absencePeriodText(clampAbsencePeriodToFuture(absenceByChild[row.child_id], businessDate)!)}
                         </span>
                       )}

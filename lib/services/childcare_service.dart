@@ -923,6 +923,28 @@ class ChildcareService {
     });
   }
 
+  /// 欠席児童一覧の「保護者からの連絡」。承認済み欠席申請の details['理由'] を
+  /// child_id→コメントで返す(admin_webと同じ直接select・RLSでstaff読取可)。
+  Future<Map<String, String>> fetchApprovedAbsenceCommentsForOffice(String officeId, DateTime businessDate) async {
+    final date = dateOnly(businessDate);
+    final rows = await _client
+        .from('parent_requests')
+        .select('child_id, details, target_date, end_date, children!inner(office_id)')
+        .eq('children.office_id', officeId)
+        .eq('status', 'approved')
+        .eq('request_type', 'absence')
+        .lte('target_date', date);
+    final map = <String, String>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      final end = (m['end_date'] as String?) ?? (m['target_date'] as String);
+      if (end.compareTo(date) < 0) continue; // 対象日が期間内のもののみ
+      final reason = (m['details'] as Map<String, dynamic>?)?['理由'] as String?;
+      if (reason != null && reason.isNotEmpty) map[m['child_id'] as String] = reason;
+    }
+    return map;
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

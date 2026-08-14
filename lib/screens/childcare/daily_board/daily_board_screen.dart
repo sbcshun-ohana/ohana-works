@@ -57,6 +57,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   Map<String, ({DateTime start, DateTime end, String kind})> _absenceByChild = const {};
   // 201: 承認済み服薬連絡の行内バッジ用。childId→(種類, 解熱剤フラグ, 様子)。
   Map<String, ({List<String> kinds, bool hasAntipyretic, String? symptom})> _medicationByChild = const {};
+  // 欠席児童一覧の「保護者からの連絡」。childId→承認済み欠席申請の理由。
+  Map<String, String> _absenceCommentByChild = const {};
   // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
   Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
       _pickupChangeByChild = const {};
@@ -234,7 +236,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     try {
       final m = await widget.service.fetchBoardAbsencePeriodsForOffice(_officeId, _businessDate);
       if (mounted) setState(() => _absenceByChild = m);
+      try {
+      final c = await widget.service.fetchApprovedAbsenceCommentsForOffice(_officeId, _businessDate);
+      if (mounted) setState(() => _absenceCommentByChild = c);
     } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+  } catch (_) {
       // 取得失敗時は前回値のまま/非表示。
     }
   }
@@ -520,12 +528,97 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   // 198: 承認済み欠席(期間)の小バッジ。期間/単日を短く表示。
+  // 俊指示(2026-08-14): 本一覧に出るのは「予告」(当日が欠席でない園児)のみのためグレーで控えめに。
+  // 欠席当日の強調(赤)は欠席児童一覧側の種別チップ・状態チップが担う。
   Widget _miniAbsenceBadge(({DateTime start, DateTime end, String kind}) p) {
     String md(DateTime d) => '${d.month}/${d.day}';
     final kindLabel = p.kind == 'sick_absence' ? '病欠' : p.kind == 'personal_absence' ? '都合欠' : '欠席';
     final sameDay = p.start.year == p.end.year && p.start.month == p.end.month && p.start.day == p.end.day;
     final range = sameDay ? md(p.start) : '${md(p.start)}〜${md(p.end)}';
-    return _miniBadge(Icons.event_busy_rounded, '$range 欠席予定($kindLabel)', AppColors.punchClockOut);
+    return _miniBadge(Icons.event_busy_rounded, '$range 欠席予定($kindLabel)', AppColors.textSecondary);
+  }
+
+  // 俊指示(2026-08-14): 欠席児童一覧(クラス別)。本一覧から外した欠席児をまとめて表示し、
+  // 期間・種別・保護者からの連絡に加えて 出欠編集/出席に戻す をその場で操作できるようにする。
+  Widget _absentSection(List<DailyBoardRow> absent) {
+    String md(DateTime d) => '${d.month}/${d.day}';
+    final groups = <String, List<DailyBoardRow>>{};
+    for (final r in absent) {
+      (groups[r.className] ??= []).add(r);
+    }
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('欠席児童一覧 (${absent.length}名)',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+            for (final entry in groups.entries) ...[
+              const SizedBox(height: 10),
+              Text(entry.key,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+              for (final row in entry.value)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: Text(row.nameLabel,
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.punchClockOut.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          row.attendanceKind == 'sick_absence'
+                              ? '病欠'
+                              : row.attendanceKind == 'personal_absence'
+                                  ? '都合欠'
+                                  : '欠席',
+                          style: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.punchClockOut),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 130,
+                        child: Text(
+                          _absenceByChild[row.childId] != null
+                              ? '${md(_absenceByChild[row.childId]!.start)}〜${md(_absenceByChild[row.childId]!.end)}'
+                              : '本日',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          _absenceCommentByChild[row.childId] ?? '—',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _actionIcon(Icons.edit_calendar_rounded, '出欠編集', AppColors.warmOrange,
+                          () => _openAttendanceEdit(row)),
+                      _actionIcon(Icons.undo_rounded, '出席に戻す', AppColors.leafGreen,
+                          () => _toggleAbsence(row)),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   // K5(i): デイリーボード行から欠席登録/取消(簡易)。種別/メモ付きの本格編集は後続の出欠モーダル(K7)で。
@@ -765,13 +858,18 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                       children: const [SizedBox(height: 120), Center(child: Text('在籍園児がいません'))],
                     );
                   }
+                  // 俊指示(2026-08-14): 欠席園児は本一覧から外し、下部の「欠席児童一覧」に
+                  // クラス別でまとめる(admin_webと同構成)。
+                  final present = rows.where((r) => effectiveBoardStatus(r) != 'absent').toList();
+                  final absent = rows.where((r) => effectiveBoardStatus(r) == 'absent').toList();
                   return ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
-                    itemCount: rows.length,
+                    itemCount: present.length + (absent.isEmpty ? 0 : 1),
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final row = rows[index];
+                      if (index == present.length) return _absentSection(absent);
+                      final row = present[index];
                       // 60/40レイアウト: 左=氏名/クラス+登降園タイムバー(約60%)、右=状態/操作/バッジ(約40%)。
                       return Card(
                         margin: EdgeInsets.zero,
