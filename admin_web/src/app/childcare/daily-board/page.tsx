@@ -74,6 +74,10 @@ function ChildcareDailyBoardPageContent() {
   >({});
   // 欠席児童一覧の「保護者からの連絡」用。承認済み欠席申請の details['理由'] を child_id→コメントで保持(DB変更なし・RLSでstaff select可)。
   const [absenceCommentByChild, setAbsenceCommentByChild] = useState<Record<string, string>>({});
+  // 201: 承認済み服薬連絡の行内バッジ用。child_id→(種類, 解熱剤フラグ, 様子)。198方式の別RPC。
+  const [medicationByChild, setMedicationByChild] = useState<
+    Record<string, { medication_kinds: string[]; has_antipyretic: boolean; symptom: string | null }>
+  >({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
@@ -194,6 +198,35 @@ function ChildcareDailyBoardPageContent() {
         });
     }
     loadAbsenceComments();
+  }, [selectedOffice, businessDate, reloadToken]);
+
+  // 201: 承認済み服薬連絡を別RPCで取得(付加情報・失敗時は非表示)。
+  useEffect(() => {
+    function loadMedication() {
+      if (!selectedOffice) {
+        setMedicationByChild({});
+        return;
+      }
+      createClient()
+        .rpc("fetch_board_medication_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
+        .then(({ data, error }) => {
+          if (error) {
+            setMedicationByChild({});
+            return;
+          }
+          const map: Record<string, { medication_kinds: string[]; has_antipyretic: boolean; symptom: string | null }> = {};
+          for (const r of (data ?? []) as {
+            child_id: string;
+            medication_kinds: string[];
+            has_antipyretic: boolean;
+            symptom: string | null;
+          }[]) {
+            map[r.child_id] = { medication_kinds: r.medication_kinds, has_antipyretic: r.has_antipyretic, symptom: r.symptom };
+          }
+          setMedicationByChild(map);
+        });
+    }
+    loadMedication();
   }, [selectedOffice, businessDate, reloadToken]);
 
   // 在籍登園状況サマリー。クラス絞り込み(selectedClass=class_id)に連動し、
@@ -604,6 +637,21 @@ function ChildcareDailyBoardPageContent() {
                       {absenceByChild[row.child_id] && (
                         <span className="ml-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
                           {absencePeriodText(absenceByChild[row.child_id])}
+                        </span>
+                      )}
+                      {medicationByChild[row.child_id] && (
+                        <span
+                          title={`薬の種類: ${medicationByChild[row.child_id].medication_kinds.join("、")}${
+                            medicationByChild[row.child_id].symptom ? ` / 様子: ${medicationByChild[row.child_id].symptom}` : ""
+                          }`}
+                          className={`ml-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            medicationByChild[row.child_id].has_antipyretic
+                              ? "bg-red-100 text-red-700"
+                              : "bg-sky-50 text-sky-700"
+                          }`}
+                        >
+                          💊{medicationByChild[row.child_id].has_antipyretic ? "解熱剤服用" : "服薬"}:{" "}
+                          {medicationByChild[row.child_id].medication_kinds.join("、")}
                         </span>
                       )}
                     </td>

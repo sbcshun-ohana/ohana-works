@@ -858,6 +858,25 @@ class ChildcareService {
     return map;
   }
 
+  /// 198方式: ボードの服薬表示(201)。承認済み服薬連絡を childId→(種類, 解熱剤フラグ, 様子)で返す。
+  Future<Map<String, ({List<String> kinds, bool hasAntipyretic, String? symptom})>>
+      fetchBoardMedicationForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_board_medication_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    final map = <String, ({List<String> kinds, bool hasAntipyretic, String? symptom})>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      map[m['child_id'] as String] = (
+        kinds: ((m['medication_kinds'] as List?) ?? const []).cast<String>(),
+        hasAntipyretic: m['has_antipyretic'] == true,
+        symptom: m['symptom'] as String?,
+      );
+    }
+    return map;
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

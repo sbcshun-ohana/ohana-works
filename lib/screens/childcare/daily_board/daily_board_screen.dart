@@ -55,6 +55,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   List<NapMissing> _napMissing = const [];
   // 198: 承認済み欠席(期間)を行内に表示するための childId→(start,end,kind)。付加情報。
   Map<String, ({DateTime start, DateTime end, String kind})> _absenceByChild = const {};
+  // 201: 承認済み服薬連絡の行内バッジ用。childId→(種類, 解熱剤フラグ, 様子)。
+  Map<String, ({List<String> kinds, bool hasAntipyretic, String? symptom})> _medicationByChild = const {};
 
   @override
   void initState() {
@@ -66,6 +68,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadWeather();
     _loadNapMissing();
     _loadAbsencePeriods();
+    _loadMedication();
     _subscribe();
     childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
   }
@@ -123,6 +126,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadWeather();
     _loadNapMissing();
     _loadAbsencePeriods();
+    _loadMedication();
     _subscribe();
   }
 
@@ -230,11 +234,22 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  // 201: 承認済み服薬連絡を取得。付加情報のため失敗は握りつぶし(バッジ非表示=安全側)。
+  Future<void> _loadMedication() async {
+    try {
+      final m = await widget.service.fetchBoardMedicationForOffice(_officeId, _businessDate);
+      if (mounted) setState(() => _medicationByChild = m);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+  }
+
   Future<void> _reload() async {
     setState(_load);
     _loadSummary();
     _loadWeather();
     _loadAbsencePeriods();
+    _loadMedication();
     await _rowsFuture;
   }
 
@@ -314,6 +329,38 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // 201: 服薬バッジ(タップで種類・様子のダイアログ)。解熱剤を含む日は赤の警告(登園不可の園ルール周知)。
+  Widget _medicationBadge(DailyBoardRow row, ({List<String> kinds, bool hasAntipyretic, String? symptom}) med) {
+    final color = med.hasAntipyretic ? AppColors.punchClockOut : AppColors.skyBlue;
+    final label = med.hasAntipyretic ? '解熱剤服用: ${med.kinds.join('、')}' : '服薬: ${med.kinds.join('、')}';
+    return InkWell(
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('服薬連絡 — ${row.nameLabel}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('薬の種類: ${med.kinds.join('、')}'),
+              if (med.hasAntipyretic) ...[
+                const SizedBox(height: 8),
+                const Text('⚠ 解熱剤を服用しています(解熱剤服用日は登園不可の園ルール)',
+                    style: TextStyle(color: AppColors.punchClockOut, fontWeight: FontWeight.w700)),
+              ],
+              if (med.symptom != null && med.symptom!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('様子・症状: ${med.symptom}'),
+              ],
+            ],
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
+        ),
+      ),
+      child: _miniBadge(Icons.medication_rounded, label, color),
     );
   }
 
@@ -426,6 +473,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadWeather();
     _loadNapMissing();
     _loadAbsencePeriods();
+    _loadMedication();
   }
 
   // K5(iii)/Phase A: 園児行から当日の連絡帳(園側 日誌・連絡帳)へ。既存詳細画面を再利用。
@@ -678,6 +726,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             const Color(0xFF7A5FC0)),
                                       if (_absenceByChild[row.childId] != null)
                                         _miniAbsenceBadge(_absenceByChild[row.childId]!),
+                                      // 201: 服薬バッジ。解熱剤を含む場合は赤警告。タップで種類と様子を表示。
+                                      if (_medicationByChild[row.childId] != null)
+                                        _medicationBadge(row, _medicationByChild[row.childId]!),
                                       _ContactPublishRow(
                                         row: row,
                                         onSchedule17: () => _scheduleContacts([row.contactId!], hour: 17, minute: 0),
