@@ -1684,11 +1684,18 @@ class _AttendanceEditSheetState extends State<_AttendanceEditSheet> {
         );
       }
       if (mounted) Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
+        // 212: 感染症ゲート等のサーバー側エラーは理由をそのまま表示する(ブロック理由・必要書類名)。
+        final msg = e.toString();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存に失敗しました(過去日・実績修正は主任以上)')),
+          SnackBar(
+            content: Text(msg.contains('登園できません')
+                ? msg.replaceFirst(RegExp(r'^[^:]*Exception[^:]*: '), '')
+                : '保存に失敗しました(過去日・実績修正は主任以上)'),
+            duration: const Duration(seconds: 6),
+          ),
         );
       }
     }
