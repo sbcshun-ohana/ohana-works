@@ -707,7 +707,11 @@ function ChildcareDailyBoardPageContent() {
                       {row.has_pickup_change && (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
                           変更あり: {row.pickup_person_name}
-                          {row.pickup_time_from ? `(${row.pickup_time_from.slice(0, 5)}〜${row.pickup_time_to?.slice(0, 5) ?? ""})` : ""}
+                          {row.pickup_time_from || row.pickup_time_to
+                            ? `(${row.pickup_time_from ? `登園${row.pickup_time_from.slice(0, 5)}` : ""}${
+                                row.pickup_time_to ? ` お迎え${row.pickup_time_to.slice(0, 5)}` : ""
+                              })`
+                            : ""}
                         </span>
                       )}
                     </td>

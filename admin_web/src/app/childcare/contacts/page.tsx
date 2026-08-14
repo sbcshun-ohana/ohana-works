@@ -645,8 +645,8 @@ function ChildcareContactsPageContent() {
                         <div className="mt-2 rounded-lg bg-amber-100 p-2 font-semibold text-amber-800">
                           お迎え変更あり: {familyDailyReport.pickup_person_name}(
                           {familyDailyReport.pickup_person_relationship || "続柄未記入"}){" "}
-                          {familyDailyReport.pickup_time_from?.slice(0, 5) ?? "—"}〜
-                          {familyDailyReport.pickup_time_to?.slice(0, 5) ?? "—"}
+                          {familyDailyReport.pickup_time_from ? `登園${familyDailyReport.pickup_time_from.slice(0, 5)} ` : ""}
+                          {familyDailyReport.pickup_time_to ? `お迎え${familyDailyReport.pickup_time_to.slice(0, 5)}` : ""}
                         </div>
                       )}
                     </div>

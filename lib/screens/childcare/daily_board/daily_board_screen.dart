@@ -717,7 +717,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             Icons.person_pin_circle_rounded,
                                             'お迎え変更: ${row.pickupPersonName ?? ''}'
                                             '${row.pickupPersonRelationship != null && row.pickupPersonRelationship!.isNotEmpty ? '(${row.pickupPersonRelationship})' : ''}'
-                                            '${row.pickupTimeFrom != null ? ' ${_hm5(row.pickupTimeFrom)}${row.pickupTimeTo != null ? '〜${_hm5(row.pickupTimeTo)}' : ''}' : ''}',
+                                            '${row.pickupTimeFrom != null ? ' 登園${_hm5(row.pickupTimeFrom)}' : ''}${row.pickupTimeTo != null ? ' お迎え${_hm5(row.pickupTimeTo)}' : ''}',
                                             AppColors.warmOrange),
                                       if (row.onTherapyOuting)
                                         _miniBadge(Icons.directions_walk_rounded,

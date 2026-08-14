@@ -131,7 +131,9 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
   static final List<String> _sleepEndOptions = _timeRange(5, 0, 9, 0);
   static final List<String> _dinnerTimeOptions = _timeRange(17, 0, 21, 0);
   static final List<String> _breakfastTimeOptions = _timeRange(6, 0, 9, 0);
-  static final List<String> _pickupTimeOptions = _timeRange(15, 0, 19, 0);
+  // 登園/お迎え時刻(俊指示 2026-08-14: 「お迎え時間帯(から/まで)」を登園時間とお迎え時間に区別)。
+  // DB列は互換のため pickup_time_from=登園時間 / pickup_time_to=お迎え時間 として使う。
+  static final List<String> _pickupTimeOptions = _timeRange(7, 0, 19, 0);
   static const List<int> _bowelCountOptions = <int>[0, 1, 2, 3, 4, 5];
 
   /// DBの"HH:mm:ss"表記を選択肢の"HH:mm"表記に正規化し、選択肢に無ければnullを返す
@@ -183,9 +185,8 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
         return '朝食の内容・摂取時刻を入力してください';
       }
     }
-    if (_pickupNameController.text.trim().isNotEmpty &&
-        (_pickupTimeFrom == null || _pickupTimeTo == null)) {
-      return 'お迎え変更の時間帯を選択してください';
+    if (_pickupNameController.text.trim().isNotEmpty && _pickupTimeTo == null) {
+      return 'お迎え時間を選択してください';
     }
     return null;
   }
@@ -568,7 +569,7 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
                   children: [
                     Expanded(
                       child: _timeDropdown(
-                        label: 'お迎え時間帯(から)',
+                        label: '登園時間',
                         value: _pickupTimeFrom,
                         options: _pickupTimeOptions,
                         onChanged: (v) => setState(() => _pickupTimeFrom = v),
@@ -577,7 +578,7 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _timeDropdown(
-                        label: 'お迎え時間帯(まで)',
+                        label: 'お迎え時間',
                         value: _pickupTimeTo,
                         options: _pickupTimeOptions,
                         onChanged: (v) => setState(() => _pickupTimeTo = v),

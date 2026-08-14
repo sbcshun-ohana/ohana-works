@@ -182,7 +182,7 @@ function ChildcareFamilyReportsPageContent() {
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         {r.pickup_person_name
-                          ? `${r.pickup_person_name}${r.pickup_time_from ? `(${fmtTime(r.pickup_time_from)}〜${fmtTime(r.pickup_time_to)})` : ""}`
+                          ? `${r.pickup_person_name}${r.pickup_time_from || r.pickup_time_to ? `(${r.pickup_time_from ? `登園${fmtTime(r.pickup_time_from)}` : ""}${r.pickup_time_to ? ` お迎え${fmtTime(r.pickup_time_to)}` : ""})` : ""}`
                           : "—"}
                       </td>
                       <td className="max-w-xs px-3 py-3 text-slate-600">

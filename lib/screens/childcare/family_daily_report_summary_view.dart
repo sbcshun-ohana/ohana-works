@@ -59,7 +59,7 @@ class FamilyDailyReportSummaryView extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'お迎え変更あり: ${r.pickupPersonName}(${r.pickupPersonRelationship ?? '続柄未記入'})'
-                    ' ${r.pickupTimeFrom ?? '--'}〜${r.pickupTimeTo ?? '--'}',
+                    ' 登園${r.pickupTimeFrom ?? '--'} / お迎え${r.pickupTimeTo ?? '--'}',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),

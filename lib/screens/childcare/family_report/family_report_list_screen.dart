@@ -85,7 +85,7 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
       r.temperature == null ? '—' : '${r.temperature}℃${r.temperatureMeasuredAt != null ? '\n(${_hm(r.temperatureMeasuredAt)})' : ''}';
   String _pickupText(FamilyDailyReportSummary r) => (r.pickupPersonName == null || r.pickupPersonName!.isEmpty)
       ? '—'
-      : '${r.pickupPersonName}${r.pickupTimeFrom != null ? '\n${_hm(r.pickupTimeFrom)}〜${_hm(r.pickupTimeTo)}' : ''}';
+      : '${r.pickupPersonName}${r.pickupTimeFrom != null || r.pickupTimeTo != null ? '\n${r.pickupTimeFrom != null ? '登園${_hm(r.pickupTimeFrom)} ' : ''}${r.pickupTimeTo != null ? 'お迎え${_hm(r.pickupTimeTo)}' : ''}' : ''}';
 
   @override
   Widget build(BuildContext context) {
