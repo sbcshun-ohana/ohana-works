@@ -13,6 +13,7 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
   { href: "/childcare/family-reports", label: "家庭での様子" },
   { href: "/childcare/nap", label: "午睡チェック" },
+  { href: "/childcare/health-check", label: "健康チェック" },
   { href: "/childcare/children", label: "園児マスタ" },
   { href: "/childcare/class-activities", label: "クラス活動" },
   { href: "/childcare/contacts", label: "連絡帳" },

@@ -497,20 +497,13 @@ function ChildcareDailyBoardPageContent() {
               <span className="text-xl leading-none">🏠</span>
               <span className="text-sm font-semibold">家庭での様子</span>
             </Link>
-            <div className="relative flex min-w-[104px] cursor-not-allowed flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-slate-400">
-              <span className="text-xl leading-none opacity-60">🌡️</span>
+            <Link
+              href={`/childcare/health-check?office=${selectedOffice}`}
+              className="flex min-w-[104px] flex-col items-center justify-center gap-0.5 rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-red-600 transition hover:bg-red-100"
+            >
+              <span className="text-xl leading-none">🌡️</span>
               <span className="text-sm font-semibold">健康チェック</span>
-              <span className="absolute right-1 top-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
-                準備中
-              </span>
-            </div>
-            <div className="relative flex min-w-[104px] cursor-not-allowed flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-slate-400">
-              <span className="text-xl leading-none opacity-60">🍚</span>
-              <span className="text-sm font-semibold">食事チェック</span>
-              <span className="absolute right-1 top-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
-                準備中
-              </span>
-            </div>
+            </Link>
           </div>
 
           {/* 連絡帳一括(承認済み・未公開が対象)。同じ行の右側に配置。 */}
