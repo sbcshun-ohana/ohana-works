@@ -8,6 +8,7 @@ import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
+import '../infection/handover_card_screen.dart';
 import '../parent_request/parent_request_list_screen.dart';
 import '../qr/child_qr_screen.dart';
 
@@ -34,7 +35,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   Set<String> _enabledFeatures = {};
   bool _isLoadingFeatures = true;
   // 感染症の手続き表示(206)。進行中案件があるときだけカードを出す。
-  List<({String caseId, String status, String? diseaseName, String? returnCriteria,
+  List<({String caseId, String origin, String status, String? diseaseName, String? returnCriteria,
       String requiredDocument, String documentState, String? formTemplatePath})> _infectionCases = const [];
 
   @override
@@ -69,9 +70,25 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     } catch (_) {}
   }
 
+  Future<void> _openHandoverCard(
+      ({String caseId, String origin, String status, String? diseaseName, String? returnCriteria,
+        String requiredDocument, String documentState, String? formTemplatePath}) c) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => HandoverCardScreen(
+          guardianService: widget.guardianService,
+          child: widget.child,
+          caseId: c.caseId,
+          caseStatus: c.status,
+        ),
+      ),
+    );
+    if (changed == true) _loadInfectionCases();
+  }
+
   // 感染症の手続きカード(206・設計書§8: 必要書類と次の手続きを大きく表示)。
   Widget _infectionCaseCard(
-      ({String caseId, String status, String? diseaseName, String? returnCriteria,
+      ({String caseId, String origin, String status, String? diseaseName, String? returnCriteria,
         String requiredDocument, String documentState, String? formTemplatePath}) c) {
     final docLabel = c.requiredDocument == 'opinion_letter'
         ? '登園許可書(医師記入)'
@@ -95,11 +112,22 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
               const Icon(Icons.medical_information_rounded, color: AppColors.danger),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('感染症の手続き: ${c.diseaseName ?? '感染症'}',
+                child: Text(
+                    c.status == 'awaiting_medical_result'
+                        ? '園から引き継ぎカードが届いています'
+                        : '感染症の手続き: ${c.diseaseName ?? '感染症'}',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               ),
             ],
           ),
+          if (c.origin == 'handover') ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _openHandoverCard(c),
+              icon: const Icon(Icons.badge_rounded, size: 18),
+              label: Text(c.status == 'awaiting_medical_result' ? 'カードを見る・受診結果を入力' : 'カードを見る'),
+            ),
+          ],
           if (c.returnCriteria != null) ...[
             const SizedBox(height: 8),
             Text('登園のめやす: ${c.returnCriteria}', style: const TextStyle(fontSize: 13)),

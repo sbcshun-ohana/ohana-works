@@ -565,7 +565,7 @@ class GuardianService {
   }
 
   /// 感染症の手続き表示(206)。進行中案件(病名・登園のめやす・必要書類・様式PDFパス)を返す。
-  Future<List<({String caseId, String status, String? diseaseName, String? returnCriteria,
+  Future<List<({String caseId, String origin, String status, String? diseaseName, String? returnCriteria,
       String requiredDocument, String documentState, String? formTemplatePath})>>
       fetchMyChildInfectionCases(String childId) async {
     final rows = await _client.rpc('fetch_my_child_infection_cases', params: {'p_child_id': childId});
@@ -573,6 +573,7 @@ class GuardianService {
       final m = r as Map<String, dynamic>;
       return (
         caseId: m['case_id'] as String,
+        origin: m['origin'] as String,
         status: m['status'] as String,
         diseaseName: m['disease_name'] as String?,
         returnCriteria: m['return_criteria'] as String?,
@@ -604,6 +605,41 @@ class GuardianService {
         contentType: m['content_type'] as String?,
       );
     }).toList();
+  }
+
+  /// 引き継ぎカード(209)。case_idの最新版カードを返す(RLSで自分の子のみ)。
+  Future<Map<String, dynamic>?> fetchLatestHandoverCard(String caseId) async {
+    final rows = await _client
+        .from('infection_handover_cards')
+        .select('*')
+        .eq('case_id', caseId)
+        .order('version', ascending: false)
+        .limit(1);
+    final list = rows as List;
+    return list.isEmpty ? null : list.first as Map<String, dynamic>;
+  }
+
+  /// 受診結果の提出(209)。案件が確定/終了/待ち継続へ遷移する。
+  Future<void> submitMedicalVisitReport({
+    required String caseId,
+    required bool visited,
+    DateTime? visitedAt,
+    String? medicalInstitution,
+    String? diseaseMasterId,
+    bool noInfection = false,
+    String? doctorNote,
+    String? noteToSchool,
+  }) async {
+    await _client.rpc('submit_medical_visit_report', params: {
+      'p_case_id': caseId,
+      'p_visited': visited,
+      'p_visited_at': visitedAt?.toUtc().toIso8601String(),
+      'p_medical_institution': medicalInstitution,
+      'p_disease_master_id': diseaseMasterId,
+      'p_no_infection': noInfection,
+      'p_doctor_note': doctorNote,
+      'p_note_to_school': noteToSchool,
+    });
   }
 
   /// 一斉配信の添付の署名付きURL(5分)。

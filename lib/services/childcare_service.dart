@@ -996,6 +996,76 @@ class ChildcareService {
     });
   }
 
+  /// 引き継ぎカード(209): 起点Aの案件作成(進行中があれば再利用)。
+  Future<String> createInfectionHandoverCase(String childId) async {
+    final data = await _client.rpc('create_infection_handover_case', params: {'p_child_id': childId});
+    return data as String;
+  }
+
+  /// 引き継ぎカード送信(209)。スナップショットはサーバー側で固定される。
+  Future<String> sendHandoverCard({
+    required String caseId,
+    required String hives,
+    required String rash,
+    List<String>? rashLocations,
+    String? rashLocationOther,
+    String? freeNote,
+    String? guardianMessage,
+  }) async {
+    final data = await _client.rpc('send_handover_card', params: {
+      'p_case_id': caseId,
+      'p_hives': hives,
+      'p_rash': rash,
+      'p_rash_locations': rashLocations,
+      'p_rash_location_other': rashLocationOther,
+      'p_free_note': freeNote,
+      'p_guardian_message': guardianMessage,
+    });
+    return data as String;
+  }
+
+  /// 園内感染症の参考表示(209・同一施設・過去7日)。
+  Future<List<({String disease, int count})>> fetchInfectionReferenceCounts(String officeId) async {
+    final rows = await _client.rpc('fetch_infection_reference_counts', params: {'p_office_id': officeId});
+    return (rows as List).map((r) {
+      final m = r as Map<String, dynamic>;
+      return (disease: m['disease_name'] as String, count: (m['report_count'] as num).toInt());
+    }).toList();
+  }
+
+  /// カード作成画面のプレビュー(209): 当日の検温・排便(RLS直接select)。
+  Future<({List<({String time, double temperature})> temps, List<({String time, String type})> toileting})>
+      fetchHandoverPreview(String childId, DateTime businessDate) async {
+    final date = dateOnly(businessDate);
+    final temps = await _client
+        .from('child_temperature_records')
+        .select('measured_at, temperature')
+        .eq('child_id', childId)
+        .eq('business_date', date)
+        .order('measured_at');
+    final contact = await _client
+        .from('child_daily_contacts')
+        .select('toileting_records')
+        .eq('child_id', childId)
+        .eq('business_date', date)
+        .maybeSingle();
+    final toilet = ((contact?['toileting_records'] as List?) ?? const [])
+        .map((e) => (
+              time: (e as Map<String, dynamic>)['time'] as String? ?? '',
+              type: e['type'] as String? ?? '',
+            ))
+        .toList();
+    return (
+      temps: (temps as List)
+          .map((r) => (
+                time: ((r as Map<String, dynamic>)['measured_at'] as String).substring(0, 5),
+                temperature: (r['temperature'] as num).toDouble(),
+              ))
+          .toList(),
+      toileting: toilet,
+    );
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

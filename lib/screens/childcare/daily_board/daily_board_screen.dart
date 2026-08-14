@@ -12,6 +12,7 @@ import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../children/child_detail_screen.dart';
 import '../contacts/daily_contact_detail_screen.dart';
+import '../infection/handover_card_create_screen.dart';
 import '../family_report/family_report_list_screen.dart';
 import '../health/temperature_screen.dart';
 
@@ -64,6 +65,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // 感染症案件バッジ用(206)。childId→リスト(病名/必要書類/書類状態)。
   Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>
       _infectionByChild = const {};
+  // 209: 感染症管理フラグ。ONの施設のみ行アクションに「引き継ぎカード」を出す。
+  bool _infectionControlEnabled = false;
   // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
   Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
       _pickupChangeByChild = const {};
@@ -80,6 +83,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadAbsencePeriods();
     _loadMedication();
     _loadPickupChanges();
+    _loadInfectionFlag();
     _subscribe();
     childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
   }
@@ -139,6 +143,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadAbsencePeriods();
     _loadMedication();
     _loadPickupChanges();
+    _loadInfectionFlag();
     _subscribe();
   }
 
@@ -271,6 +276,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       if (mounted) setState(() => _medicationByChild = m);
     } catch (_) {
       // 取得失敗時は前回値のまま/非表示。
+    }
+  }
+
+  Future<void> _loadInfectionFlag() async {
+    try {
+      final data = await Supabase.instance.client
+          .rpc('is_infection_control_enabled_for_office', params: {'p_office_id': _officeId});
+      if (mounted) setState(() => _infectionControlEnabled = data == true);
+    } catch (_) {
+      if (mounted) setState(() => _infectionControlEnabled = false);
     }
   }
 
@@ -726,6 +741,19 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadPickupChanges();
   }
 
+  // 209: 引き継ぎカード作成画面へ(園内発症起点)。
+  Future<void> _openHandoverCard(DailyBoardRow row) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => HandoverCardCreateScreen(
+        service: widget.service,
+        officeId: _officeId,
+        childId: row.childId,
+        childNameLabel: row.nameLabel,
+      ),
+    ));
+    _loadPickupChanges();
+  }
+
   // K5(iii)/Phase A: 園児行から当日の連絡帳(園側 日誌・連絡帳)へ。既存詳細画面を再利用。
   Future<void> _openContact(DailyBoardRow row) async {
     await Navigator.of(context).push(MaterialPageRoute(
@@ -971,6 +999,10 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
                                             () => _toggleAbsence(row),
                                           ),
+                                          // 209: 引き継ぎカード作成(感染症管理ON施設のみ)
+                                          if (_infectionControlEnabled)
+                                            _actionIcon(Icons.medical_information_rounded, '引き継ぎカード',
+                                                const Color(0xFFB05FA0), () => _openHandoverCard(row)),
                                         ],
                                       ),
                                       // 登園・お迎え時間バッジ。氏名・続柄は連絡帳から廃止(申請・連絡に一本化)
