@@ -588,6 +588,29 @@ class GuardianService {
     return _client.storage.from('document-templates').createSignedUrl(path, 300);
   }
 
+  /// 一斉配信の添付(208)。RLSで自分宛の承認済みお知らせの分のみ返る。
+  Future<List<({String filePath, String fileName, String? contentType})>>
+      fetchBroadcastNoticeAttachments(String noticeId) async {
+    final rows = await _client
+        .from('guardian_notice_attachments')
+        .select('file_path, file_name, content_type')
+        .eq('notice_id', noticeId)
+        .order('sort_order');
+    return (rows as List).map((r) {
+      final m = r as Map<String, dynamic>;
+      return (
+        filePath: m['file_path'] as String,
+        fileName: m['file_name'] as String,
+        contentType: m['content_type'] as String?,
+      );
+    }).toList();
+  }
+
+  /// 一斉配信の添付の署名付きURL(5分)。
+  Future<String> createBroadcastAttachmentUrl(String path) async {
+    return _client.storage.from('guardian-notice-attachments').createSignedUrl(path, 300);
+  }
+
   /// お迎え者身分証明書(202)の機能フラグ。OFF/取得失敗は false=アップロードUIを出さない(安全側)。
   Future<bool> isPickupIdDocumentEnabled(String officeId) async {
     try {

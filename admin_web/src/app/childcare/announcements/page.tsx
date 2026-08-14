@@ -63,6 +63,11 @@ function AnnouncementsPageContent() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 208: 添付(PDF/画像)。新規フォームで選択→下書き作成時にアップロード。詳細では一覧表示+draft中の削除。
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<
+    { id: string; file_path: string; file_name: string; content_type: string | null }[]
+  >([]);
   const selectedNotice = notices.find((n) => n.id === selectedId) ?? null;
 
   // 作成フォーム
@@ -200,6 +205,12 @@ function AnnouncementsPageContent() {
     supabase.rpc("fetch_guardian_notice_unread_recipients", { p_notice_id: selectedNotice.id }).then(({ data }) => {
       setUnreadList((data ?? []) as GuardianNoticeUnreadRecipient[]);
     });
+    supabase
+      .from("guardian_notice_attachments")
+      .select("id, file_path, file_name, content_type")
+      .eq("notice_id", selectedNotice.id)
+      .order("sort_order")
+      .then(({ data }) => setAttachments((data ?? []) as typeof attachments));
     // selectedId と status の変化のみで再取得する(オブジェクト全体を依存にすると過剰再取得)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, selectedNotice?.status, reloadToken]);
@@ -259,7 +270,48 @@ function AnnouncementsPageContent() {
       setActionError(error.message);
       return null;
     }
-    return data as string;
+    const noticeId = data as string;
+    // 208: 選択済みファイルをアップロードして添付行を作成(失敗はエラー表示するが下書き自体は成立)
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const f = pendingFiles[i];
+      const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".")) : "";
+      const path = `${noticeId}/${Date.now()}_${i}${ext}`;
+      const { error: upErr } = await createClient()
+        .storage.from("guardian-notice-attachments")
+        .upload(path, f, { contentType: f.type || undefined });
+      if (upErr) {
+        setActionError(`添付「${f.name}」のアップロードに失敗しました: ${upErr.message}`);
+        continue;
+      }
+      await createClient().from("guardian_notice_attachments").insert({
+        notice_id: noticeId,
+        file_path: path,
+        file_name: f.name,
+        content_type: f.type || null,
+        file_size_bytes: f.size,
+        sort_order: i,
+      });
+    }
+    setPendingFiles([]);
+    return noticeId;
+  }
+
+  async function openAttachment(filePath: string) {
+    const { data, error } = await createClient()
+      .storage.from("guardian-notice-attachments")
+      .createSignedUrl(filePath, 300);
+    if (error) {
+      setActionError(`添付の表示に失敗しました: ${error.message}`);
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
+  }
+
+  async function deleteAttachment(att: { id: string; file_path: string }) {
+    const supabase = createClient();
+    await supabase.storage.from("guardian-notice-attachments").remove([att.file_path]);
+    await supabase.from("guardian_notice_attachments").delete().eq("id", att.id);
+    setAttachments((list) => list.filter((a) => a.id !== att.id));
   }
 
   async function handleSaveDraft() {
@@ -543,6 +595,35 @@ function AnnouncementsPageContent() {
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {pendingFiles.length > 0 && (
+                  <div className="w-full space-y-1 text-xs text-slate-600">
+                    {pendingFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span>📎 {f.name}</span>
+                        <button
+                          onClick={() => setPendingFiles((cur) => cur.filter((_, j) => j !== i))}
+                          className="text-red-500 hover:underline"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                  📎 添付を追加(PDF/画像)
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      if (files.length) setPendingFiles((cur) => [...cur, ...files]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
                 <button
                   onClick={handleSaveDraft}
                   disabled={isBusy}
@@ -689,6 +770,24 @@ function AnnouncementsPageContent() {
 
             <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{selectedNotice.body}</p>
             <div className="text-xs text-slate-500">宛先: {(selectedNotice.target_labels ?? []).join(" / ") || "—"}</div>
+
+            {/* 208: 添付一覧(タップで署名URL表示。draft/差し戻し中は削除可) */}
+            {attachments.length > 0 && (
+              <div className="space-y-1 text-sm">
+                {attachments.map((a) => (
+                  <div key={a.id} className="flex items-center gap-2">
+                    <button onClick={() => openAttachment(a.file_path)} className="text-sky-700 hover:underline">
+                      📎 {a.file_name}
+                    </button>
+                    {(selectedNotice.status === "draft" || selectedNotice.status === "returned") && (
+                      <button onClick={() => deleteAttachment(a)} className="text-xs text-red-500 hover:underline">
+                        削除
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {selectedNotice.status === "returned" && selectedNotice.returned_reason && (
               <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">差し戻し理由: {selectedNotice.returned_reason}</div>
