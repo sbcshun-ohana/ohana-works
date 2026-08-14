@@ -61,6 +61,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   Map<String, String> _absenceCommentByChild = const {};
   // 承認済み 遅刻/早退 のバッジ用。childId→リスト(種別/予定時刻/理由)。
   Map<String, List<({String type, String? time, String? reason})>> _timeChangeByChild = const {};
+  // 感染症案件バッジ用(206)。childId→リスト(病名/必要書類/書類状態)。
+  Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>
+      _infectionByChild = const {};
   // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
   Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
       _pickupChangeByChild = const {};
@@ -247,6 +250,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     try {
       final t = await widget.service.fetchApprovedTimeChangeRequestsForOffice(_officeId, _businessDate);
       if (mounted) setState(() => _timeChangeByChild = t);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+    try {
+      final ic = await widget.service.fetchBoardInfectionCasesForOffice(_officeId);
+      if (mounted) setState(() => _infectionByChild = ic);
     } catch (_) {
       // 取得失敗時は前回値のまま/非表示。
     }
@@ -964,6 +973,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                       // 202: 承認済みお迎え変更(申請・連絡由来)。複数申請はバッジを重ねて表示。
                                       for (final pc in _pickupChangeByChild[row.childId] ?? const [])
                                         _pickupChangeBadge(row, pc),
+                                      // 206: 感染症案件バッジ(進行中のみ)。書類待ち=赤/提出・受領済み=緑。
+                                      for (final ic in _infectionByChild[row.childId] ?? const [])
+                                        _miniBadge(
+                                            Icons.medical_information_rounded,
+                                            '感染症: ${ic.diseaseName ?? ''}'
+                                            '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
+                                            '${ic.documentState == 'required_not_submitted' ? '待ち' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
+                                            ic.documentState == 'required_not_submitted'
+                                                ? AppColors.punchClockOut
+                                                : AppColors.leafGreen),
                                       // 201: 服薬バッジ。解熱剤を含む場合は赤警告。タップで種類と様子を表示。
                                       if (_medicationByChild[row.childId] != null)
                                         _medicationBadge(row, _medicationByChild[row.childId]!),

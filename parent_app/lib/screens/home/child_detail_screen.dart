@@ -33,12 +33,98 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   int _unreadNoticeCount = 0;
   Set<String> _enabledFeatures = {};
   bool _isLoadingFeatures = true;
+  // 感染症の手続き表示(206)。進行中案件があるときだけカードを出す。
+  List<({String caseId, String status, String? diseaseName, String? returnCriteria,
+      String requiredDocument, String documentState, String? formTemplatePath})> _infectionCases = const [];
 
   @override
   void initState() {
     super.initState();
     _loadFeatureFlags();
     _loadUnreadCounts();
+    _loadInfectionCases();
+  }
+
+  Future<void> _loadInfectionCases() async {
+    try {
+      final cases = await widget.guardianService.fetchMyChildInfectionCases(widget.child.childId);
+      if (mounted) setState(() => _infectionCases = cases);
+    } catch (_) {
+      // 取得失敗時は非表示(安全側)。
+    }
+  }
+
+  Future<void> _openFormPdf(String path) async {
+    try {
+      final url = await widget.guardianService.createDocumentTemplateUrl(path);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('様式のダウンロード', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          content: SelectableText('以下のURLをブラウザで開くとPDFを表示・保存できます(5分間有効)\n\n$url'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
+        ),
+      );
+    } catch (_) {}
+  }
+
+  // 感染症の手続きカード(206・設計書§8: 必要書類と次の手続きを大きく表示)。
+  Widget _infectionCaseCard(
+      ({String caseId, String status, String? diseaseName, String? returnCriteria,
+        String requiredDocument, String documentState, String? formTemplatePath}) c) {
+    final docLabel = c.requiredDocument == 'opinion_letter'
+        ? '登園許可書(医師記入)'
+        : c.requiredDocument == 'return_form'
+            ? '登園届(保護者記入)'
+            : null;
+    final submitted = c.documentState == 'submitted_electronically' || c.documentState == 'received_on_paper';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.medical_information_rounded, color: AppColors.danger),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('感染症の手続き: ${c.diseaseName ?? '感染症'}',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+            ],
+          ),
+          if (c.returnCriteria != null) ...[
+            const SizedBox(height: 8),
+            Text('登園のめやす: ${c.returnCriteria}', style: const TextStyle(fontSize: 13)),
+          ],
+          if (docLabel != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              submitted ? '$docLabel: 提出済みです' : '登園には $docLabel の提出が必要です',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: submitted ? AppColors.leafGreen : AppColors.danger),
+            ),
+          ],
+          if (!submitted && c.formTemplatePath != null) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _openFormPdf(c.formTemplatePath!),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+              label: const Text('様式PDFを表示'),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _loadFeatureFlags() async {
@@ -73,7 +159,14 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
       appBar: AppBar(
         title: ChildContextAppBarTitle(title: widget.child.nameLabel, officeName: widget.child.officeName),
       ),
-      body: _isLoadingFeatures ? const Center(child: CircularProgressIndicator()) : _buildGrid(),
+      body: _isLoadingFeatures
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                for (final c in _infectionCases) _infectionCaseCard(c),
+                Expanded(child: _buildGrid()),
+              ],
+            ),
     );
   }
 

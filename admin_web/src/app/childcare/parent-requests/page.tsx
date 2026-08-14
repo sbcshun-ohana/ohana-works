@@ -127,6 +127,11 @@ function ChildcareParentRequestsPageContent() {
                     <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
                       {PARENT_REQUEST_TYPE_LABELS[req.request_type]}
                     </span>
+                    {req.request_type === "absence" && req.details?.["感染症により欠席"] != null && (
+                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                        感染症{req.details?.["感染症の種類"] ? `: ${String(req.details["感染症の種類"])}` : ""}
+                      </span>
+                    )}
                     {req.request_type === "pickup_person_change" &&
                       (req.pickup_id_verified ? (
                         <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">

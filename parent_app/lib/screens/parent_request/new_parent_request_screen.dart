@@ -55,6 +55,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   bool _isInfectiousAbsence = false;
   final Set<String> _selectedDiseaseNames = {};
   Future<List<InfectiousDiseaseMaster>>? _diseasesFuture;
+  // 感染症管理(206)。フラグON施設では単一選択+マスターID送信=提出時に案件が自動作成される。
+  bool _infectionControlEnabled = false;
+  String? _selectedDiseaseMasterId;
 
   // 服薬連絡(201)。種類=複数選択(日本語ラベル)。フラグOFF施設では種類プルダウンに出さない。
   bool _medicationEnabled = false;
@@ -75,6 +78,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     });
     widget.guardianService.isPickupIdDocumentEnabled(widget.child.officeId).then((enabled) {
       if (mounted) setState(() => _pickupIdDocEnabled = enabled);
+    });
+    widget.guardianService.isInfectionControlEnabled(widget.child.officeId).then((enabled) {
+      if (mounted) setState(() => _infectionControlEnabled = enabled);
     });
     // 取得失敗時は空のまま=既登録なし扱い(初回=添付必須の安全側)。
     widget.guardianService
@@ -330,6 +336,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
         absenceKind: _requestType == 'absence' ? _absenceKind : null,
         medicationKinds: _requestType == 'medication' ? _selectedMedicationKinds.toList() : null,
         idDocumentPath: idDocumentPath,
+        infectiousDiseaseMasterId: (_requestType == 'absence' && _isInfectiousAbsence && _infectionControlEnabled)
+            ? _selectedDiseaseMasterId
+            : null,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
@@ -638,7 +647,15 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
                         (d) => CheckboxListTile(
                           value: _selectedDiseaseNames.contains(d.name),
                           onChanged: (checked) => setState(() {
-                            if (checked ?? false) {
+                            if (_infectionControlEnabled) {
+                              // 206: 案件作成のため単一選択(該当する感染症を1つ)。
+                              _selectedDiseaseNames.clear();
+                              _selectedDiseaseMasterId = null;
+                              if (checked ?? false) {
+                                _selectedDiseaseNames.add(d.name);
+                                _selectedDiseaseMasterId = d.id;
+                              }
+                            } else if (checked ?? false) {
                               _selectedDiseaseNames.add(d.name);
                             } else {
                               _selectedDiseaseNames.remove(d.name);

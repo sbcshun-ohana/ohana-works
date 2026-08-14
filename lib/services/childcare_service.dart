@@ -970,6 +970,24 @@ class ChildcareService {
     return map;
   }
 
+  /// ボードの感染症案件バッジ用(206・198方式)。進行中案件を childId→リストで返す。
+  Future<Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>>
+      fetchBoardInfectionCasesForOffice(String officeId) async {
+    final rows = await _client.rpc('fetch_board_infection_cases_for_office', params: {'p_office_id': officeId});
+    final map = <String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      (map[m['child_id'] as String] ??= []).add((
+        caseId: m['case_id'] as String,
+        status: m['status'] as String,
+        diseaseName: m['disease_name'] as String?,
+        requiredDocument: m['required_document'] as String,
+        documentState: m['document_state'] as String,
+      ));
+    }
+    return map;
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

@@ -538,6 +538,7 @@ class GuardianService {
     String? absenceKind,
     List<String>? medicationKinds,
     String? idDocumentPath,
+    String? infectiousDiseaseMasterId,
   }) async {
     await _client.from('parent_requests').insert({
       'child_id': childId,
@@ -548,8 +549,43 @@ class GuardianService {
       'absence_kind': ?absenceKind,
       if (medicationKinds != null && medicationKinds.isNotEmpty) 'medication_kinds': medicationKinds,
       'id_document_path': ?idDocumentPath,
+      'infectious_disease_master_id': ?infectiousDiseaseMasterId,
       'details': details,
     });
+  }
+
+  /// 感染症管理(205)の機能フラグ。OFF/取得失敗は false(従来動作=案件を作らない)。
+  Future<bool> isInfectionControlEnabled(String officeId) async {
+    try {
+      final data = await _client.rpc('is_infection_control_enabled_for_office', params: {'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 感染症の手続き表示(206)。進行中案件(病名・登園のめやす・必要書類・様式PDFパス)を返す。
+  Future<List<({String caseId, String status, String? diseaseName, String? returnCriteria,
+      String requiredDocument, String documentState, String? formTemplatePath})>>
+      fetchMyChildInfectionCases(String childId) async {
+    final rows = await _client.rpc('fetch_my_child_infection_cases', params: {'p_child_id': childId});
+    return (rows as List).map((r) {
+      final m = r as Map<String, dynamic>;
+      return (
+        caseId: m['case_id'] as String,
+        status: m['status'] as String,
+        diseaseName: m['disease_name'] as String?,
+        returnCriteria: m['return_criteria'] as String?,
+        requiredDocument: m['required_document'] as String,
+        documentState: m['document_state'] as String,
+        formTemplatePath: m['form_template_path'] as String?,
+      );
+    }).toList();
+  }
+
+  /// 様式PDF(document-templatesバケット)の署名付きURL(5分)。
+  Future<String> createDocumentTemplateUrl(String path) async {
+    return _client.storage.from('document-templates').createSignedUrl(path, 300);
   }
 
   /// お迎え者身分証明書(202)の機能フラグ。OFF/取得失敗は false=アップロードUIを出さない(安全側)。

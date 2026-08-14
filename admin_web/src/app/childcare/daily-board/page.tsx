@@ -111,6 +111,10 @@ function ChildcareDailyBoardPageContent() {
   const [timeChangeByChild, setTimeChangeByChild] = useState<
     Record<string, { request_type: "tardiness" | "early_leave"; time: string | null; reason: string | null }[]>
   >({});
+  // 感染症案件バッジ用(206)。child_id→リスト(病名/必要書類/書類状態)。
+  const [infectionByChild, setInfectionByChild] = useState<
+    Record<string, { disease_name: string | null; required_document: string; document_state: string }[]>
+  >({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
@@ -343,6 +347,38 @@ function ChildcareDailyBoardPageContent() {
     }
     loadTimeChanges();
   }, [selectedOffice, businessDate, reloadToken]);
+
+  // 感染症案件(206)。進行中案件のバッジ表示(失敗時は非表示)。
+  useEffect(() => {
+    function loadInfectionCases() {
+      if (!selectedOffice) {
+        setInfectionByChild({});
+        return;
+      }
+      createClient()
+        .rpc("fetch_board_infection_cases_for_office", { p_office_id: selectedOffice })
+        .then(({ data, error }) => {
+          if (error) {
+            setInfectionByChild({});
+            return;
+          }
+          const map: Record<
+            string,
+            { disease_name: string | null; required_document: string; document_state: string }[]
+          > = {};
+          for (const r of (data ?? []) as {
+            child_id: string;
+            disease_name: string | null;
+            required_document: string;
+            document_state: string;
+          }[]) {
+            (map[r.child_id] ??= []).push(r);
+          }
+          setInfectionByChild(map);
+        });
+    }
+    loadInfectionCases();
+  }, [selectedOffice, reloadToken]);
 
   // 在籍登園状況サマリー。クラス絞り込み(selectedClass=class_id)に連動し、
   // 空文字(全クラス)のときは施設全体、クラス選択時はそのクラス単位で集計する。
@@ -749,6 +785,31 @@ function ChildcareDailyBoardPageContent() {
                             : ""}
                         </span>
                       )}
+                      {/* 感染症案件(206): 書類待ち=赤/提出・受領済み=緑 */}
+                      {(infectionByChild[row.child_id] ?? []).map((ic, i) => (
+                        <span
+                          key={`ic-${i}`}
+                          className={`ml-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            ic.document_state === "required_not_submitted"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          感染症: {ic.disease_name ?? ""}
+                          {ic.required_document === "opinion_letter"
+                            ? " 許可書"
+                            : ic.required_document === "return_form"
+                              ? " 登園届"
+                              : ""}
+                          {ic.document_state === "required_not_submitted"
+                            ? "待ち"
+                            : ic.document_state === "submitted_electronically"
+                              ? "提出済み"
+                              : ic.document_state === "received_on_paper"
+                                ? "紙受領済み"
+                                : ""}
+                        </span>
+                      ))}
                       {/* 承認済み 遅刻/早退(欠席と同様にボードで見えるように) */}
                       {(timeChangeByChild[row.child_id] ?? []).map((tc, i) => (
                         <span
