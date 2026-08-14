@@ -945,6 +945,31 @@ class ChildcareService {
     return map;
   }
 
+  /// ボードの遅刻・早退バッジ用。対象日の承認済み 遅刻(tardiness)/早退(early_leave) 申請を
+  /// childId→リストで返す(details の 到着予定時刻/降園予定時刻・理由。直接select・RLSでstaff可)。
+  Future<Map<String, List<({String type, String? time, String? reason})>>>
+      fetchApprovedTimeChangeRequestsForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client
+        .from('parent_requests')
+        .select('child_id, request_type, details, children!inner(office_id)')
+        .eq('children.office_id', officeId)
+        .eq('status', 'approved')
+        .inFilter('request_type', ['tardiness', 'early_leave'])
+        .eq('target_date', dateOnly(businessDate));
+    final map = <String, List<({String type, String? time, String? reason})>>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      final details = (m['details'] as Map<String, dynamic>?) ?? const {};
+      final type = m['request_type'] as String;
+      (map[m['child_id'] as String] ??= []).add((
+        type: type,
+        time: (type == 'tardiness' ? details['到着予定時刻'] : details['降園予定時刻']) as String?,
+        reason: details['理由'] as String?,
+      ));
+    }
+    return map;
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

@@ -59,6 +59,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   Map<String, ({List<String> kinds, bool hasAntipyretic, String? symptom})> _medicationByChild = const {};
   // 欠席児童一覧の「保護者からの連絡」。childId→承認済み欠席申請の理由。
   Map<String, String> _absenceCommentByChild = const {};
+  // 承認済み 遅刻/早退 のバッジ用。childId→リスト(種別/予定時刻/理由)。
+  Map<String, List<({String type, String? time, String? reason})>> _timeChangeByChild = const {};
   // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
   Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
       _pickupChangeByChild = const {};
@@ -239,6 +241,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       try {
       final c = await widget.service.fetchApprovedAbsenceCommentsForOffice(_officeId, _businessDate);
       if (mounted) setState(() => _absenceCommentByChild = c);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+    try {
+      final t = await widget.service.fetchApprovedTimeChangeRequestsForOffice(_officeId, _businessDate);
+      if (mounted) setState(() => _timeChangeByChild = t);
     } catch (_) {
       // 取得失敗時は前回値のまま/非表示。
     }
@@ -945,6 +953,14 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             const Color(0xFF7A5FC0)),
                                       if (_displayAbsencePeriod(row) != null)
                                         _miniAbsenceBadge(_displayAbsencePeriod(row)!),
+                                      // 承認済み 遅刻/早退(俊指示 2026-08-14: 欠席と同様にボードで見えるように)
+                                      for (final tc in _timeChangeByChild[row.childId] ?? const [])
+                                        _miniBadge(
+                                            tc.type == 'tardiness' ? Icons.schedule_rounded : Icons.directions_run_rounded,
+                                            '${tc.type == 'tardiness' ? '遅刻予定' : '早退予定'}'
+                                            '${tc.time != null ? ' ${tc.time}' : ''}'
+                                            '${tc.reason != null && tc.reason!.isNotEmpty ? '(${tc.reason})' : ''}',
+                                            AppColors.warmOrange),
                                       // 202: 承認済みお迎え変更(申請・連絡由来)。複数申請はバッジを重ねて表示。
                                       for (final pc in _pickupChangeByChild[row.childId] ?? const [])
                                         _pickupChangeBadge(row, pc),

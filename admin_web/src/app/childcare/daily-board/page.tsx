@@ -107,6 +107,10 @@ function ChildcareDailyBoardPageContent() {
       }[]
     >
   >({});
+  // 承認済み 遅刻/早退 のバッジ用。child_id→リスト(種別/予定時刻/理由)。直接select(RLSでstaff可)。
+  const [timeChangeByChild, setTimeChangeByChild] = useState<
+    Record<string, { request_type: "tardiness" | "early_leave"; time: string | null; reason: string | null }[]>
+  >({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
@@ -297,6 +301,47 @@ function ChildcareDailyBoardPageContent() {
         });
     }
     loadPickupChanges();
+  }, [selectedOffice, businessDate, reloadToken]);
+
+  // 承認済み 遅刻/早退(俊指示 2026-08-14: 欠席と同様にボードで見えるように)。
+  useEffect(() => {
+    function loadTimeChanges() {
+      if (!selectedOffice) {
+        setTimeChangeByChild({});
+        return;
+      }
+      createClient()
+        .from("parent_requests")
+        .select("child_id, request_type, details, children!inner(office_id)")
+        .eq("children.office_id", selectedOffice)
+        .eq("status", "approved")
+        .in("request_type", ["tardiness", "early_leave"])
+        .eq("target_date", businessDate)
+        .then(({ data, error }) => {
+          if (error) {
+            setTimeChangeByChild({});
+            return;
+          }
+          const map: Record<
+            string,
+            { request_type: "tardiness" | "early_leave"; time: string | null; reason: string | null }[]
+          > = {};
+          for (const r of (data ?? []) as {
+            child_id: string;
+            request_type: "tardiness" | "early_leave";
+            details: Record<string, unknown> | null;
+          }[]) {
+            const d = r.details ?? {};
+            (map[r.child_id] ??= []).push({
+              request_type: r.request_type,
+              time: (r.request_type === "tardiness" ? d["到着予定時刻"] : d["降園予定時刻"]) as string | null,
+              reason: (d["理由"] as string | undefined) || null,
+            });
+          }
+          setTimeChangeByChild(map);
+        });
+    }
+    loadTimeChanges();
   }, [selectedOffice, businessDate, reloadToken]);
 
   // 在籍登園状況サマリー。クラス絞り込み(selectedClass=class_id)に連動し、
@@ -704,6 +749,17 @@ function ChildcareDailyBoardPageContent() {
                             : ""}
                         </span>
                       )}
+                      {/* 承認済み 遅刻/早退(欠席と同様にボードで見えるように) */}
+                      {(timeChangeByChild[row.child_id] ?? []).map((tc, i) => (
+                        <span
+                          key={i}
+                          className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                        >
+                          {tc.request_type === "tardiness" ? "遅刻予定" : "早退予定"}
+                          {tc.time ? ` ${tc.time}` : ""}
+                          {tc.reason ? `(${tc.reason})` : ""}
+                        </span>
+                      ))}
                       {/* 予告(当日は欠席でない)はグレーで控えめに。欠席当日の赤の強調は欠席児童一覧が担う(俊指示 2026-08-14) */}
                       {clampAbsencePeriodToFuture(absenceByChild[row.child_id], businessDate) && (
                         <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
