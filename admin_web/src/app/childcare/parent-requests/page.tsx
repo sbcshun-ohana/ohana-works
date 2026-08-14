@@ -17,6 +17,8 @@ function ChildcareParentRequestsPageContent() {
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+  // 202: 身分証画像の署名付きURL(request_id単位・表示ボタン押下時に発行)
+  const [docUrlByRequest, setDocUrlByRequest] = useState<Record<string, string>>({});
 
   useEffect(() => {
     function loadRows() {
@@ -53,6 +55,19 @@ function ChildcareParentRequestsPageContent() {
       return;
     }
     setReloadToken((t) => t + 1);
+  }
+
+  async function showIdDocument(request: ParentRequestRow) {
+    if (!request.id_document_path || docUrlByRequest[request.request_id]) return;
+    const supabase = createClient();
+    const { data, error } = await supabase.storage
+      .from("pickup-id-documents")
+      .createSignedUrl(request.id_document_path, 300);
+    if (error) {
+      setRowsError(`身分証画像の取得に失敗しました: ${error.message}`);
+      return;
+    }
+    setDocUrlByRequest((m) => ({ ...m, [request.request_id]: data.signedUrl }));
   }
 
   async function reject(request: ParentRequestRow) {
@@ -112,6 +127,20 @@ function ChildcareParentRequestsPageContent() {
                     <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
                       {PARENT_REQUEST_TYPE_LABELS[req.request_type]}
                     </span>
+                    {req.request_type === "pickup_person_change" &&
+                      (req.pickup_id_verified ? (
+                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          ✓ 身分証確認済み
+                        </span>
+                      ) : req.id_document_path ? (
+                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                          初回・要実物確認
+                        </span>
+                      ) : (
+                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                          身分証なし
+                        </span>
+                      ))}
                   </h3>
                   <p className="text-xs text-slate-500">
                     申請者: {req.guardian_name} ・ 対象日: {req.target_date}
@@ -138,6 +167,27 @@ function ChildcareParentRequestsPageContent() {
                   </p>
                 ))}
               </div>
+
+              {req.id_document_path && (
+                <div className="space-y-2">
+                  {!docUrlByRequest[req.request_id] ? (
+                    <button
+                      onClick={() => showIdDocument(req)}
+                      className="rounded-lg border border-sky-300 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                    >
+                      身分証明書を表示
+                    </button>
+                  ) : (
+                    // 署名付きURL(5分)。next/imageは外部署名URL非対応のため素imgを使う。
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={docUrlByRequest[req.request_id]}
+                      alt="身分証明書"
+                      className="max-h-80 rounded-xl border border-slate-200"
+                    />
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <button

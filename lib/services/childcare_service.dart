@@ -877,6 +877,52 @@ class ChildcareService {
     return map;
   }
 
+  /// 198方式: ボードのお迎え変更表示(202)。承認済みお迎え変更を childId→リストで返す
+  /// (同児で複数申請があり得るためリスト。氏名・時間・確認済み・書類有無)。
+  Future<Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>>
+      fetchBoardPickupChangesForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_board_pickup_changes_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    final map = <String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>{};
+    for (final r in (rows as List)) {
+      final m = r as Map<String, dynamic>;
+      (map[m['child_id'] as String] ??= []).add((
+        name: m['person_name'] as String?,
+        relationship: m['relationship'] as String?,
+        arrive: m['arrive_time'] as String?,
+        leave: m['leave_time'] as String?,
+        idVerified: m['id_verified'] == true,
+        hasDocument: m['has_document'] == true,
+      ));
+    }
+    return map;
+  }
+
+  /// お迎え者マスタ(202)。実物確認チェックの対象person_id解決に使う。
+  Future<List<({String personId, String name, bool hasDocument, bool idVerified})>>
+      fetchPickupPersonsForChild(String childId) async {
+    final rows = await _client.rpc('fetch_pickup_persons_for_child', params: {'p_child_id': childId});
+    return (rows as List).map((r) {
+      final m = r as Map<String, dynamic>;
+      return (
+        personId: m['person_id'] as String,
+        name: m['name'] as String,
+        hasDocument: m['has_document'] == true,
+        idVerified: m['id_verified'] == true,
+      );
+    }).toList();
+  }
+
+  /// 身分証の実物確認済みチェック(202・主任以上)。
+  Future<void> setPickupPersonIdVerified(String personId, bool verified) async {
+    await _client.rpc('set_pickup_person_id_verified', params: {
+      'p_person_id': personId,
+      'p_verified': verified,
+    });
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/linked_child.dart';
 import '../../models/parent_request.dart';
+import '../../models/pickup_person.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/child_context_app_bar_title.dart';
@@ -43,6 +47,11 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   TimeOfDay? _pickupArriveTime;
   TimeOfDay? _pickupLeaveTime;
 
+  // お迎え者身分証明書(202)。フラグON施設のみ: 初回(=お迎え者マスタに同名なし)は写真添付必須。
+  bool _pickupIdDocEnabled = false;
+  List<PickupPerson> _pickupPersons = [];
+  XFile? _pickupIdImage;
+
   bool _isInfectiousAbsence = false;
   final Set<String> _selectedDiseaseNames = {};
   Future<List<InfectiousDiseaseMaster>>? _diseasesFuture;
@@ -64,6 +73,15 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     widget.guardianService.isMedicationReportEnabled(widget.child.officeId).then((enabled) {
       if (mounted) setState(() => _medicationEnabled = enabled);
     });
+    widget.guardianService.isPickupIdDocumentEnabled(widget.child.officeId).then((enabled) {
+      if (mounted) setState(() => _pickupIdDocEnabled = enabled);
+    });
+    // 取得失敗時は空のまま=既登録なし扱い(初回=添付必須の安全側)。
+    widget.guardianService
+        .fetchPickupPersonsForChild(widget.child.childId)
+        .then((list) {
+      if (mounted) setState(() => _pickupPersons = list);
+    }).catchError((_) {});
   }
 
   @override
@@ -111,6 +129,88 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   Future<void> _pickTime() async {
     final picked = await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.now());
     if (picked != null) setState(() => _time = picked);
+  }
+
+  /// 入力中の氏名と一致する既登録お迎え者(園児×氏名)。
+  PickupPerson? get _matchedPickupPerson {
+    final name = _pickupNameController.text.trim();
+    if (name.isEmpty) return null;
+    for (final person in _pickupPersons) {
+      if (person.name == name) return person;
+    }
+    return null;
+  }
+
+  /// 身分証明書セクション(202・フラグON施設のみ)。
+  /// 既登録者(同名)は状態表示のみ、初回の方は写真添付必須。
+  List<Widget> _buildPickupIdDocSection() {
+    final matched = _matchedPickupPerson;
+    if (matched != null && matched.hasDocument) {
+      final verified = matched.idVerified;
+      return [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: (verified ? AppColors.leafGreen : AppColors.warmOrange).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(verified ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                  color: verified ? AppColors.leafGreen : AppColors.warmOrange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  verified
+                      ? 'この方は身分証明書を確認済みです。アップロードは不要です'
+                      : 'この方は身分証明書を提出済みです(園での確認待ち)。アップロードは不要です',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+    return [
+      const Text(
+        '初めてお迎えに来られる方は、身分証明書(運転免許証・マイナンバーカード等)の写真の添付が必要です。'
+        '2回目以降は不要になります。',
+        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 8),
+      if (_pickupIdImage != null) ...[
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(File(_pickupIdImage!.path), height: 160, fit: BoxFit.cover),
+        ),
+        const SizedBox(height: 8),
+      ],
+      Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _pickIdImage(ImageSource.camera),
+              icon: const Icon(Icons.photo_camera_rounded, size: 18),
+              label: const Text('撮影する'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _pickIdImage(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_rounded, size: 18),
+              label: Text(_pickupIdImage == null ? '写真を選ぶ' : '選び直す'),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  Future<void> _pickIdImage(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source, maxWidth: 1600, imageQuality: 85);
+    if (picked != null) setState(() => _pickupIdImage = picked);
   }
 
   Future<void> _pickPickupTime({required bool isArrive}) async {
@@ -181,6 +281,12 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     if (_requestType == 'pickup_person_change' && _pickupNameController.text.trim().isEmpty) {
       return 'お迎えの方の氏名を入力してください';
     }
+    if (_requestType == 'pickup_person_change' && _pickupIdDocEnabled) {
+      final matched = _matchedPickupPerson;
+      if ((matched == null || !matched.hasDocument) && _pickupIdImage == null) {
+        return '初めてお迎えに来られる方は身分証明書の写真の添付が必要です';
+      }
+    }
     if (_requestType == 'other' && _otherMessageController.text.trim().isEmpty) {
       return '連絡内容を入力してください';
     }
@@ -205,6 +311,15 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
       _errorMessage = null;
     });
     try {
+      // 202: 身分証画像を先にアップロードし、申請行にパスを載せる(承認時にお迎え者マスタへ転記)。
+      String? idDocumentPath;
+      if (_requestType == 'pickup_person_change' && _pickupIdImage != null) {
+        final bytes = await _pickupIdImage!.readAsBytes();
+        idDocumentPath = await widget.guardianService.uploadPickupIdDocument(
+          childId: widget.child.childId,
+          bytes: bytes,
+        );
+      }
       await widget.guardianService.createParentRequest(
         childId: widget.child.childId,
         guardianId: widget.guardianId,
@@ -214,6 +329,7 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
         endDate: _requestType == 'absence' ? _endDate : null,
         absenceKind: _requestType == 'absence' ? _absenceKind : null,
         medicationKinds: _requestType == 'medication' ? _selectedMedicationKinds.toList() : null,
+        idDocumentPath: idDocumentPath,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
@@ -306,9 +422,36 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
         ];
       case 'pickup_person_change':
         return [
+          if (_pickupPersons.isNotEmpty) ...[
+            const Text('登録済みのお迎え者から選ぶ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _pickupPersons
+                  .map(
+                    (person) => ActionChip(
+                      avatar: person.idVerified
+                          ? const Icon(Icons.verified_rounded, size: 18, color: AppColors.leafGreen)
+                          : null,
+                      label: Text(
+                        '${person.name}${person.relationship != null && person.relationship!.isNotEmpty ? '(${person.relationship})' : ''}',
+                      ),
+                      onPressed: () => setState(() {
+                        _pickupNameController.text = person.name;
+                        _pickupRelationController.text = person.relationship ?? '';
+                        _pickupPhoneController.text = person.phone ?? '';
+                        _pickupIdImage = null;
+                      }),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 20),
+          ],
           const Text('お迎えの方の氏名', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
-          TextField(controller: _pickupNameController),
+          TextField(controller: _pickupNameController, onChanged: (_) => setState(() {})),
           const SizedBox(height: 20),
           const Text('続柄', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
@@ -318,6 +461,12 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           const SizedBox(height: 8),
           TextField(controller: _pickupPhoneController, keyboardType: TextInputType.phone),
           const SizedBox(height: 20),
+          if (_pickupIdDocEnabled) ...[
+            const Text('身分証明書', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            const SizedBox(height: 8),
+            ..._buildPickupIdDocSection(),
+            const SizedBox(height: 20),
+          ],
           const Text('登園・お迎え時間(任意)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
           Row(

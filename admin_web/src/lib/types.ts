@@ -388,6 +388,9 @@ export type ParentRequestRow = {
   medication_kinds: string[] | null;
   details: Record<string, unknown>;
   created_at: string;
+  // お迎え者身分証明書(202)。pickup_person_change以外はnull/false。
+  id_document_path: string | null;
+  pickup_id_verified: boolean;
 };
 
 export const ABSENCE_KIND_LABELS: Record<"sick_absence" | "personal_absence", string> = {

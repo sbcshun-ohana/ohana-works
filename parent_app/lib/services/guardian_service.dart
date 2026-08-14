@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/class_photo.dart';
@@ -8,6 +10,7 @@ import '../models/guardian_profile.dart';
 import '../models/guardian_qr_token.dart';
 import '../models/linked_child.dart';
 import '../models/parent_request.dart';
+import '../models/pickup_person.dart';
 
 String _formatDate(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
@@ -534,6 +537,7 @@ class GuardianService {
     DateTime? endDate,
     String? absenceKind,
     List<String>? medicationKinds,
+    String? idDocumentPath,
   }) async {
     await _client.from('parent_requests').insert({
       'child_id': childId,
@@ -543,8 +547,40 @@ class GuardianService {
       if (endDate != null) 'end_date': _formatDate(endDate),
       'absence_kind': ?absenceKind,
       if (medicationKinds != null && medicationKinds.isNotEmpty) 'medication_kinds': medicationKinds,
+      'id_document_path': ?idDocumentPath,
       'details': details,
     });
+  }
+
+  /// お迎え者身分証明書(202)の機能フラグ。OFF/取得失敗は false=アップロードUIを出さない(安全側)。
+  Future<bool> isPickupIdDocumentEnabled(String officeId) async {
+    try {
+      final data = await _client.rpc('is_pickup_id_document_enabled_for_office', params: {'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// お迎え者マスタ(202)。同一人物(園児×氏名)の既登録・確認済み状態の照合に使う。
+  Future<List<PickupPerson>> fetchPickupPersonsForChild(String childId) async {
+    final data = await _client.rpc('fetch_pickup_persons_for_child', params: {'p_child_id': childId});
+    return (data as List<dynamic>).map((e) => PickupPerson.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// 身分証明書画像をアップロードし、storageパスを返す(202)。
+  /// パス規約 {child_id}/{ファイル名} はstorageポリシー(保護者=自分の関連児フォルダのみ)と一致させる。
+  Future<String> uploadPickupIdDocument({
+    required String childId,
+    required Uint8List bytes,
+  }) async {
+    final path = '$childId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _client.storage.from('pickup-id-documents').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+        );
+    return path;
   }
 
   /// 服薬連絡(201)の機能フラグ。OFF/取得失敗は false=種類プルダウンに出さない(安全側)。

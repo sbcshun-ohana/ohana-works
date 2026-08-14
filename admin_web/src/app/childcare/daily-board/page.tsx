@@ -78,6 +78,20 @@ function ChildcareDailyBoardPageContent() {
   const [medicationByChild, setMedicationByChild] = useState<
     Record<string, { medication_kinds: string[]; has_antipyretic: boolean; symptom: string | null }>
   >({});
+  // 202: 承認済みお迎え変更の行内バッジ用。child_id→リスト(氏名/時間/確認済み/書類有無)。198方式の別RPC。
+  const [pickupChangeByChild, setPickupChangeByChild] = useState<
+    Record<
+      string,
+      {
+        person_name: string | null;
+        relationship: string | null;
+        arrive_time: string | null;
+        leave_time: string | null;
+        id_verified: boolean;
+        has_document: boolean;
+      }[]
+    >
+  >({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
   const [temperatureTarget, setTemperatureTarget] = useState<DailyBoardRow | null>(null);
@@ -227,6 +241,47 @@ function ChildcareDailyBoardPageContent() {
         });
     }
     loadMedication();
+  }, [selectedOffice, businessDate, reloadToken]);
+
+  // 202: 承認済みお迎え変更を別RPCで取得(付加情報・失敗時は非表示)。
+  useEffect(() => {
+    function loadPickupChanges() {
+      if (!selectedOffice) {
+        setPickupChangeByChild({});
+        return;
+      }
+      createClient()
+        .rpc("fetch_board_pickup_changes_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
+        .then(({ data, error }) => {
+          if (error) {
+            setPickupChangeByChild({});
+            return;
+          }
+          const map: Record<
+            string,
+            {
+              person_name: string | null;
+              relationship: string | null;
+              arrive_time: string | null;
+              leave_time: string | null;
+              id_verified: boolean;
+              has_document: boolean;
+            }[]
+          > = {};
+          for (const r of (data ?? []) as ({ child_id: string } & {
+            person_name: string | null;
+            relationship: string | null;
+            arrive_time: string | null;
+            leave_time: string | null;
+            id_verified: boolean;
+            has_document: boolean;
+          })[]) {
+            (map[r.child_id] ??= []).push(r);
+          }
+          setPickupChangeByChild(map);
+        });
+    }
+    loadPickupChanges();
   }, [selectedOffice, businessDate, reloadToken]);
 
   // 在籍登園状況サマリー。クラス絞り込み(selectedClass=class_id)に連動し、
@@ -712,6 +767,20 @@ function ChildcareDailyBoardPageContent() {
                           {row.pickup_time_to ? ` お迎え${row.pickup_time_to.slice(0, 5)}` : ""}
                         </span>
                       )}
+                      {/* 202: 承認済みお迎え変更(申請・連絡由来)。身分証の確認状態を併記 */}
+                      {(pickupChangeByChild[row.child_id] ?? []).map((pc, i) => (
+                        <span
+                          key={i}
+                          className={`mt-1 block w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            pc.id_verified ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          お迎え変更: {pc.person_name ?? "—"}
+                          {pc.relationship ? `(${pc.relationship})` : ""} {pc.id_verified ? "身分証✓" : "要確認"}
+                          {pc.arrive_time ? ` 登園${pc.arrive_time}` : ""}
+                          {pc.leave_time ? ` お迎え${pc.leave_time}` : ""}
+                        </span>
+                      ))}
                     </td>
                     <td className="px-4 py-3">
                       <ContactPublishCell

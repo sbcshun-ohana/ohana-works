@@ -57,6 +57,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   Map<String, ({DateTime start, DateTime end, String kind})> _absenceByChild = const {};
   // 201: 承認済み服薬連絡の行内バッジ用。childId→(種類, 解熱剤フラグ, 様子)。
   Map<String, ({List<String> kinds, bool hasAntipyretic, String? symptom})> _medicationByChild = const {};
+  // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
+  Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
+      _pickupChangeByChild = const {};
 
   @override
   void initState() {
@@ -69,6 +72,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadNapMissing();
     _loadAbsencePeriods();
     _loadMedication();
+    _loadPickupChanges();
     _subscribe();
     childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
   }
@@ -127,6 +131,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadNapMissing();
     _loadAbsencePeriods();
     _loadMedication();
+    _loadPickupChanges();
     _subscribe();
   }
 
@@ -244,12 +249,22 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  Future<void> _loadPickupChanges() async {
+    try {
+      final m = await widget.service.fetchBoardPickupChangesForOffice(_officeId, _businessDate);
+      if (mounted) setState(() => _pickupChangeByChild = m);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+  }
+
   Future<void> _reload() async {
     setState(_load);
     _loadSummary();
     _loadWeather();
     _loadAbsencePeriods();
     _loadMedication();
+    _loadPickupChanges();
     await _rowsFuture;
   }
 
@@ -380,6 +395,96 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   String _hm5(String? s) => s == null ? '' : (s.length >= 5 ? s.substring(0, 5) : s);
 
   // 右40%カラムの小バッジ(お迎え変更/療育外出中 等)。列幅内に収め溢れは省略。
+  // 202: 承認済みお迎え変更バッジ。タップで詳細+実物確認済みチェック(主任以上のみ操作可)。
+  Widget _pickupChangeBadge(
+      DailyBoardRow row,
+      ({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument}) pc) {
+    final color = pc.idVerified ? AppColors.leafGreen : AppColors.warmOrange;
+    final who = '${pc.name ?? ''}${pc.relationship != null && pc.relationship!.isNotEmpty ? '(${pc.relationship})' : ''}';
+    final times = '${pc.arrive != null ? ' 登園${pc.arrive}' : ''}${pc.leave != null ? ' お迎え${pc.leave}' : ''}';
+    final label = 'お迎え変更: $who ${pc.idVerified ? '身分証✓' : '要確認'}$times';
+    return InkWell(
+      onTap: () => _showPickupChangeDialog(row, pc),
+      child: _miniBadge(Icons.person_pin_circle_rounded, label, color),
+    );
+  }
+
+  Future<void> _showPickupChangeDialog(
+      DailyBoardRow row,
+      ({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument}) pc) async {
+    // 実物確認チェックの対象person_idを氏名で解決(お迎え者マスタは園児×氏名で一意)。
+    ({String personId, String name, bool hasDocument, bool idVerified})? person;
+    try {
+      final persons = await widget.service.fetchPickupPersonsForChild(row.childId);
+      for (final p in persons) {
+        if (p.name == pc.name) person = p;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    var verified = person?.idVerified ?? pc.idVerified;
+    var busy = false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('お迎え変更 — ${row.nameLabel}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('お迎えの方: ${pc.name ?? '—'}'
+                  '${pc.relationship != null && pc.relationship!.isNotEmpty ? '(${pc.relationship})' : ''}'),
+              if (pc.arrive != null || pc.leave != null) ...[
+                const SizedBox(height: 8),
+                Text('${pc.arrive != null ? '登園 ${pc.arrive}' : ''}'
+                    '${pc.arrive != null && pc.leave != null ? ' / ' : ''}'
+                    '${pc.leave != null ? 'お迎え ${pc.leave}' : ''}'),
+              ],
+              const SizedBox(height: 8),
+              Text(pc.hasDocument ? '身分証明書: 提出済み' : '身分証明書: 未提出',
+                  style: TextStyle(color: pc.hasDocument ? AppColors.textPrimary : AppColors.punchClockOut)),
+              const SizedBox(height: 8),
+              if (person == null)
+                const Text('お迎え者マスタ未登録(承認前)のため確認チェックはできません',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary))
+              else
+                Row(
+                  children: [
+                    const Expanded(
+                        child: Text('身分証を実物確認済み', style: TextStyle(fontWeight: FontWeight.w700))),
+                    Switch(
+                      value: verified,
+                      // 実物確認のチェックは主任以上(set_pickup_person_id_verified側でも拒否される)。
+                      onChanged: (!_isManager || busy)
+                          ? null
+                          : (v) async {
+                              setDialogState(() => busy = true);
+                              try {
+                                await widget.service.setPickupPersonIdVerified(person!.personId, v);
+                                setDialogState(() {
+                                  verified = v;
+                                  busy = false;
+                                });
+                                _loadPickupChanges();
+                              } catch (_) {
+                                setDialogState(() => busy = false);
+                              }
+                            },
+                    ),
+                  ],
+                ),
+              if (person != null && !_isManager)
+                const Text('チェックの変更は主任以上のみ行えます',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
+        ),
+      ),
+    );
+  }
+
   Widget _miniBadge(IconData icon, String label, Color color) {
     return Container(
       width: double.infinity,
@@ -474,6 +579,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadNapMissing();
     _loadAbsencePeriods();
     _loadMedication();
+    _loadPickupChanges();
   }
 
   // K5(iii)/Phase A: 園児行から当日の連絡帳(園側 日誌・連絡帳)へ。既存詳細画面を再利用。
@@ -726,6 +832,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             const Color(0xFF7A5FC0)),
                                       if (_absenceByChild[row.childId] != null)
                                         _miniAbsenceBadge(_absenceByChild[row.childId]!),
+                                      // 202: 承認済みお迎え変更(申請・連絡由来)。複数申請はバッジを重ねて表示。
+                                      for (final pc in _pickupChangeByChild[row.childId] ?? const [])
+                                        _pickupChangeBadge(row, pc),
                                       // 201: 服薬バッジ。解熱剤を含む場合は赤警告。タップで種類と様子を表示。
                                       if (_medicationByChild[row.childId] != null)
                                         _medicationBadge(row, _medicationByChild[row.childId]!),

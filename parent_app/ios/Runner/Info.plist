@@ -82,5 +82,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>お迎えの方の身分証明書を撮影するためにカメラを使用します</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>お迎えの方の身分証明書の写真を選択するためにフォトライブラリを使用します</string>
 </dict>
 </plist>
