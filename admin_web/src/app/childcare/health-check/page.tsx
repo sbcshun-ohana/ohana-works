@@ -54,13 +54,21 @@ function hm(t: string): string {
   return t.length >= 5 ? t.slice(0, 5) : t;
 }
 
-// 対象日時点の月齢(UI絞り込み用)。
+// 対象日時点の月齢(ミルクタブの絞り込み用・実月齢基準)。
 function ageMonths(birthDate: string, onDate: string): number {
   const b = new Date(birthDate);
   const d = new Date(onDate);
   let months = (d.getFullYear() - b.getFullYear()) * 12 + (d.getMonth() - b.getMonth());
   if (d.getDate() < b.getDate()) months -= 1;
   return months;
+}
+
+// クラスの年齢下限(age_groupの先頭の数字)。例: '0-1歳'→0, '2-3歳'→2, '3歳児'→3。数字なしはnull。
+// 食事タブの対象判定は実年齢でなく「0・1・2歳児クラス」基準(俊指示 2026-08-14):
+// 年度途中で3歳になった1・2歳児クラスの子も登録必須のため、クラスで判定する。
+function classMinAge(ageGroup: string): number | null {
+  const m = ageGroup.match(/\d+/);
+  return m ? Number(m[0]) : null;
 }
 
 function HealthCheckPageContent() {
@@ -123,14 +131,19 @@ function HealthCheckPageContent() {
     reload();
   }
 
-  // タブごとの対象園児(年齢絞り込み)。birth_date 不明の児は安全側で表示する。
+  // タブごとの対象園児。ミルク=実月齢18ヶ月未満 / 食事=0・1・2歳児クラス(クラス基準)。
+  // birth_date・クラス年齢が判定不能な児は安全側で表示する。
   const classFiltered = selectedClassName ? roster.filter((c) => c.class_name === selectedClassName) : roster;
+  const minAgeByClassName = new Map(classes.map((c) => [c.class_name, classMinAge(c.age_group)]));
   const rows = classFiltered.filter((c) => {
-    const b = healthByChild[c.child_id]?.birth_date;
-    if (!b) return true;
-    const m = ageMonths(b, businessDate);
-    if (tab === "milk") return m < 18;
-    if (tab === "am_snack" || tab === "lunch" || tab === "pm_snack") return m < 36;
+    if (tab === "milk") {
+      const b = healthByChild[c.child_id]?.birth_date;
+      return !b || ageMonths(b, businessDate) < 18;
+    }
+    if (tab === "am_snack" || tab === "lunch" || tab === "pm_snack") {
+      const minAge = c.class_name ? minAgeByClassName.get(c.class_name) : null;
+      return minAge == null || minAge <= 2;
+    }
     return true;
   });
 

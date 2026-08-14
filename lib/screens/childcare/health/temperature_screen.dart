@@ -128,13 +128,26 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
 
   String _hm(String dbTime) => dbTime.length >= 5 ? dbTime.substring(0, 5) : dbTime;
 
-  /// 対象日時点の月齢。ミルク=18ヶ月未満/食事=36ヶ月未満(0・1・2歳児)の絞り込みに使う。
+  /// 対象日時点の月齢。ミルク=生後18ヶ月未満の絞り込みに使う(実月齢基準)。
   int? _ageMonths(String childId) {
     final b = _healthByChild[childId]?.birthDate;
     if (b == null) return null;
     var months = (_businessDate.year - b.year) * 12 + (_businessDate.month - b.month);
     if (_businessDate.day < b.day) months -= 1;
     return months;
+  }
+
+  /// クラスの年齢下限(age_groupの先頭の数字)。例: '0-1歳'→0, '2-3歳'→2, '3歳児'→3。数字なしはnull。
+  /// 食事タブの対象判定は実年齢でなく「0・1・2歳児クラス」基準(俊指示 2026-08-14):
+  /// 年度途中で3歳になった1・2歳児クラスの子も登録必須のため、クラスで判定する。
+  int? _classMinAge(String className) {
+    for (final c in _classes) {
+      if (c.className == className) {
+        final m = RegExp(r'\d+').firstMatch(c.ageGroup);
+        return m == null ? null : int.parse(m.group(0)!);
+      }
+    }
+    return null;
   }
 
   // ---------------- 検温 ----------------
@@ -332,9 +345,10 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
       case 'am_snack':
       case 'lunch':
       case 'pm_snack':
+        // 0・1・2歳児クラスの園児(クラス基準・実年齢は見ない)。判定不能クラスは安全側で表示。
         return _roster.where((c) {
-          final m = _ageMonths(c.childId);
-          return m == null || m < 36;
+          final minAge = _classMinAge(c.className);
+          return minAge == null || minAge <= 2;
         }).toList();
       default:
         return _roster;
