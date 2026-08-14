@@ -117,6 +117,9 @@ function ChildcareParentRequestsPageContent() {
                     申請者: {req.guardian_name} ・ 対象日: {req.target_date}
                     {req.end_date ? `〜${req.end_date}` : ""}
                     {req.absence_kind ? ` ・${ABSENCE_KIND_LABELS[req.absence_kind]}` : ""}
+                    {req.medication_kinds && req.medication_kinds.length > 0
+                      ? ` ・薬: ${req.medication_kinds.join("、")}`
+                      : ""}
                   </p>
                 </div>
                 <p className="text-xs text-slate-400">

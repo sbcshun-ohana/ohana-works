@@ -43,6 +43,14 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   bool _isInfectiousAbsence = false;
   final Set<String> _selectedDiseaseNames = {};
   Future<List<InfectiousDiseaseMaster>>? _diseasesFuture;
+
+  // 服薬連絡(201)。種類=複数選択(日本語ラベル)。フラグOFF施設では種類プルダウンに出さない。
+  bool _medicationEnabled = false;
+  final Set<String> _selectedMedicationKinds = {};
+  final _medicationOtherController = TextEditingController();
+  final _symptomController = TextEditingController();
+  final _medicationNotesController = TextEditingController();
+
   bool _isSaving = false;
   String? _errorMessage;
 
@@ -50,6 +58,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   void initState() {
     super.initState();
     _diseasesFuture = widget.guardianService.fetchInfectiousDiseaseMasters(widget.child.officeId);
+    widget.guardianService.isMedicationReportEnabled(widget.child.officeId).then((enabled) {
+      if (mounted) setState(() => _medicationEnabled = enabled);
+    });
   }
 
   @override
@@ -59,6 +70,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     _pickupNameController.dispose();
     _pickupRelationController.dispose();
     _pickupPhoneController.dispose();
+    _medicationOtherController.dispose();
+    _symptomController.dispose();
+    _medicationNotesController.dispose();
     super.dispose();
   }
 
@@ -117,6 +131,14 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           if (_pickupPhoneController.text.trim().isNotEmpty) '電話番号': _pickupPhoneController.text.trim(),
           if (_reasonController.text.trim().isNotEmpty) '備考': _reasonController.text.trim(),
         };
+      case 'medication':
+        // 種類はDBの medication_kinds 列(構造化)に保存。details は承認画面の汎用表示用。
+        return {
+          '薬の種類': _selectedMedicationKinds.join('、'),
+          if (_selectedMedicationKinds.contains('その他')) 'その他の薬': _medicationOtherController.text.trim(),
+          'お子さまの様子・症状': _symptomController.text.trim(),
+          if (_medicationNotesController.text.trim().isNotEmpty) '備考': _medicationNotesController.text.trim(),
+        };
       case 'other':
         return {'連絡内容': _otherMessageController.text.trim()};
       case 'absence':
@@ -140,6 +162,13 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     if (_requestType == 'other' && _otherMessageController.text.trim().isEmpty) {
       return '連絡内容を入力してください';
     }
+    if (_requestType == 'medication') {
+      if (_selectedMedicationKinds.isEmpty) return '薬の種類を選択してください';
+      if (_selectedMedicationKinds.contains('その他') && _medicationOtherController.text.trim().isEmpty) {
+        return '「その他」を選択した場合は薬の内容をご記入ください';
+      }
+      if (_symptomController.text.trim().isEmpty) return 'お子さまの様子・症状を入力してください';
+    }
     return null;
   }
 
@@ -162,6 +191,7 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
         details: _buildDetails(),
         endDate: _requestType == 'absence' ? _endDate : null,
         absenceKind: _requestType == 'absence' ? _absenceKind : null,
+        medicationKinds: _requestType == 'medication' ? _selectedMedicationKinds.toList() : null,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
@@ -188,6 +218,8 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           DropdownButtonFormField<String>(
             initialValue: _requestType,
             items: parentRequestTypeLabels.entries
+                // 服薬連絡は機能フラグON施設のみ表示(201)。
+                .where((e) => e.key != 'medication' || _medicationEnabled)
                 .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                 .toList(),
             onChanged: (v) {
@@ -266,8 +298,75 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           const SizedBox(height: 20),
           _reasonField('備考(任意)'),
         ];
+      case 'medication':
+        return [
+          const Text('薬の種類(複数選択できます)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 4),
+          ...medicationKindOptions.map(
+            (kind) => CheckboxListTile(
+              value: _selectedMedicationKinds.contains(kind),
+              onChanged: (checked) => setState(() {
+                if (checked ?? false) {
+                  _selectedMedicationKinds.add(kind);
+                } else {
+                  _selectedMedicationKinds.remove(kind);
+                }
+              }),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(kind),
+            ),
+          ),
+          // 解熱剤の特別ルール(201 §3.2): 赤の警告を表示するが送信は可能(園が服薬の事実を把握するため)。
+          if (_selectedMedicationKinds.contains('解熱剤')) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withValues(alpha: 0.10),
+                border: Border.all(color: AppColors.danger),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                '解熱剤を服用した日は登園できません。欠席のご連絡をお願いします。',
+                style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+          if (_selectedMedicationKinds.contains('その他')) ...[
+            const SizedBox(height: 12),
+            const Text('その他の薬の内容', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _medicationOtherController,
+              decoration: const InputDecoration(hintText: '薬の内容をご記入ください'),
+            ),
+          ],
+          const SizedBox(height: 20),
+          const Text('お子さまの様子・症状(必須)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _symptomController,
+            maxLines: 3,
+            decoration: const InputDecoration(hintText: '例: 昨晩から咳が出ています。熱はありません'),
+          ),
+          const SizedBox(height: 20),
+          const Text('備考(任意)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 8),
+          TextField(controller: _medicationNotesController, maxLines: 2),
+        ];
       case 'other':
         return [
+          // 服薬の連絡は専用種類へ誘導(201 §3.5。フラグON施設のみ表示)。
+          if (_medicationEnabled) ...[
+            const Text(
+              'お薬のご連絡は「服薬連絡」からお願いします',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+          ],
           const Text('連絡内容', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 8),
           TextField(

@@ -533,6 +533,7 @@ class GuardianService {
     required Map<String, dynamic> details,
     DateTime? endDate,
     String? absenceKind,
+    List<String>? medicationKinds,
   }) async {
     await _client.from('parent_requests').insert({
       'child_id': childId,
@@ -541,8 +542,19 @@ class GuardianService {
       'target_date': _formatDate(targetDate),
       if (endDate != null) 'end_date': _formatDate(endDate),
       'absence_kind': ?absenceKind,
+      if (medicationKinds != null && medicationKinds.isNotEmpty) 'medication_kinds': medicationKinds,
       'details': details,
     });
+  }
+
+  /// 服薬連絡(201)の機能フラグ。OFF/取得失敗は false=種類プルダウンに出さない(安全側)。
+  Future<bool> isMedicationReportEnabled(String officeId) async {
+    try {
+      final data = await _client.rpc('is_medication_report_enabled_for_office', params: {'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<List<ParentRequestMessage>> fetchParentRequestMessages(String requestId) async {

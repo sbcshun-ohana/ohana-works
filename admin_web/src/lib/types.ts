@@ -380,10 +380,12 @@ export type ParentRequestRow = {
   child_id: string;
   child_display_name: string;
   guardian_name: string;
-  request_type: "absence" | "tardiness" | "early_leave" | "pickup_person_change" | "other";
+  request_type: "absence" | "tardiness" | "early_leave" | "pickup_person_change" | "medication" | "other";
   target_date: string;
   end_date: string | null;
   absence_kind: "sick_absence" | "personal_absence" | null;
+  // 服薬連絡(201)の薬の種類(日本語ラベル)。medication以外はnull。
+  medication_kinds: string[] | null;
   details: Record<string, unknown>;
   created_at: string;
 };
@@ -398,6 +400,7 @@ export const PARENT_REQUEST_TYPE_LABELS: Record<ParentRequestRow["request_type"]
   tardiness: "遅刻",
   early_leave: "早退",
   pickup_person_change: "お迎えの方の変更",
+  medication: "服薬連絡",
   other: "その他連絡",
 };
 
