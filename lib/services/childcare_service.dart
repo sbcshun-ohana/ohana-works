@@ -1075,6 +1075,92 @@ class ChildcareService {
     });
   }
 
+  // ------------------------------------------------------------------
+  // 園内連絡(156/213・職員間コミュニケーション)
+  // ------------------------------------------------------------------
+
+  /// 一覧(213)。既定=直近30日。宛先ラベル・自分宛て・確認状況込み。
+  Future<List<({String messageId, String body, DateTime? targetDate, DateTime createdAt,
+      String authorEmployeeId, String authorName, List<String> targetLabels,
+      bool isAddressedToMe, bool acknowledgedByMe, int ackCount, int addressedCount})>>
+      fetchStaffMessages(String officeId, {bool includeArchive = false}) async {
+    final rows = await _client.rpc('fetch_staff_messages', params: {
+      'p_office_id': officeId,
+      'p_include_archive': includeArchive,
+    });
+    return (rows as List).map((r) {
+      final m = r as Map<String, dynamic>;
+      return (
+        messageId: m['message_id'] as String,
+        body: m['body'] as String,
+        targetDate: m['target_date'] != null ? DateTime.parse(m['target_date'] as String) : null,
+        createdAt: DateTime.parse(m['created_at'] as String).toLocal(),
+        authorEmployeeId: m['author_employee_id'] as String,
+        authorName: m['author_name'] as String,
+        targetLabels: ((m['target_labels'] as List?) ?? const []).cast<String>(),
+        isAddressedToMe: m['is_addressed_to_me'] == true,
+        acknowledgedByMe: m['acknowledged_by_me'] == true,
+        ackCount: (m['ack_count'] as num?)?.toInt() ?? 0,
+        addressedCount: (m['addressed_count'] as num?)?.toInt() ?? 0,
+      );
+    }).toList();
+  }
+
+  /// 送信(156)。targets例: [{'type':'facility'},{'type':'individual','employee_id':...},
+  /// {'type':'band','band_id':...},{'type':'class','class_id':...}]
+  Future<String> createStaffMessage({
+    required String officeId,
+    required String body,
+    DateTime? targetDate,
+    required List<Map<String, dynamic>> targets,
+  }) async {
+    final data = await _client.rpc('create_staff_message', params: {
+      'p_office_id': officeId,
+      'p_body': body,
+      'p_target_date': targetDate != null ? dateOnly(targetDate) : null,
+      'p_targets': targets,
+    });
+    return data as String;
+  }
+
+  Future<void> acknowledgeStaffMessage(String messageId) async {
+    await _client.rpc('acknowledge_staff_message', params: {'p_message_id': messageId});
+  }
+
+  Future<void> deleteStaffMessage(String messageId) async {
+    await _client.rpc('delete_staff_message', params: {'p_message_id': messageId});
+  }
+
+  /// 自分宛て未確認件数(156)。ホームタイルのバッジ・ログイン後バナー用。
+  Future<int> fetchMyUnacknowledgedStaffMessageCount(String officeId) async {
+    final data = await _client
+        .rpc('fetch_my_unacknowledged_staff_message_count', params: {'p_office_id': officeId});
+    return (data as num?)?.toInt() ?? 0;
+  }
+
+  /// 時間帯マスタ(RLS直接select)。宛先選択用。
+  Future<List<({String bandId, String name})>> fetchStaffTimeBands(String officeId) async {
+    final rows = await _client
+        .from('staff_time_bands')
+        .select('id, name')
+        .eq('office_id', officeId)
+        .order('sort_order');
+    return (rows as List)
+        .map((r) => (bandId: (r as Map<String, dynamic>)['id'] as String, name: r['name'] as String))
+        .toList();
+  }
+
+  /// クラス宛て機能フラグ(6.4・大和のみON)。
+  Future<bool> isClassMessagingEnabled(String officeId) async {
+    try {
+      final data = await _client
+          .rpc('is_feature_enabled_for_office', params: {'p_feature_key': 'class_messaging_enabled', 'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

@@ -12,6 +12,7 @@ import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
 import 'daily_board/daily_board_screen.dart';
 import 'health/temperature_screen.dart';
+import 'staff_messages/staff_message_list_screen.dart';
 import 'nap/nap_check_screen.dart';
 
 /// Ohana Kids ホーム画面(childcare_home_enabled=ON時の初期画面)。
@@ -32,6 +33,8 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   ChildcareOffice? _selectedOffice;
   final DateTime _businessDate = DateTime.now();
   bool _internalNotesEnabled = false;
+  // 園内連絡(156): 自分宛て未確認件数(タイルバッジ+ログイン後バナー)。
+  int _staffMessageUnack = 0;
 
   @override
   void initState() {
@@ -42,8 +45,36 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
       if (!mounted) return;
       _officesCache = offices;
       childcareOfficeList.value = offices;
+      _loadStaffMessageCount();
     });
     childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
+  }
+
+  Future<void> _loadStaffMessageCount() async {
+    final office = _selectedOffice ?? (_officesCache.isNotEmpty ? _officesCache.first : null);
+    if (office == null) return;
+    try {
+      final n = await widget.service.fetchMyUnacknowledgedStaffMessageCount(office.officeId);
+      if (!mounted) return;
+      setState(() => _staffMessageUnack = n);
+      // §7: ログイン直後のバナー(自分宛て未確認がある場合のみ・共有iPadでは本人分だけ)。
+      if (n > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('あなた宛ての園内連絡が$n件あります'),
+            action: SnackBarAction(
+              label: '確認する',
+              onPressed: () => _push(StaffMessageListScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                isManager: office.isManager,
+              )),
+            ),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   // 黒帯の施設プルダウン変更に追随(ホームのタイル遷移先officeIdも切り替わる)。
@@ -54,6 +85,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
       if (o.officeId == id) {
         setState(() => _selectedOffice = o);
         _loadInternalNotesFlag();
+        _loadStaffMessageCount();
         return;
       }
     }
@@ -180,6 +212,19 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               )),
             ),
             // 週次予定タイルは撤去(俊指示 2026-08-14: 週次予定は園児マスタ(admin)側で管理する方針)。
+            // 園内連絡(156/213)。自分宛て未確認バッジ付き。
+            _HomeTile(
+              icon: Icons.forum_rounded,
+              color: AppColors.skyBlue,
+              label: _staffMessageUnack > 0 ? '園内連絡($_staffMessageUnack)' : '園内連絡',
+              onTap: () {
+                _push(StaffMessageListScreen(
+                  service: widget.service,
+                  officeId: office.officeId,
+                  isManager: office.isManager,
+                ));
+              },
+            ),
             _HomeTile(
               icon: Icons.mark_email_unread_rounded,
               color: AppColors.warmOrange,
