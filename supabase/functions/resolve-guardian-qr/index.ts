@@ -177,6 +177,53 @@ Deno.serve(async (req) => {
           );
         }
       }
+
+      // 212: 感染症の登園ゲート(§3.8/AC-11)。gate ON施設で確定案件の書類が未充足なら受付拒否。
+      // 例外は書類提出/紙受領の記録、または主任以上の案件取消のみ(admin_overrideでも突破不可)。
+      const { data: gateRows } = await adminClient.rpc("fetch_infection_gate_status", {
+        p_child_id: child.id,
+      });
+      const blocking = (gateRows ?? []).filter(
+        (g: { gate_enabled: boolean; blocked: boolean }) => g.gate_enabled && g.blocked,
+      );
+      if (blocking.length > 0) {
+        const docs = blocking
+          .map(
+            (g: { disease_name: string | null; required_document: string }) =>
+              `${g.disease_name ?? "感染症"}の${g.required_document === "opinion_letter" ? "登園許可書" : "登園届"}`,
+          )
+          .join("、");
+        await adminClient.from("child_attendance_events").insert({
+          child_id: child.id,
+          event_type: "rejected",
+          device_id,
+          recorded_by_guardian_id: qrToken.guardian_id,
+          rejection_reason: `感染症の必要書類未提出(${docs})`,
+        });
+
+        const { data: tokens } = await adminClient
+          .from("push_device_tokens")
+          .select("fcm_token")
+          .eq("guardian_id", qrToken.guardian_id);
+        for (const t of tokens ?? []) {
+          await sendFcmPush({
+            fcmToken: t.fcm_token,
+            title: "登園に必要な書類が未提出です",
+            body: `${child.display_name}さんの登園には ${docs} の提出が必要です。`,
+            data: { type: "infection_documents_required", child_id: child.id },
+          });
+        }
+
+        return new Response(
+          JSON.stringify({
+            accepted: false,
+            reason: "infection_documents_required",
+            child_name: child.display_name,
+            message: `${docs}が未提出のため受付できません。アプリから提出するか、紙の書類を職員へお渡しください(職員が受領を記録すると登園できます)。`,
+          }),
+          { headers: { ...headers, "Content-Type": "application/json" } },
+        );
+      }
     }
 
     const eventType = currentStatus === "present" ? "pick_up" : "drop_off";
