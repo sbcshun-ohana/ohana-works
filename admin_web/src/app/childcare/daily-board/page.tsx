@@ -1040,27 +1040,40 @@ function ChildcareDailyBoardPageContent() {
                                 ) : (
                                   <span className="text-xs text-slate-400">—</span>
                                 )}
-                                {/* 206+俊指示: 欠席児童一覧でも感染症の内容(病名+書類状態)を残す */}
-                                {(infectionByChild[row.child_id] ?? []).map((ic, i) => (
-                                  <span
-                                    key={i}
-                                    className="ml-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700"
-                                  >
-                                    感染症: {ic.disease_name ?? ""}
-                                    {ic.required_document === "opinion_letter"
-                                      ? " 許可書"
+                                {/* 206+俊指示: 欠席児童一覧でも感染症の内容(病名+書類状態)を残す。
+                                    211+俊指摘(2026-08-14): 欠席中の園児こそ紙受領の入口が必要なためボタンをここにも置く */}
+                                {(infectionByChild[row.child_id] ?? []).map((ic, i) => {
+                                  const docLabel =
+                                    ic.required_document === "opinion_letter"
+                                      ? "許可書"
                                       : ic.required_document === "return_form"
-                                        ? " 登園届"
-                                        : ""}
-                                    {ic.document_state === "required_not_submitted"
-                                      ? "待ち"
-                                      : ic.document_state === "submitted_electronically"
-                                        ? "提出済み"
-                                        : ic.document_state === "received_on_paper"
-                                          ? "紙受領済み"
-                                          : ""}
-                                  </span>
-                                ))}
+                                        ? "登園届"
+                                        : "";
+                                  return (
+                                    <span key={i} className="ml-1 inline-flex items-center gap-1">
+                                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                                        感染症: {ic.disease_name ?? ""} {docLabel}
+                                        {ic.document_state === "required_not_submitted"
+                                          ? "待ち"
+                                          : ic.document_state === "submitted_electronically"
+                                            ? "提出済み"
+                                            : ic.document_state === "received_on_paper"
+                                              ? "紙受領済み"
+                                              : ""}
+                                      </span>
+                                      {ic.document_state === "required_not_submitted" && (
+                                        <button
+                                          onClick={() =>
+                                            recordPaperReceipt(ic.case_id, `${ic.disease_name ?? "感染症"}の${docLabel}`)
+                                          }
+                                          className="rounded-lg border border-slate-300 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                                        >
+                                          紙受領
+                                        </button>
+                                      )}
+                                    </span>
+                                  );
+                                })}
                               </td>
                               <td className="px-3 py-2 whitespace-pre-wrap text-slate-600">
                                 {comment ? comment : <span className="text-slate-300">—</span>}

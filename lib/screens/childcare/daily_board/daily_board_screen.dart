@@ -630,22 +630,35 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
                       ),
-                      // 206+俊指示: 欠席児童一覧でも感染症の内容(病名+書類状態)を残す
+                      // 206+俊指示: 欠席児童一覧でも感染症の内容(病名+書類状態)を残す。
+                      // 211+俊指摘(2026-08-14): 欠席中の園児こそ紙受領の入口が必要=「待ち」はタップで紙受領。
                       for (final ic in _infectionByChild[row.childId] ?? const [])
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.punchClockOut.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '感染症: ${ic.diseaseName ?? ''}'
-                              '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
-                              '${ic.documentState == 'required_not_submitted' ? '待ち' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
-                              style: const TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.punchClockOut),
+                          child: InkWell(
+                            onTap: ic.documentState == 'required_not_submitted'
+                                ? () => _recordPaperReceipt(row, ic)
+                                : null,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (ic.documentState == 'required_not_submitted'
+                                        ? AppColors.punchClockOut
+                                        : AppColors.leafGreen)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '感染症: ${ic.diseaseName ?? ''}'
+                                '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
+                                '${ic.documentState == 'required_not_submitted' ? '待ち(タップで紙受領)' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: ic.documentState == 'required_not_submitted'
+                                        ? AppColors.punchClockOut
+                                        : AppColors.leafGreen),
+                              ),
                             ),
                           ),
                         ),
