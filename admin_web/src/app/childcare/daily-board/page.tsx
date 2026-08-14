@@ -129,7 +129,7 @@ function ChildcareDailyBoardPageContent() {
 
   // 感染症案件バッジ用(206)。child_id→リスト(病名/必要書類/書類状態)。
   const [infectionByChild, setInfectionByChild] = useState<
-    Record<string, { case_id: string; disease_name: string | null; required_document: string; document_state: string }[]>
+    Record<string, { case_id: string; disease_name: string | null; required_document: string; document_state: string; received_by_name: string | null; received_at: string | null }[]>
   >({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
@@ -380,7 +380,7 @@ function ChildcareDailyBoardPageContent() {
           }
           const map: Record<
             string,
-            { case_id: string; disease_name: string | null; required_document: string; document_state: string }[]
+            { case_id: string; disease_name: string | null; required_document: string; document_state: string; received_by_name: string | null; received_at: string | null }[]
           > = {};
           for (const r of (data ?? []) as {
             child_id: string;
@@ -388,6 +388,8 @@ function ChildcareDailyBoardPageContent() {
             disease_name: string | null;
             required_document: string;
             document_state: string;
+            received_by_name: string | null;
+            received_at: string | null;
           }[]) {
             (map[r.child_id] ??= []).push(r);
           }
@@ -831,7 +833,7 @@ function ChildcareDailyBoardPageContent() {
                                 : ic.document_state === "submitted_electronically"
                                   ? "提出済み"
                                   : ic.document_state === "received_on_paper"
-                                    ? "紙受領済み"
+                                    ? `紙受領済み${ic.received_by_name ? `(受領: ${ic.received_by_name}${ic.received_at ? ` ${new Date(ic.received_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""})` : ""}`
                                     : ""}
                             </span>
                             {/* 211: 紙受領記録(AC-12) */}
@@ -1058,7 +1060,7 @@ function ChildcareDailyBoardPageContent() {
                                           : ic.document_state === "submitted_electronically"
                                             ? "提出済み"
                                             : ic.document_state === "received_on_paper"
-                                              ? "紙受領済み"
+                                              ? `紙受領済み${ic.received_by_name ? `(受領: ${ic.received_by_name})` : ""}`
                                               : ""}
                                       </span>
                                       {ic.document_state === "required_not_submitted" && (

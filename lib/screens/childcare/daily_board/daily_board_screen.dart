@@ -63,7 +63,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // 承認済み 遅刻/早退 のバッジ用。childId→リスト(種別/予定時刻/理由)。
   Map<String, List<({String type, String? time, String? reason})>> _timeChangeByChild = const {};
   // 感染症案件バッジ用(206)。childId→リスト(病名/必要書類/書類状態)。
-  Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>
+  Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument,
+      String documentState, String? receivedByName, DateTime? receivedAt})>>
       _infectionByChild = const {};
   // 209: 感染症管理フラグ。ONの施設のみ行アクションに「引き継ぎカード」を出す。
   bool _infectionControlEnabled = false;
@@ -651,7 +652,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                               child: Text(
                                 '感染症: ${ic.diseaseName ?? ''}'
                                 '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
-                                '${ic.documentState == 'required_not_submitted' ? '待ち(タップで紙受領)' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
+                                '${ic.documentState == 'required_not_submitted' ? '待ち(タップで紙受領)' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み${ic.receivedByName != null ? '(受領: ${ic.receivedByName})' : ''}' : ''}',
                                 style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
@@ -756,7 +757,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
 
   // 211: 紙書類の受領記録(AC-12)。一般職員可・記録成立でブロック解除の前提。
   Future<void> _recordPaperReceipt(DailyBoardRow row,
-      ({String caseId, String status, String? diseaseName, String requiredDocument, String documentState}) ic) async {
+      ({String caseId, String status, String? diseaseName, String requiredDocument,
+        String documentState, String? receivedByName, DateTime? receivedAt}) ic) async {
     final docLabel = ic.requiredDocument == 'opinion_letter' ? '登園許可書' : '登園届';
     final ok = await showDialog<bool>(
       context: context,

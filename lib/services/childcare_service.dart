@@ -970,11 +970,13 @@ class ChildcareService {
     return map;
   }
 
-  /// ボードの感染症案件バッジ用(206・198方式)。進行中案件を childId→リストで返す。
-  Future<Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>>
+  /// ボードの感染症案件バッジ用(206/216・198方式)。進行中案件を childId→リストで返す。
+  Future<Map<String, List<({String caseId, String status, String? diseaseName, String requiredDocument,
+      String documentState, String? receivedByName, DateTime? receivedAt})>>>
       fetchBoardInfectionCasesForOffice(String officeId) async {
     final rows = await _client.rpc('fetch_board_infection_cases_for_office', params: {'p_office_id': officeId});
-    final map = <String, List<({String caseId, String status, String? diseaseName, String requiredDocument, String documentState})>>{};
+    final map = <String, List<({String caseId, String status, String? diseaseName, String requiredDocument,
+        String documentState, String? receivedByName, DateTime? receivedAt})>>{};
     for (final r in (rows as List)) {
       final m = r as Map<String, dynamic>;
       (map[m['child_id'] as String] ??= []).add((
@@ -983,6 +985,8 @@ class ChildcareService {
         diseaseName: m['disease_name'] as String?,
         requiredDocument: m['required_document'] as String,
         documentState: m['document_state'] as String,
+        receivedByName: m['received_by_name'] as String?,
+        receivedAt: m['received_at'] != null ? DateTime.parse(m['received_at'] as String).toLocal() : null,
       ));
     }
     return map;
