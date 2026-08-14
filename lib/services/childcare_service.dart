@@ -155,6 +155,11 @@ class ChildcareService {
     });
   }
 
+  /// 連絡帳の担当を自分にする(200 claim_child_daily_contact)。未割当のみ・draft/rejectedのみ。
+  Future<void> claimDailyContact(String contactId) async {
+    await _client.rpc('claim_child_daily_contact', params: {'p_contact_id': contactId});
+  }
+
   Future<void> claimClassActivity(String activityId) async {
     await _client.rpc('claim_class_activity', params: {'p_activity_id': activityId});
   }

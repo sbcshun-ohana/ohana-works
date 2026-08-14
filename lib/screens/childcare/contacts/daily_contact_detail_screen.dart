@@ -226,7 +226,23 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('担当: ${_contact?.assigneeName ?? "未割当"}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Row(
+                    children: [
+                      Text('担当: ${_contact?.assigneeName ?? "未割当"}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      // 未割当のとき、自分を担当にできる(200 claim_child_daily_contact。draft/rejectedのみ)。
+                      if (_contact?.assigneeEmployeeId == null &&
+                          (_contact?.status == 'draft' || _contact?.status == 'rejected')) ...[
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed: _isBusy
+                              ? null
+                              : () => _run(() => widget.service.claimDailyContact(_contact!.contactId!),
+                                  successMessage: '担当になりました'),
+                          child: const Text('自分を担当にする'),
+                        ),
+                      ],
+                    ],
+                  ),
                   if (_contact?.rejectedReason != null) ...[
                     const SizedBox(height: 12),
                     _banner(AppColors.punchClockOut, '差し戻し理由: ${_contact!.rejectedReason}'),
