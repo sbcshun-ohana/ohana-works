@@ -43,7 +43,7 @@ class FamilyDailyReportSummaryView extends StatelessWidget {
         _row('睡眠', '${r.sleepStartAt ?? '--'} 〜 ${r.sleepEndAt ?? '--'}'),
         _row('夕食', '${r.dinnerContent?.isNotEmpty == true ? r.dinnerContent! : '--'}(${r.dinnerAt ?? '--'})'),
         _row('朝食', '${r.breakfastContent?.isNotEmpty == true ? r.breakfastContent! : '--'}(${r.breakfastAt ?? '--'})'),
-        if (r.pickupPersonName?.isNotEmpty == true)
+        if (r.pickupPersonName?.isNotEmpty == true || r.pickupTimeFrom != null || r.pickupTimeTo != null)
           Container(
             margin: const EdgeInsets.only(top: 8),
             padding: const EdgeInsets.all(12),
@@ -58,8 +58,9 @@ class FamilyDailyReportSummaryView extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'お迎え変更あり: ${r.pickupPersonName}(${r.pickupPersonRelationship ?? '続柄未記入'})'
-                    ' 登園${r.pickupTimeFrom ?? '--'} / お迎え${r.pickupTimeTo ?? '--'}',
+                    ('${r.pickupPersonName?.isNotEmpty == true ? 'お迎え変更あり: ${r.pickupPersonName}(${r.pickupPersonRelationship ?? '続柄未記入'})' : ''}'
+                            ' 登園${r.pickupTimeFrom ?? '--'} / お迎え${r.pickupTimeTo ?? '--'}')
+                        .trim(),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),

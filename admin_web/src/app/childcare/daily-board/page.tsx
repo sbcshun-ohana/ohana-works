@@ -704,14 +704,12 @@ function ChildcareDailyBoardPageContent() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {row.has_pickup_change && (
+                      {/* 氏名・続柄は連絡帳から廃止(申請・連絡に一本化)。氏名は旧データがある場合のみ表示 */}
+                      {(row.has_pickup_change || row.pickup_time_from || row.pickup_time_to) && (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                          変更あり: {row.pickup_person_name}
-                          {row.pickup_time_from || row.pickup_time_to
-                            ? `(${row.pickup_time_from ? `登園${row.pickup_time_from.slice(0, 5)}` : ""}${
-                                row.pickup_time_to ? ` お迎え${row.pickup_time_to.slice(0, 5)}` : ""
-                              })`
-                            : ""}
+                          {row.has_pickup_change ? `変更あり: ${row.pickup_person_name ?? ""} ` : ""}
+                          {row.pickup_time_from ? `登園${row.pickup_time_from.slice(0, 5)}` : ""}
+                          {row.pickup_time_to ? ` お迎え${row.pickup_time_to.slice(0, 5)}` : ""}
                         </span>
                       )}
                     </td>

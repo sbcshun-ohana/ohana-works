@@ -641,10 +641,14 @@ function ChildcareContactsPageContent() {
                         朝食: {familyDailyReport.breakfast_content || "—"}(
                         {familyDailyReport.breakfast_at?.slice(0, 5) ?? "—"})
                       </p>
-                      {familyDailyReport.pickup_person_name && (
+                      {/* 氏名・続柄は連絡帳から廃止(申請・連絡に一本化)。氏名は旧データがある場合のみ表示 */}
+                      {(familyDailyReport.pickup_person_name ||
+                        familyDailyReport.pickup_time_from ||
+                        familyDailyReport.pickup_time_to) && (
                         <div className="mt-2 rounded-lg bg-amber-100 p-2 font-semibold text-amber-800">
-                          お迎え変更あり: {familyDailyReport.pickup_person_name}(
-                          {familyDailyReport.pickup_person_relationship || "続柄未記入"}){" "}
+                          {familyDailyReport.pickup_person_name
+                            ? `お迎え変更あり: ${familyDailyReport.pickup_person_name}(${familyDailyReport.pickup_person_relationship || "続柄未記入"}) `
+                            : ""}
                           {familyDailyReport.pickup_time_from ? `登園${familyDailyReport.pickup_time_from.slice(0, 5)} ` : ""}
                           {familyDailyReport.pickup_time_to ? `お迎え${familyDailyReport.pickup_time_to.slice(0, 5)}` : ""}
                         </div>

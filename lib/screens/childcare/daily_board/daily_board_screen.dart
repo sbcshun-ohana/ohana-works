@@ -710,14 +710,14 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                           ),
                                         ],
                                       ),
-                                      // お迎え変更: 氏名+続柄+時間帯を表示(admin_webのお迎え変更列と同等の情報量)。
-                                      // 時刻はDBのtime('HH:MM:SS')をHH:MMへ整形。toが無ければfromのみ表示。
-                                      if (row.hasPickupChange)
+                                      // 登園・お迎え時間バッジ。氏名・続柄は連絡帳から廃止(申請・連絡に一本化)
+                                      // したため、氏名は旧データがある場合のみ表示。時刻はtime('HH:MM:SS')をHH:MMへ整形。
+                                      if (row.hasPickupChange || row.pickupTimeFrom != null || row.pickupTimeTo != null)
                                         _miniBadge(
                                             Icons.person_pin_circle_rounded,
-                                            'お迎え変更: ${row.pickupPersonName ?? ''}'
-                                            '${row.pickupPersonRelationship != null && row.pickupPersonRelationship!.isNotEmpty ? '(${row.pickupPersonRelationship})' : ''}'
-                                            '${row.pickupTimeFrom != null ? ' 登園${_hm5(row.pickupTimeFrom)}' : ''}${row.pickupTimeTo != null ? ' お迎え${_hm5(row.pickupTimeTo)}' : ''}',
+                                            ('${row.hasPickupChange ? 'お迎え変更: ${row.pickupPersonName ?? ''}${row.pickupPersonRelationship != null && row.pickupPersonRelationship!.isNotEmpty ? '(${row.pickupPersonRelationship})' : ''}' : ''}'
+                                                    '${row.pickupTimeFrom != null ? ' 登園${_hm5(row.pickupTimeFrom)}' : ''}${row.pickupTimeTo != null ? ' お迎え${_hm5(row.pickupTimeTo)}' : ''}')
+                                                .trim(),
                                             AppColors.warmOrange),
                                       if (row.onTherapyOuting)
                                         _miniBadge(Icons.directions_walk_rounded,

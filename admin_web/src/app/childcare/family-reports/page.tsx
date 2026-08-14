@@ -181,8 +181,9 @@ function ChildcareFamilyReportsPageContent() {
                         {r.temperature_measured_at ? `(${fmtTime(r.temperature_measured_at)})` : ""}
                       </td>
                       <td className="px-3 py-3 text-slate-600">
-                        {r.pickup_person_name
-                          ? `${r.pickup_person_name}${r.pickup_time_from || r.pickup_time_to ? `(${r.pickup_time_from ? `登園${fmtTime(r.pickup_time_from)}` : ""}${r.pickup_time_to ? ` お迎え${fmtTime(r.pickup_time_to)}` : ""})` : ""}`
+                        {/* 氏名・続柄は連絡帳から廃止(申請・連絡に一本化)。氏名は旧データがある場合のみ併記 */}
+                        {r.pickup_person_name || r.pickup_time_from || r.pickup_time_to
+                          ? `${r.pickup_person_name ? `${r.pickup_person_name} ` : ""}${r.pickup_time_from ? `登園${fmtTime(r.pickup_time_from)} ` : ""}${r.pickup_time_to ? `お迎え${fmtTime(r.pickup_time_to)}` : ""}`.trim()
                           : "—"}
                       </td>
                       <td className="max-w-xs px-3 py-3 text-slate-600">

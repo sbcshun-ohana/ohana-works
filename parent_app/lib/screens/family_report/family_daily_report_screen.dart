@@ -26,8 +26,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
   final _homeNotesController = TextEditingController();
   final _dinnerContentController = TextEditingController();
   final _breakfastContentController = TextEditingController();
-  final _pickupNameController = TextEditingController();
-  final _pickupRelationshipController = TextEditingController();
   final _today = DateTime.now();
 
   bool _isLoading = true;
@@ -63,8 +61,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
     _homeNotesController.dispose();
     _dinnerContentController.dispose();
     _breakfastContentController.dispose();
-    _pickupNameController.dispose();
-    _pickupRelationshipController.dispose();
     super.dispose();
   }
 
@@ -95,8 +91,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
       _breakfastAt = _matchTimeOption(report?.breakfastAt, _breakfastTimeOptions);
       _dinnerContentController.text = report?.dinnerContent ?? '';
       _breakfastContentController.text = report?.breakfastContent ?? '';
-      _pickupNameController.text = report?.pickupPersonName ?? '';
-      _pickupRelationshipController.text = report?.pickupPersonRelationship ?? '';
       _pickupTimeFrom = _matchTimeOption(report?.pickupTimeFrom, _pickupTimeOptions);
       _pickupTimeTo = _matchTimeOption(report?.pickupTimeTo, _pickupTimeOptions);
       _isLoading = false;
@@ -185,9 +179,6 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
         return '朝食の内容・摂取時刻を入力してください';
       }
     }
-    if (_pickupNameController.text.trim().isNotEmpty && _pickupTimeTo == null) {
-      return 'お迎え時間を選択してください';
-    }
     return null;
   }
 
@@ -224,9 +215,10 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
         breakfastContent:
             _breakfastContentController.text.trim().isEmpty ? null : _breakfastContentController.text.trim(),
         breakfastAt: _breakfastAt,
-        pickupPersonName: _pickupNameController.text.trim().isEmpty ? null : _pickupNameController.text.trim(),
-        pickupPersonRelationship:
-            _pickupRelationshipController.text.trim().isEmpty ? null : _pickupRelationshipController.text.trim(),
+        // お迎えの方の変更は申請・連絡(pickup_person_change)に一本化(俊指示 2026-08-14)。
+        // 連絡帳からは常にnullを送り、旧下書きに残る値もクリアする。
+        pickupPersonName: null,
+        pickupPersonRelationship: null,
         pickupTimeFrom: _pickupTimeFrom,
         pickupTimeTo: _pickupTimeTo,
       );
@@ -551,20 +543,8 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
                   onChanged: (v) => setState(() => _breakfastAt = v),
                 ),
                 const SizedBox(height: 24),
-                _sectionLabel('お迎え(変更がある場合のみ・任意)'),
+                _sectionLabel('登園・お迎え時間(任意)'),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _pickupNameController,
-                  enabled: _isEditable,
-                  decoration: const InputDecoration(hintText: 'お迎えに来られる方の氏名'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pickupRelationshipController,
-                  enabled: _isEditable,
-                  decoration: const InputDecoration(hintText: '続柄(例: 祖母、おじ 等)'),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(

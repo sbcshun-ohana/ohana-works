@@ -83,9 +83,16 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
 
   String _tempText(FamilyDailyReportSummary r) =>
       r.temperature == null ? '—' : '${r.temperature}℃${r.temperatureMeasuredAt != null ? '\n(${_hm(r.temperatureMeasuredAt)})' : ''}';
-  String _pickupText(FamilyDailyReportSummary r) => (r.pickupPersonName == null || r.pickupPersonName!.isEmpty)
-      ? '—'
-      : '${r.pickupPersonName}${r.pickupTimeFrom != null || r.pickupTimeTo != null ? '\n${r.pickupTimeFrom != null ? '登園${_hm(r.pickupTimeFrom)} ' : ''}${r.pickupTimeTo != null ? 'お迎え${_hm(r.pickupTimeTo)}' : ''}' : ''}';
+  // 氏名・続柄は連絡帳から廃止(申請・連絡に一本化)。旧データに氏名がある場合のみ併記。
+  String _pickupText(FamilyDailyReportSummary r) {
+    final hasName = r.pickupPersonName != null && r.pickupPersonName!.isNotEmpty;
+    final times =
+        '${r.pickupTimeFrom != null ? '登園${_hm(r.pickupTimeFrom)} ' : ''}${r.pickupTimeTo != null ? 'お迎え${_hm(r.pickupTimeTo)}' : ''}'
+            .trim();
+    if (!hasName && times.isEmpty) return '—';
+    if (!hasName) return times;
+    return times.isEmpty ? r.pickupPersonName! : '${r.pickupPersonName}\n$times';
+  }
 
   @override
   Widget build(BuildContext context) {
