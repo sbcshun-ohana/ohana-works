@@ -642,6 +642,45 @@ class GuardianService {
     });
   }
 
+  /// 電子登園届(211): 案件のルール定義と既存の下書き/提出済み届を取得。
+  Future<({String? diseaseName, String? returnCriteria, List<String> checks,
+      String? dateConditionLabel, int? dateConditionMinHours,
+      Map<String, dynamic>? notice})> fetchReturnNoticeContext(String caseId) async {
+    final caseRow = await _client
+        .from('infection_cases')
+        .select('disease_master_id, infectious_disease_masters(name, return_criteria, rule_definition)')
+        .eq('id', caseId)
+        .maybeSingle();
+    final master = caseRow?['infectious_disease_masters'] as Map<String, dynamic>?;
+    final rule = (master?['rule_definition'] as Map<String, dynamic>?) ?? const {};
+    final dateCond = rule['date_condition'] as Map<String, dynamic>?;
+    final notice = await _client
+        .from('infection_return_notices')
+        .select('*')
+        .eq('case_id', caseId)
+        .maybeSingle();
+    return (
+      diseaseName: master?['name'] as String?,
+      returnCriteria: master?['return_criteria'] as String?,
+      checks: ((rule['checks'] as List?) ?? const []).cast<String>(),
+      dateConditionLabel: dateCond?['base_label'] as String?,
+      dateConditionMinHours: (dateCond?['min_hours'] as num?)?.toInt(),
+      notice: notice,
+    );
+  }
+
+  Future<void> saveReturnNoticeDraft(String caseId, Map<String, dynamic> inputs) async {
+    await _client.rpc('save_return_notice_draft', params: {'p_case_id': caseId, 'p_inputs': inputs});
+  }
+
+  Future<void> submitReturnNotice(String caseId, Map<String, dynamic> inputs) async {
+    await _client.rpc('submit_return_notice', params: {
+      'p_case_id': caseId,
+      'p_inputs': inputs,
+      'p_confirmed': true,
+    });
+  }
+
   /// 一斉配信の添付の署名付きURL(5分)。
   Future<String> createBroadcastAttachmentUrl(String path) async {
     return _client.storage.from('guardian-notice-attachments').createSignedUrl(path, 300);

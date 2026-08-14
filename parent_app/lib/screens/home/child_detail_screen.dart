@@ -9,6 +9,7 @@ import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
+import '../infection/return_notice_screen.dart';
 import '../parent_request/parent_request_list_screen.dart';
 import '../qr/child_qr_screen.dart';
 
@@ -140,6 +141,26 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                   color: submitted ? AppColors.leafGreen : AppColors.danger),
+            ),
+          ],
+          // 211: 電子登園届(登園届対象・未提出のとき)
+          if (c.requiredDocument == 'return_form' && !submitted) ...[
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: () async {
+                final done = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => ReturnNoticeScreen(
+                      guardianService: widget.guardianService,
+                      child: widget.child,
+                      caseId: c.caseId,
+                    ),
+                  ),
+                );
+                if (done == true) _loadInfectionCases();
+              },
+              icon: const Icon(Icons.assignment_turned_in_rounded, size: 18),
+              label: const Text('登園届を入力・提出する'),
             ),
           ],
           if (!submitted && c.formTemplatePath != null) ...[

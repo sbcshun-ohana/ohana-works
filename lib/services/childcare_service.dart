@@ -1066,6 +1066,15 @@ class ChildcareService {
     );
   }
 
+  /// 紙書類の受領記録(211・一般職員可)。記録成立で書類充足(received_on_paper)。
+  Future<void> recordPaperDocumentReceipt(String caseId, {String? note}) async {
+    await _client.rpc('record_paper_document_receipt', params: {
+      'p_case_id': caseId,
+      'p_received_method': 'paper',
+      'p_note': note,
+    });
+  }
+
   /// 週次標準保育時間の取得(184)。曜日(1:月..7:日)→(start,end)。
   Future<Map<int, ({String? start, String? end})>> fetchChildWeeklySchedule(String childId) async {
     final rows = await _client.rpc('fetch_child_weekly_schedule', params: {'p_child_id': childId});

@@ -741,6 +741,38 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadPickupChanges();
   }
 
+  // 211: 紙書類の受領記録(AC-12)。一般職員可・記録成立でブロック解除の前提。
+  Future<void> _recordPaperReceipt(DailyBoardRow row,
+      ({String caseId, String status, String? diseaseName, String requiredDocument, String documentState}) ic) async {
+    final docLabel = ic.requiredDocument == 'opinion_letter' ? '登園許可書' : '登園届';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('紙で受領 — ${row.nameLabel}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Text('${ic.diseaseName ?? '感染症'}の$docLabelを紙で受領した記録を残します。\n'
+            '受領者(あなた)と時刻が保存され、書類待ちが解除されます。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('受領を記録')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.service.recordPaperDocumentReceipt(ic.caseId);
+      _loadPickupChanges();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$docLabelの紙受領を記録しました')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('記録に失敗しました: $e')));
+      }
+    }
+  }
+
   // 209: 引き継ぎカード作成画面へ(園内発症起点)。
   Future<void> _openHandoverCard(DailyBoardRow row) async {
     await Navigator.of(context).push(MaterialPageRoute(
@@ -1032,16 +1064,21 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                       // 202: 承認済みお迎え変更(申請・連絡由来)。複数申請はバッジを重ねて表示。
                                       for (final pc in _pickupChangeByChild[row.childId] ?? const [])
                                         _pickupChangeBadge(row, pc),
-                                      // 206: 感染症案件バッジ(進行中のみ)。書類待ち=赤/提出・受領済み=緑。
+                                      // 206/211: 感染症案件バッジ。書類待ち=赤(タップで紙受領を記録)/充足=緑。
                                       for (final ic in _infectionByChild[row.childId] ?? const [])
-                                        _miniBadge(
-                                            Icons.medical_information_rounded,
-                                            '感染症: ${ic.diseaseName ?? ''}'
-                                            '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
-                                            '${ic.documentState == 'required_not_submitted' ? '待ち' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
-                                            ic.documentState == 'required_not_submitted'
-                                                ? AppColors.punchClockOut
-                                                : AppColors.leafGreen),
+                                        InkWell(
+                                          onTap: ic.documentState == 'required_not_submitted'
+                                              ? () => _recordPaperReceipt(row, ic)
+                                              : null,
+                                          child: _miniBadge(
+                                              Icons.medical_information_rounded,
+                                              '感染症: ${ic.diseaseName ?? ''}'
+                                              '${ic.requiredDocument == 'opinion_letter' ? ' 許可書' : ic.requiredDocument == 'return_form' ? ' 登園届' : ''}'
+                                              '${ic.documentState == 'required_not_submitted' ? '待ち(タップで紙受領)' : ic.documentState == 'submitted_electronically' ? '提出済み' : ic.documentState == 'received_on_paper' ? '紙受領済み' : ''}',
+                                              ic.documentState == 'required_not_submitted'
+                                                  ? AppColors.punchClockOut
+                                                  : AppColors.leafGreen),
+                                        ),
                                       // 201: 服薬バッジ。解熱剤を含む場合は赤警告。タップで種類と様子を表示。
                                       if (_medicationByChild[row.childId] != null)
                                         _medicationBadge(row, _medicationByChild[row.childId]!),

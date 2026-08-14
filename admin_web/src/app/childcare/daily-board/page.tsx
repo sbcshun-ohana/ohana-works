@@ -111,9 +111,25 @@ function ChildcareDailyBoardPageContent() {
   const [timeChangeByChild, setTimeChangeByChild] = useState<
     Record<string, { request_type: "tardiness" | "early_leave"; time: string | null; reason: string | null }[]>
   >({});
+  // 211: 紙書類の受領記録。記録成立で書類待ちが解除される(AC-12)。
+  async function recordPaperReceipt(caseId: string, label: string) {
+    if (!window.confirm(`${label}を紙で受領した記録を残します。よろしいですか?`)) return;
+    const { error } = await createClient().rpc("record_paper_document_receipt", {
+      p_case_id: caseId,
+      p_received_method: "paper",
+      p_note: null,
+    });
+    if (error) {
+      showToast(`受領記録に失敗しました: ${error.message}`);
+      return;
+    }
+    showToast(`${label}の紙受領を記録しました`);
+    setReloadToken((t) => t + 1);
+  }
+
   // 感染症案件バッジ用(206)。child_id→リスト(病名/必要書類/書類状態)。
   const [infectionByChild, setInfectionByChild] = useState<
-    Record<string, { disease_name: string | null; required_document: string; document_state: string }[]>
+    Record<string, { case_id: string; disease_name: string | null; required_document: string; document_state: string }[]>
   >({});
   const [scheduleTarget, setScheduleTarget] = useState<{ contactIds: string[]; label: string } | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<DailyBoardRow | null>(null);
@@ -364,10 +380,11 @@ function ChildcareDailyBoardPageContent() {
           }
           const map: Record<
             string,
-            { disease_name: string | null; required_document: string; document_state: string }[]
+            { case_id: string; disease_name: string | null; required_document: string; document_state: string }[]
           > = {};
           for (const r of (data ?? []) as {
             child_id: string;
+            case_id: string;
             disease_name: string | null;
             required_document: string;
             document_state: string;
@@ -792,30 +809,45 @@ function ChildcareDailyBoardPageContent() {
                         </span>
                       )}
                       {/* 感染症案件(206): 書類待ち=赤/提出・受領済み=緑 */}
-                      {(infectionByChild[row.child_id] ?? []).map((ic, i) => (
-                        <span
-                          key={`ic-${i}`}
-                          className={`ml-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            ic.document_state === "required_not_submitted"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
-                        >
-                          感染症: {ic.disease_name ?? ""}
-                          {ic.required_document === "opinion_letter"
-                            ? " 許可書"
+                      {(infectionByChild[row.child_id] ?? []).map((ic, i) => {
+                        const docLabel =
+                          ic.required_document === "opinion_letter"
+                            ? "許可書"
                             : ic.required_document === "return_form"
-                              ? " 登園届"
-                              : ""}
-                          {ic.document_state === "required_not_submitted"
-                            ? "待ち"
-                            : ic.document_state === "submitted_electronically"
-                              ? "提出済み"
-                              : ic.document_state === "received_on_paper"
-                                ? "紙受領済み"
-                                : ""}
-                        </span>
-                      ))}
+                              ? "登園届"
+                              : "";
+                        return (
+                          <span key={`ic-${i}`} className="ml-1 inline-flex items-center gap-1">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                ic.document_state === "required_not_submitted"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-emerald-100 text-emerald-700"
+                              }`}
+                            >
+                              感染症: {ic.disease_name ?? ""} {docLabel}
+                              {ic.document_state === "required_not_submitted"
+                                ? "待ち"
+                                : ic.document_state === "submitted_electronically"
+                                  ? "提出済み"
+                                  : ic.document_state === "received_on_paper"
+                                    ? "紙受領済み"
+                                    : ""}
+                            </span>
+                            {/* 211: 紙受領記録(AC-12) */}
+                            {ic.document_state === "required_not_submitted" && (
+                              <button
+                                onClick={() =>
+                                  recordPaperReceipt(ic.case_id, `${ic.disease_name ?? "感染症"}の${docLabel}`)
+                                }
+                                className="rounded-lg border border-slate-300 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                              >
+                                紙受領
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
                       {/* 承認済み 遅刻/早退(欠席と同様にボードで見えるように) */}
                       {(timeChangeByChild[row.child_id] ?? []).map((tc, i) => (
                         <span
