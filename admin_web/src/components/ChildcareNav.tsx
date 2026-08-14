@@ -25,6 +25,8 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/emergency-contacts", label: "緊急連絡先" },
   { href: THERAPY_HREF, label: "療育記録" },
   { href: "/childcare/support-childcare", label: "支援保育" },
+  // 感染症マスター(205)。閲覧は職員可・編集はRLSで統括園長以上に限定されるためタブは常時表示。
+  { href: "/childcare/infection-masters", label: "感染症マスター" },
 ];
 
 export function ChildcareNav() {
