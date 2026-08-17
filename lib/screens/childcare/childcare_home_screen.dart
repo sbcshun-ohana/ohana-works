@@ -7,6 +7,7 @@ import '../../services/childcare_service.dart';
 import '../../services/pin_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ohana_logo_home_button.dart';
+import 'children/child_register_list_screen.dart';
 import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
@@ -209,6 +210,17 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 officeId: office.officeId,
                 businessDate: _businessDate,
                 isManager: office.isManager,
+              )),
+            ),
+            // 園児台帳(221・俊指示 2026-08-17): デイリーボード→園児詳細の既存導線に加えた別入口。
+            _HomeTile(
+              icon: Icons.badge_rounded,
+              color: AppColors.leafGreen,
+              label: '園児台帳',
+              onTap: () => _push(ChildRegisterListScreen(
+                service: widget.service,
+                officeId: office.officeId,
+                businessDate: _businessDate,
               )),
             ),
             // 週次予定タイルは撤去(俊指示 2026-08-14: 週次予定は園児マスタ(admin)側で管理する方針)。

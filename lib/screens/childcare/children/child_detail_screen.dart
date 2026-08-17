@@ -18,6 +18,7 @@ class ChildDetailScreen extends StatefulWidget {
     required this.childName,
     required this.officeId,
     required this.businessDate,
+    this.openRegisterTab = false,
   });
 
   final ChildcareService service;
@@ -25,6 +26,9 @@ class ChildDetailScreen extends StatefulWidget {
   final String childName;
   final String officeId;
   final DateTime businessDate;
+
+  /// true のとき「台帳」タブを直接開く(園児台帳一覧からの導線・221)。
+  final bool openRegisterTab;
 
   @override
   State<ChildDetailScreen> createState() => _ChildDetailScreenState();
@@ -75,6 +79,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         ];
         return DefaultTabController(
           length: tabs.length,
+          initialIndex: widget.openRegisterTab ? tabs.length - 1 : 0,
           child: Scaffold(
             appBar: AppBar(
               leading: const OhanaBackHomeLeading(),
