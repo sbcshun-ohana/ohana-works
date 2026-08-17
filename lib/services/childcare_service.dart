@@ -1364,6 +1364,14 @@ class ChildcareService {
     await _client.rpc('soft_delete_child_internal_note', params: {'p_note_id': noteId});
   }
 
+  /// 園児台帳(221)。children正本+世帯住所+承認済み入園フォームのスナップショット。
+  /// 施設の全職員が閲覧可(閲覧専用)。
+  Future<Map<String, dynamic>?> fetchChildRegister(String childId) async {
+    final rows = await _client.rpc('fetch_child_register', params: {'p_child_id': childId});
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
   /// 招待コードは発行時のみ取得できる(サーバーはtoken_hashのみ保持する)。
   Future<({String token, DateTime expiresAt})> createGuardianInvitationByStaff({
     required String childId,

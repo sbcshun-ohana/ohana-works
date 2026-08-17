@@ -372,9 +372,56 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
       return _infoBanner('提出済みです。園の確認をお待ちください(修正はできません)', AppColors.skyBlue);
     }
     if (form.status == 'approved') {
-      return _infoBanner('園に承認されました。ご登録ありがとうございました', AppColors.leafGreen);
+      // 221: 承認済みは閲覧+変更申請の入口(修正→再提出→園の承認後に反映)
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.leafGreen.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('園に承認された登録内容です',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _isSaving ? null : _startChangeRequest,
+              icon: const Icon(Icons.edit_rounded, size: 18),
+              label: const Text('変更申請を開始する'),
+            ),
+          ],
+        ),
+      );
     }
     return null;
+  }
+
+  Future<void> _startChangeRequest() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('変更申請を開始しますか?',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: const Text('現在の登録内容をもとに修正できます。修正後に再提出すると、園の承認後に反映されます。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('開始する')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isSaving = true);
+    try {
+      await widget.guardianService.startEnrollmentChangeRequest(widget.child.childId);
+      setState(() => _isLoading = true);
+      await _load();
+    } on GuardianServiceException catch (e) {
+      if (mounted) setState(() => _errorMessage = e.message);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   Widget _infoBanner(String text, Color color) {

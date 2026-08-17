@@ -57,7 +57,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
       if (!enabled) return;
       final form = await widget.guardianService.fetchEnrollmentForm(widget.child.childId);
       final status = form?.status ?? 'none';
-      if (status == 'approved' || status == 'cancelled') return; // 完了後は案内を出さない
+      if (status == 'cancelled') return;
+      // approved はバナーを出さず、グリッドの「登録情報の確認・変更」メニューだけ出す(221)
       if (mounted) setState(() => _enrollmentFormStatus = status);
     } catch (_) {
       // 取得失敗時は非表示(安全側)。
@@ -281,7 +282,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                if (_enrollmentFormStatus != null) _enrollmentFormCard(),
+                if (_enrollmentFormStatus != null && _enrollmentFormStatus != 'approved')
+                  _enrollmentFormCard(),
                 for (final c in _infectionCases) _infectionCaseCard(c),
                 Expanded(child: _buildGrid()),
               ],
@@ -355,6 +357,24 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
               guardianId: widget.guardianId,
             ),
           ),
+        ),
+      // 承認済みの入園時基本情報の確認・変更申請(221)
+      if (_enrollmentFormStatus == 'approved')
+        _GridMenuItem(
+          icon: Icons.assignment_ind_rounded,
+          color: AppColors.skyBlue,
+          label: '登録情報の確認・変更',
+          onTap: () async {
+            final changed = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => EnrollmentFormScreen(
+                  guardianService: widget.guardianService,
+                  child: widget.child,
+                ),
+              ),
+            );
+            if (changed == true) _loadEnrollmentFormStatus();
+          },
         ),
       if (_enabledFeatures.contains('class_photos'))
         _GridMenuItem(

@@ -5,6 +5,7 @@ import '../../../services/childcare_service.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../../../widgets/time_dropdown_picker.dart';
 import 'child_internal_notes_tab.dart';
+import 'child_register_tab.dart';
 import '../family_daily_report_summary_view.dart';
 
 /// 園児詳細画面。「家庭連絡帳」タブは常時表示、「園内記録」タブは
@@ -70,6 +71,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         final tabs = <Tab>[
           const Tab(text: '家庭連絡帳'),
           if (internalNotesEnabled) const Tab(text: '園内記録'),
+          const Tab(text: '台帳'),
         ];
         return DefaultTabController(
           length: tabs.length,
@@ -100,6 +102,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
                     childId: widget.childId,
                     officeId: widget.officeId,
                   ),
+                // 園児台帳(221)。全職員閲覧可・閲覧専用
+                ChildRegisterTab(service: widget.service, childId: widget.childId),
               ],
             ),
           ),

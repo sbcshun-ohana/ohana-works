@@ -810,6 +810,15 @@ class GuardianService {
     }
   }
 
+  /// 変更申請の開始(221)。承認済みフォームを再編集可能な下書きに戻す(承認内容がコピーされる)。
+  Future<void> startEnrollmentChangeRequest(String childId) async {
+    try {
+      await _client.rpc('start_enrollment_change_request', params: {'p_child_id': childId});
+    } on PostgrestException catch (e) {
+      throw GuardianServiceException(_translateEnrollmentError(e.message));
+    }
+  }
+
   String _translateEnrollmentError(String message) {
     if (message.contains('required fields missing')) {
       return '必須項目が入力されていません。各ステップの必須項目をご確認ください';
