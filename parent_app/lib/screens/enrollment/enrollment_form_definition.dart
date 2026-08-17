@@ -143,13 +143,17 @@ const enrollmentSteps = <StepDef>[
           type: FieldType.notice, visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
       FieldDef('car_number', '車両ナンバー', required: true,
           hint: '例: 相模 300 あ 12-34', visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
-      FieldDef('car_model', '車種・色', hint: '例: 白のフリード',
+      FieldDef('car_model', '車種・色', required: true, hint: '例: 白のフリード',
           visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
-      FieldDef('car_driver', '主な運転者', visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
-      // 自転車: 保険加入・ヘルメット着用の要請(俊指示 2026-08-17)
+      FieldDef('car_driver', '主な運転者', required: true,
+          visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      // 自転車: 保険加入・ヘルメット着用の要請+確認チェック必須(俊指示 2026-08-17)
       FieldDef('bicycle_notice',
           '自転車で送迎される場合は、自転車保険へのご加入と、お子様・保護者様のヘルメット着用をお願いしています。',
           type: FieldType.notice, visibleWhenKey: 'method', visibleWhenEquals: '自転車'),
+      FieldDef('bicycle_acknowledged', '上記の注意事項(保険加入・ヘルメット着用)を確認しました',
+          type: FieldType.toggle, required: true,
+          visibleWhenKey: 'method', visibleWhenEquals: '自転車'),
       FieldDef('duration', '所要時間', required: true, hint: '例: 10分'),
     ],
     listGroups: [

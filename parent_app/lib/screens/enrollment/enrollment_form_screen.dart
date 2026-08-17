@@ -180,7 +180,11 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
         if (!f.required || f.type == FieldType.notice) continue;
         if (!f.isVisible(section)) continue;
         final v = section[f.key];
-        if (v == null || (v is String && v.trim().isEmpty)) {
+        // 必須トグル=確認チェック(自転車の注意事項など)はONでないと未入力扱い
+        final isMissing = f.type == FieldType.toggle
+            ? v != true
+            : v == null || (v is String && v.trim().isEmpty);
+        if (isMissing) {
           missing.add((step: i + 1, stepTitle: step.title, label: f.label));
         }
       }
@@ -504,6 +508,22 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
           ),
         );
       case FieldType.toggle:
+        // 必須トグル=同意・確認チェック(俊指示: チェックボックス表示)。通常トグルはスイッチ。
+        if (f.required) {
+          return CheckboxListTile(
+            key: fieldKey,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(f.label, style: const TextStyle(fontSize: 14)),
+            value: value == true,
+            onChanged: enabled
+                ? (v) => setState(() {
+                      holder[f.key] = v == true;
+                      _dirty = true;
+                    })
+                : null,
+          );
+        }
         return SwitchListTile(
           key: fieldKey,
           contentPadding: EdgeInsets.zero,
@@ -527,11 +547,12 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
               for (final o in f.options ?? const <String>[])
                 DropdownMenuItem(value: o, child: Text(o)),
             ],
+            // setStateで再描画する(通園方法などの選択値に応じた条件フィールドを即時に出すため)
             onChanged: enabled
-                ? (v) {
-                    holder[f.key] = v;
-                    _dirty = true;
-                  }
+                ? (v) => setState(() {
+                      holder[f.key] = v;
+                      _dirty = true;
+                    })
                 : null,
           ),
         );
