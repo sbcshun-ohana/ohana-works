@@ -151,7 +151,9 @@ fee_waivers (                              -- 園側事情の免除・取消(§9
 ```sql
 billing_cycles (id, office_id, billing_month date, status, opened_by/at, calculated_at, note)
 invoices (
-  id uuid PK, invoice_no text unique,      -- 採番: {施設コード}-{YYYYMM}-{連番3桁} 例 YMT-202609-012
+  id uuid PK, invoice_no text unique,      -- 採番: {施設コード}-{YYYYMM}-{連番3桁} 例 OHN-202609-012
+                                           -- 施設コード(俊確定 2026-08-17): 大和=OHN / BABY MAHALO=BMH
+                                           --                               / MahaloStation=STA / Halelea=HLA
   household_id → households, office_id, billing_month date,
   status text check (草案§12.7の13状態),
   total_amount int, paid_amount int default 0,   -- balance=total-paid(導出)
@@ -236,7 +238,7 @@ receipts (
 
 ## 11. 俊へのQ&A(本設計の残確定事項)
 
-1. **請求番号・領収書番号の形式**: `YMT-202609-012` のような「施設コード-年月-連番」で良いか。施設コード(YMT/BMH/MST/HLL等)の指定を。
+1. ~~請求番号の形式~~ **回答済み(2026-08-17)**: 施設コード-年月-連番で確定。コード= 大和:OHN / BABY MAHALO:BMH / MahaloStation:STA / Halelea:HLA(officesにcode列を追加して保持)。
 2. **領収書のPDF**: v1は「アプリ内の領収書画面(印刷可)+必要時にPDFダウンロード」の2段構えで良いか。
 3. **支払期限の起算**: 公開日+10日は暦日(土日祝含む)で良いか。
 4. **行事費**: 明細種別は用意するが、入力は都度手入力(マスター化しない)で良いか。
