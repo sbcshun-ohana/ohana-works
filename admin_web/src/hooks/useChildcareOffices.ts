@@ -33,12 +33,13 @@ export function useChildcareOffices(rpcName: "fetch_my_childcare_offices" | "fet
 
   // 選択中施設は URL(?office=) から導出する(内部stateを持たない)。ヘッダーの施設プルダウンが
   // ?office= を更新すると、このフックを使う全ページの selectedOffice が同じ値へ即追随する。
-  // 一覧が未取得の間は空文字。URLに無い/一覧に無い場合は先頭施設を既定にする。
+  // 一覧が未取得の間は空文字。URLに無い/一覧に無い場合は既定施設(大和オハナ保育園、
+  // 無ければ先頭施設)にする(俊指示 2026-08-17)。
   const fromUrl = searchParams.get("office");
   const selectedOffice = offices
     ? fromUrl && offices.some((o) => o.office_id === fromUrl)
       ? fromUrl
-      : offices[0]?.office_id ?? ""
+      : offices.find((o) => o.office_name === "大和オハナ保育園")?.office_id ?? offices[0]?.office_id ?? ""
     : "";
 
   function setSelectedOffice(officeId: string) {
