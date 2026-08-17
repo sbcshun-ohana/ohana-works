@@ -390,6 +390,10 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
   // ----- 入力ステップ -----
 
   Widget _fieldsStep(StepDef stepDef) {
+    // 必須と任意を分けて表示する(俊指示 2026-08-17)。必須未入力があると提出できない
+    // (最終確認のリスト+submit RPC 側の必須チェックでブロック)。
+    final requiredFields = stepDef.fields.where((f) => f.required).toList();
+    final optionalFields = stepDef.fields.where((f) => !f.required).toList();
     return ListView(
       key: ValueKey('step$_step'),
       padding: const EdgeInsets.all(16),
@@ -400,10 +404,44 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
             child: Text(stepDef.note!,
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ),
-        for (final f in stepDef.fields) _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
+        if (requiredFields.isNotEmpty) ...[
+          _groupHeader('必須項目', AppColors.danger, note: '入力がないと提出できません'),
+          for (final f in requiredFields)
+            _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
+        ],
+        if (optionalFields.isNotEmpty) ...[
+          _groupHeader('任意項目', AppColors.textSecondary),
+          for (final f in optionalFields)
+            _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
+        ],
         for (final g in stepDef.listGroups) ..._listGroupWidgets(stepDef.sectionKey, g),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _groupHeader(String label, Color color, {String? note}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(label,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+          ),
+          if (note != null) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(note, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
