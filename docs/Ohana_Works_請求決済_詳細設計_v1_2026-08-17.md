@@ -104,8 +104,12 @@ child_exemptions (                         -- 無償化・免除(適用期間付
   kind text check ('free_childcare','meal_main','meal_side','company_paid','custom'),
   start_month date, end_month date null,
   document_state text check ('not_required','pending','confirmed','deficient') default 'not_required',
+  document_path text,                      -- 俊確定⑤(2026-08-17): 非課税証明書等のPDFを添付保存する
+  document_fiscal_year int,                -- 書類の有効年度(§11.1)
   document_confirmed_by, document_confirmed_at, note
-)                                          -- 無償化=住民税非課税証明の年度確認(§11.1)
+)                                          -- 無償化=住民税非課税証明の年度確認+PDF保存(§11.1)
+-- storage: exemption-documents バケット(非公開)。閲覧/登録=統括園長以上のみ
+-- (世帯収入に関わる機微書類のため、管理者一般より狭く統括限定とする)
 child_age_band_snapshots (                 -- 年齢区分の年度確定(クラス基準・俊確定②)
   id uuid PK, child_id, fiscal_year int, age_band text,
   basis_class_id → childcare_classes, determined_at, unique(child_id, fiscal_year)
@@ -239,8 +243,11 @@ receipts (
 ## 11. 俊へのQ&A(本設計の残確定事項)
 
 1. ~~請求番号の形式~~ **回答済み(2026-08-17)**: 施設コード-年月-連番で確定。コード= 大和:OHN / BABY MAHALO:BMH / MahaloStation:STA / Halelea:HLA(officesにcode列を追加して保持)。
-2. **領収書のPDF**: v1は「アプリ内の領収書画面(印刷可)+必要時にPDFダウンロード」の2段構えで良いか。
-3. **支払期限の起算**: 公開日+10日は暦日(土日祝含む)で良いか。
-4. **行事費**: 明細種別は用意するが、入力は都度手入力(マスター化しない)で良いか。
-5. **無償化の非課税証明書**: v1は受領記録(確認者・日付・年度)のみで、ファイル添付は将来拡張で良いか。
-6. **大和の主食費・副食費の「3歳以上児」**: 年齢区分と同じく在籍クラス基準(幼児クラス在籍=対象)で良いか。
+2. ~~領収書~~ **回答済み**: 2段構え(アプリ内画面+PDFダウンロード)で確定。
+3. ~~支払期限~~ **回答済み**: 公開日+10日=暦日で確定。
+4. ~~行事費~~ **回答済み**: 種別あり・金額は都度手入力で確定。
+5. ~~非課税証明書~~ **回答済み**: **ファイル添付必要(PDF保存)**。child_exemptions.document_path+
+   exemption-documentsバケット(非公開・統括園長以上のみ)をv1に含める。
+6. ~~給食費の3歳以上判定~~ **回答済み**: 在籍クラス基準で確定。
+
+**→ 全Q&A回答済み(2026-08-17)。本設計v1.0で確定。Phase 1着手=第1弾リリース後。**
