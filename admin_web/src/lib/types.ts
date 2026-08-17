@@ -128,8 +128,8 @@ export type ChildMasterRow = {
   honorific_suffix: string | null;
   full_name: string;
   name_kana: string | null;
-  gender: string;
-  birth_date: string;
+  gender: string | null;
+  birth_date: string | null;
   enrollment_status: string;
   withdrawal_date: string | null;
   class_id: string | null;
@@ -137,6 +137,8 @@ export type ChildMasterRow = {
   class_family_daily_report_required: boolean | null;
   family_daily_report_required_from: string | null;
   family_daily_report_required_until: string | null;
+  child_kind: "regular" | "temporary";
+  enrollment_date: string | null;
 };
 
 export type ChildForAssignment = {

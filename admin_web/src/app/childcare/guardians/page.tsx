@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
@@ -29,7 +30,7 @@ function ChildcareGuardiansPageContent() {
   const [newInviteChildId, setNewInviteChildId] = useState("");
   const [newInviteRole, setNewInviteRole] = useState<"primary" | "additional">("primary");
   const [isIssuing, setIsIssuing] = useState(false);
-  const [issuedInvite, setIssuedInvite] = useState<{ token: string; expiresAt: string } | null>(null);
+  const [issuedInvite, setIssuedInvite] = useState<{ token: string; expiresAt: string; qrDataUrl: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const classOrder = classOrderIndex(classes);
@@ -109,7 +110,22 @@ function ChildcareGuardiansPageContent() {
       return;
     }
     const result = (Array.isArray(data) ? data[0] : data) as { token: string; expires_at: string };
-    setIssuedInvite({ token: result.token, expiresAt: result.expires_at });
+    const qrDataUrl = await QRCode.toDataURL(result.token, { width: 240, margin: 1 });
+    setIssuedInvite({ token: result.token, expiresAt: result.expires_at, qrDataUrl });
+    setReloadToken((t) => t + 1);
+  }
+
+  async function revokeInvitation(invitationId: string) {
+    if (!window.confirm("この招待を無効化しますか?(無効化後は再発行してください)")) return;
+    setActionError(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("revoke_guardian_invitation", {
+      p_invitation_id: invitationId,
+    });
+    if (error) {
+      setActionError(error.message);
+      return;
+    }
     setReloadToken((t) => t + 1);
   }
 
@@ -263,10 +279,17 @@ function ChildcareGuardiansPageContent() {
               <p className="font-semibold">
                 招待コードはこの画面でのみ表示されます。保護者へ直接お伝えください(スクリーンショット等での共有は避けてください)。
               </p>
-              <p className="mt-2 break-all font-mono text-xs">{issuedInvite.token}</p>
-              <p className="mt-1 text-xs">
-                有効期限: {new Date(issuedInvite.expiresAt).toLocaleString("ja-JP")}
-              </p>
+              <div className="mt-3 flex flex-wrap items-start gap-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={issuedInvite.qrDataUrl} alt="招待QRコード" className="h-40 w-40 rounded-lg border border-amber-200 bg-white p-1" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs">保護者アプリの「QRを読み取る」で取り込めます。コード手入力でも登録できます。</p>
+                  <p className="mt-2 break-all font-mono text-xs">{issuedInvite.token}</p>
+                  <p className="mt-1 text-xs">
+                    有効期限: {new Date(issuedInvite.expiresAt).toLocaleString("ja-JP")}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -278,12 +301,13 @@ function ChildcareGuardiansPageContent() {
                   <th className="px-4 py-3">役割</th>
                   <th className="px-4 py-3">期限</th>
                   <th className="px-4 py-3">状態</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {invitations.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
                       招待履歴はありません
                     </td>
                   </tr>
@@ -298,6 +322,16 @@ function ChildcareGuardiansPageContent() {
                       {new Date(inv.expires_at).toLocaleString("ja-JP")}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{GUARDIAN_INVITATION_STATUS_LABELS[inv.status]}</td>
+                    <td className="px-4 py-3 text-right">
+                      {inv.status === "pending" && (
+                        <button
+                          onClick={() => revokeInvitation(inv.invitation_id)}
+                          className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                        >
+                          無効化
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

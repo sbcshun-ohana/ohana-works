@@ -36,6 +36,7 @@ export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props)
   const [birthDate, setBirthDate] = useState("");
   const [classId, setClassId] = useState("");
   const [enrollmentStartDate, setEnrollmentStartDate] = useState(currentDate());
+  const [childKind, setChildKind] = useState<"regular" | "temporary">("regular");
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -73,6 +74,7 @@ export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props)
       p_birth_date: birthDate,
       p_class_id: classId,
       p_enrollment_start_date: enrollmentStartDate,
+      p_child_kind: childKind,
     });
 
     setIsSaving(false);
@@ -116,6 +118,17 @@ export function CreateChildModal({ officeId, classes, onClose, onSaved }: Props)
               placeholder="例: やまだたろう"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">在籍種別</label>
+            <select
+              value={childKind}
+              onChange={(e) => setChildKind(e.target.value as "regular" | "temporary")}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              <option value="regular">通常在籍</option>
+              <option value="temporary">一時預かり</option>
+            </select>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">性別</label>

@@ -9,6 +9,8 @@ import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal"
 import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
 import { ChildWeeklyScheduleModal } from "@/components/ChildWeeklyScheduleModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
+import { InvitationQrModal } from "@/components/InvitationQrModal";
+import { ProvisionalChildModal } from "@/components/ProvisionalChildModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
@@ -39,6 +41,8 @@ function ChildcareChildrenPageContent() {
   const [editingRow, setEditingRow] = useState<ChildMasterRow | null>(null);
   const [isPromoting, setIsPromoting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  const [qrRow, setQrRow] = useState<ChildMasterRow | null>(null);
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
@@ -87,10 +91,43 @@ function ChildcareChildrenPageContent() {
   }, [selectedOffice, reloadToken]);
 
   const classOrder = classOrderIndex(classes);
-  const filteredRows = (selectedClassName === null ? rows : rows.filter((r) => r.class_name === selectedClassName))
+  // 入園予定(仮登録)は本体の表と分けて表示する(クラス未所属・基本情報未入力のため)
+  const provisionalRows = rows.filter((r) => r.enrollment_status === "入園予定");
+  const enrolledRows = rows.filter((r) => r.enrollment_status !== "入園予定");
+  const filteredRows = (selectedClassName === null ? enrolledRows : enrolledRows.filter((r) => r.class_name === selectedClassName))
     .slice()
     .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
   const today = currentDate();
+
+  async function toggleChildKind(row: ChildMasterRow) {
+    const nextKind = row.child_kind === "temporary" ? "regular" : "temporary";
+    const label = nextKind === "temporary" ? "一時預かり" : "通常在籍";
+    if (!window.confirm(`${row.display_name}${row.honorific_suffix ?? ""}の在籍種別を「${label}」に変更しますか?`)) return;
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_child_kind", {
+      p_child_id: row.child_id,
+      p_child_kind: nextKind,
+    });
+    if (error) {
+      setRowsError(error.message);
+      return;
+    }
+    setReloadToken((t) => t + 1);
+  }
+
+  async function cancelProvisionalChild(row: ChildMasterRow) {
+    if (!window.confirm(`${row.full_name}さんの仮登録を取り消しますか?(退園済み扱いになります)`)) return;
+    const supabase = createClient();
+    const { error } = await supabase.rpc("withdraw_child", {
+      p_child_id: row.child_id,
+      p_withdrawal_date: today,
+    });
+    if (error) {
+      setRowsError(error.message);
+      return;
+    }
+    setReloadToken((t) => t + 1);
+  }
 
   if (officesError) {
     return (
@@ -122,6 +159,12 @@ function ChildcareChildrenPageContent() {
             </p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => setIsProvisioning(true)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              仮登録(入園予定)
+            </button>
             <button
               onClick={() => setIsCreating(true)}
               disabled={classes.length === 0}
@@ -158,6 +201,52 @@ function ChildcareChildrenPageContent() {
         </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
+
+        {provisionalRows.length > 0 && (
+          <div className="space-y-2 rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-700">入園予定(仮登録)</h3>
+            <p className="text-xs text-slate-400">
+              園児名だけの仮登録です。登園ボード・在園児一覧には表示されません。招待QRから保護者アカウントの準備を進められます。
+            </p>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                    <th className="px-4 py-2">園児名</th>
+                    <th className="px-4 py-2">ふりがな</th>
+                    <th className="px-4 py-2">入園予定日</th>
+                    <th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {provisionalRows.map((row) => (
+                    <tr key={row.child_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-4 py-2 font-medium text-slate-800">{row.full_name}</td>
+                      <td className="px-4 py-2 text-slate-500">{row.name_kana ?? "—"}</td>
+                      <td className="px-4 py-2 text-slate-500">{row.enrollment_date ?? "未定"}</td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setQrRow(row)}
+                            className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                          >
+                            招待QR
+                          </button>
+                          <button
+                            onClick={() => cancelProvisionalChild(row)}
+                            className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           <table className="min-w-full text-sm">
@@ -201,16 +290,31 @@ function ChildcareChildrenPageContent() {
                       <td className="px-4 py-3 font-medium text-slate-800">
                         {row.display_name}
                         {row.honorific_suffix ?? ""}
+                        {row.child_kind === "temporary" && (
+                          <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-600">
+                            一時預かり
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-500">{row.class_name ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-500">{row.birth_date}</td>
+                      <td className="px-4 py-3 text-slate-500">{row.birth_date ?? "—"}</td>
                       <td className="px-4 py-3">
                         {isWithdrawn ? (
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
                             退園済み{row.withdrawal_date ? `(${row.withdrawal_date})` : ""}
                           </span>
                         ) : (
-                          <span className="text-slate-500">{row.enrollment_status}</span>
+                          <div className="space-y-1">
+                            <span className="block text-slate-500">{row.enrollment_status}</span>
+                            {isManager && (
+                              <button
+                                onClick={() => toggleChildKind(row)}
+                                className="text-xs text-slate-400 underline hover:text-slate-600"
+                              >
+                                {row.child_kind === "temporary" ? "通常在籍に戻す" : "一時預かりにする"}
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -323,6 +427,25 @@ function ChildcareChildrenPageContent() {
             setIsPromoting(false);
             setReloadToken((t) => t + 1);
           }}
+        />
+      )}
+
+      {isProvisioning && (
+        <ProvisionalChildModal
+          officeId={selectedOffice}
+          onClose={() => setIsProvisioning(false)}
+          onSaved={() => {
+            setIsProvisioning(false);
+            setReloadToken((t) => t + 1);
+          }}
+        />
+      )}
+
+      {qrRow && (
+        <InvitationQrModal
+          childId={qrRow.child_id}
+          childName={qrRow.full_name}
+          onClose={() => setQrRow(null)}
         />
       )}
 

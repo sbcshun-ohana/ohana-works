@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import 'invitation_qr_scan_screen.dart';
 
 /// 招待コード受諾画面。ログイン済み(auth.uid()がある)ことが前提。
 /// 園から口頭・メール等で伝えられた招待コードと氏名を入力し、
@@ -62,6 +63,15 @@ class _InvitationEntryScreenState extends State<InvitationEntryScreen> {
     await Supabase.instance.client.auth.signOut();
   }
 
+  Future<void> _scanQr() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const InvitationQrScanScreen()),
+    );
+    if (code != null && mounted) {
+      setState(() => _tokenController.text = code);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,6 +98,12 @@ class _InvitationEntryScreenState extends State<InvitationEntryScreen> {
                   controller: _tokenController,
                   decoration: const InputDecoration(labelText: '招待コード'),
                   validator: (v) => (v == null || v.trim().isEmpty) ? '招待コードを入力してください' : null,
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _isBusy ? null : _scanQr,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: const Text('QRを読み取る'),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
