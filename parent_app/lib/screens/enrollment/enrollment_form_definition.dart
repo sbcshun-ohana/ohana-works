@@ -149,6 +149,16 @@ const enrollmentSteps = <StepDef>[
           visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
       FieldDef('car_driver', '主な運転者', required: true,
           visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      // 自動車: 駐車場利用の注意+同意チェック必須(俊指示 2026-08-17)
+      FieldDef('car_parking_notice',
+          '保育園の専用駐車場はありません。テナントビルの共同駐車場をご利用ください。'
+          '登降園の時間に駐車場に空きがない場合でも、路上駐車は絶対にしないでください。'
+          '駐車場の空き待ち等によりお迎えが遅れ、延長保育となった場合は延長保育料金がかかります。',
+          type: FieldType.notice, required: true,
+          visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      FieldDef('car_parking_agreed', '上記の駐車場利用に関する注意事項に同意します',
+          type: FieldType.toggle, required: true,
+          visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
       // 自転車: 保険加入・ヘルメット着用の要請+確認チェック必須(俊指示 2026-08-17)
       FieldDef('bicycle_notice',
           '自転車で送迎される場合は、自転車保険へのご加入と、お子様・保護者様のヘルメット着用をお願いしています。',
