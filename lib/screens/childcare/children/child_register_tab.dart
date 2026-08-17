@@ -3,14 +3,43 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/childcare_service.dart';
 
+/// 入園日(予定日)が属する年度の4/1時点のコホート年齢(admin CreateChildModal と同一ロジック。
+/// 4/1生まれは前のコホート=早生まれ扱い)。
+int? estimateCohortAge(String? birthDate, String? enrollmentDate) {
+  if (birthDate == null || birthDate.isEmpty) return null;
+  final b = DateTime.tryParse(birthDate);
+  final base = enrollmentDate != null && enrollmentDate.isNotEmpty
+      ? DateTime.tryParse(enrollmentDate)
+      : DateTime.now();
+  if (b == null || base == null) return null;
+  final nendoYear = base.month >= 4 ? base.year : base.year - 1;
+  final cohortYear = (b.month > 4 || (b.month == 4 && b.day >= 2)) ? b.year : b.year - 1;
+  final age = nendoYear - cohortYear - 1;
+  return age < 0 ? null : age;
+}
+
+/// age_group「クラス名/◯歳児」等から歳児数を取り出す
+int? parseClassAge(String ageGroup) {
+  final m = RegExp(r'(\d+)\s*歳児').firstMatch(ageGroup);
+  return m == null ? null : int.tryParse(m.group(1)!);
+}
+
 /// 園児台帳タブ(M6 Phase 3a・221)。閲覧専用。
 /// children正本+世帯住所+承認済み入園フォームのスナップショット(=正本)を表示する。
 /// 電話番号はタップで発信、住所はタップで地図を開く(草案§9.3)。
 class ChildRegisterTab extends StatefulWidget {
-  const ChildRegisterTab({super.key, required this.service, required this.childId});
+  const ChildRegisterTab({
+    super.key,
+    required this.service,
+    required this.childId,
+    this.officeId,
+  });
 
   final ChildcareService service;
   final String childId;
+
+  /// 入園予定クラスの推定表示に使う(未指定なら推定なし)。
+  final String? officeId;
 
   @override
   State<ChildRegisterTab> createState() => _ChildRegisterTabState();
@@ -84,12 +113,31 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
     _load();
   }
 
+  /// クラス未所属(入園予定)のときの推定クラスラベル
+  String? _plannedClassLabel = '';
+
   Future<void> _load() async {
     try {
       final register = await widget.service.fetchChildRegister(widget.childId);
+      String? planned;
+      if (register != null &&
+          register['class_name'] == null &&
+          register['enrollment_status'] == '入園予定' &&
+          widget.officeId != null) {
+        final age = estimateCohortAge(
+            register['birth_date'] as String?, register['enrollment_date'] as String?);
+        if (age != null) {
+          final classes = await widget.service.fetchChildcareClasses(widget.officeId!);
+          final match = classes.where((cl) => parseClassAge(cl.ageGroup) == age).toList();
+          planned = match.isNotEmpty
+              ? '(入園予定)${match.first.className}($age歳児)'
+              : '(入園予定)$age歳児クラス相当';
+        }
+      }
       if (mounted) {
         setState(() {
           _register = register;
+          _plannedClassLabel = planned;
           _isLoading = false;
         });
       }
@@ -141,7 +189,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
             _row('呼び名', '${r['display_name'] ?? ''}${r['honorific_suffix'] ?? ''}'),
             _row('性別', (r['gender'] as String?) ?? '—'),
             _row('生年月日', (r['birth_date'] as String?) ?? '—'),
-            _row('クラス', (r['class_name'] as String?) ?? '—'),
+            _row('クラス', (r['class_name'] as String?) ?? _plannedClassLabel ?? '—'),
             _row('入園日', (r['enrollment_date'] as String?) ?? '—'),
             _row('在籍状況',
                 '${r['enrollment_status'] ?? ''}${r['child_kind'] == 'temporary' ? '(一時預かり)' : ''}'),

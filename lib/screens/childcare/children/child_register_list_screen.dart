@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/childcare.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import 'child_detail_screen.dart';
+import 'child_register_tab.dart' show estimateCohortAge, parseClassAge;
 
 /// 園児台帳の一覧入口(ホームタイル用・俊指示 2026-08-17)。
 /// 在籍状況を区分してクラス・名前(漢字/ふりがな)で探せる。園児タップで「台帳」タブを直接開く。
@@ -30,6 +32,7 @@ const _noClassLabel = 'クラス未所属(在籍中)';
 
 class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
   List<Map<String, dynamic>> _children = const [];
+  List<ChildcareClass> _classes = const [];
   bool _isLoading = true;
   String? _errorMessage;
   String _query = '';
@@ -44,9 +47,11 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
   Future<void> _load() async {
     try {
       final children = await widget.service.fetchChildrenForOfficeMaster(widget.officeId);
+      final classes = await widget.service.fetchChildcareClasses(widget.officeId);
       if (mounted) {
         setState(() {
           _children = children;
+          _classes = classes;
           _isLoading = false;
         });
       }
@@ -58,6 +63,17 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
         });
       }
     }
+  }
+
+  /// 入園前の園児向け: 生年月日から入園予定クラス(年齢区分)を推定して表示ラベルを返す
+  String? _plannedClassLabel(Map<String, dynamic> c) {
+    final age = estimateCohortAge(c['birth_date'] as String?, c['enrollment_date'] as String?);
+    if (age == null) return null;
+    final match = _classes.where((cl) => parseClassAge(cl.ageGroup) == age).toList();
+    if (match.isNotEmpty) {
+      return '入園予定クラス: ${match.first.className}($age歳児)';
+    }
+    return '入園予定: $age歳児クラス相当';
   }
 
   /// 在籍状況を明確に区分する(俊指示: 入園前・卒園後がわかるように)
@@ -188,13 +204,32 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
     final honorific = (c['honorific_suffix'] as String?) ?? '';
     final kana = (c['name_kana'] as String?) ?? '';
     final isWithdrawn = category == _withdrawnLabel;
+    // 入園前の園児は生年月日から入園予定クラスを併記(俊指示 2026-08-17)
+    final planned = category == _preEnrollLabel ? _plannedClassLabel(c) : null;
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
       child: ListTile(
         leading: Icon(Icons.badge_rounded,
             color: isWithdrawn ? Colors.grey : AppColors.leafGreen),
-        title: Text('$display$honorific',
-            style: TextStyle(color: isWithdrawn ? Colors.grey : null)),
+        title: Row(
+          children: [
+            Text('$display$honorific',
+                style: TextStyle(color: isWithdrawn ? Colors.grey : null)),
+            if (planned != null) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.warmOrange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(planned,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warmOrange)),
+              ),
+            ],
+          ],
+        ),
         subtitle: kana.isEmpty ? null : Text(kana, style: const TextStyle(fontSize: 12)),
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: () => Navigator.of(context).push<void>(

@@ -108,7 +108,11 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
                     officeId: widget.officeId,
                   ),
                 // 園児台帳(221)。全職員閲覧可・閲覧専用
-                ChildRegisterTab(service: widget.service, childId: widget.childId),
+                ChildRegisterTab(
+                  service: widget.service,
+                  childId: widget.childId,
+                  officeId: widget.officeId,
+                ),
               ],
             ),
           ),
