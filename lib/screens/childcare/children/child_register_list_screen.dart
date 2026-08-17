@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import 'child_detail_screen.dart';
 
 /// 園児台帳の一覧入口(ホームタイル用・俊指示 2026-08-17)。
-/// クラス別の在園児一覧から園児をタップすると、園児詳細の「台帳」タブを直接開く。
+/// 在籍状況を区分してクラス・名前(漢字/ふりがな)で探せる。園児タップで「台帳」タブを直接開く。
 /// デイリーボード→園児詳細の既存導線はそのまま(こちらは別の入り口)。
 class ChildRegisterListScreen extends StatefulWidget {
   const ChildRegisterListScreen({
@@ -25,12 +24,16 @@ class ChildRegisterListScreen extends StatefulWidget {
   State<ChildRegisterListScreen> createState() => _ChildRegisterListScreenState();
 }
 
+const _preEnrollLabel = '入園前(入園予定)';
+const _withdrawnLabel = '卒園・退園済み';
+const _noClassLabel = 'クラス未所属(在籍中)';
+
 class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
-  List<ChildForInvitation> _children = const [];
+  List<Map<String, dynamic>> _children = const [];
   bool _isLoading = true;
   String? _errorMessage;
   String _query = '';
-  String? _classFilter; // null=全クラス
+  String? _filter; // null=全園児。クラス名 or _preEnrollLabel / _withdrawnLabel / _noClassLabel
 
   @override
   void initState() {
@@ -40,7 +43,7 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
 
   Future<void> _load() async {
     try {
-      final children = await widget.service.fetchChildrenForOffice(widget.officeId);
+      final children = await widget.service.fetchChildrenForOfficeMaster(widget.officeId);
       if (mounted) {
         setState(() {
           _children = children;
@@ -57,27 +60,52 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
     }
   }
 
+  /// 在籍状況を明確に区分する(俊指示: 入園前・卒園後がわかるように)
+  String _category(Map<String, dynamic> c) {
+    final status = (c['enrollment_status'] as String?) ?? '';
+    if (status == '入園予定') return _preEnrollLabel;
+    if (status == '退園済み' || status == '退園予定') return _withdrawnLabel;
+    return (c['class_name'] as String?) ?? _noClassLabel;
+  }
+
+  /// 漢字(正式氏名・呼び名)とふりがなのどちらでもヒットさせる
+  bool _matchesQuery(Map<String, dynamic> c, String query) {
+    final display = (c['display_name'] as String?) ?? '';
+    final full = (c['full_name'] as String?) ?? '';
+    final kana = (c['name_kana'] as String?) ?? '';
+    return display.contains(query) || full.contains(query) || kana.contains(query);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // クラス+名前で絞り込み(俊指示 2026-08-17)
-    final allClassNames = _children.map((c) => c.className ?? 'クラス未所属').toSet().toList()..sort();
-    var filtered = _query.trim().isEmpty
-        ? _children
-        : _children.where((c) => c.displayName.contains(_query.trim())).toList();
-    if (_classFilter != null) {
-      filtered = filtered.where((c) => (c.className ?? 'クラス未所属') == _classFilter).toList();
+    final q = _query.trim();
+    var filtered = q.isEmpty ? _children : _children.where((c) => _matchesQuery(c, q)).toList();
+    if (_filter != null) {
+      filtered = filtered.where((c) => _category(c) == _filter).toList();
     }
 
-    // クラス別にグループ化(クラス未所属は末尾)
-    final byClass = <String, List<ChildForInvitation>>{};
+    // 区分別にグループ化。表示順=クラス→クラス未所属→入園前→卒園・退園済み
+    final byCategory = <String, List<Map<String, dynamic>>>{};
     for (final c in filtered) {
-      byClass.putIfAbsent(c.className ?? 'クラス未所属', () => []).add(c);
+      byCategory.putIfAbsent(_category(c), () => []).add(c);
     }
-    final classNames = byClass.keys.toList()
+    int rank(String cat) {
+      if (cat == _preEnrollLabel) return 2;
+      if (cat == _withdrawnLabel) return 3;
+      if (cat == _noClassLabel) return 1;
+      return 0;
+    }
+    final categories = byCategory.keys.toList()
       ..sort((a, b) {
-        if (a == 'クラス未所属') return 1;
-        if (b == 'クラス未所属') return -1;
-        return a.compareTo(b);
+        final r = rank(a).compareTo(rank(b));
+        return r != 0 ? r : a.compareTo(b);
+      });
+
+    // プルダウンの選択肢(データに存在する区分のみ・順序は表示と同じ)
+    final allCategories = _children.map(_category).toSet().toList()
+      ..sort((a, b) {
+        final r = rank(a).compareTo(rank(b));
+        return r != 0 ? r : a.compareTo(b);
       });
 
     return Scaffold(
@@ -100,7 +128,7 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
                             child: TextField(
                               decoration: const InputDecoration(
                                 prefixIcon: Icon(Icons.search_rounded),
-                                hintText: '園児名で検索',
+                                hintText: '園児名で検索(漢字・ひらがな)',
                                 isDense: true,
                               ),
                               onChanged: (v) => setState(() => _query = v),
@@ -108,14 +136,14 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
                           ),
                           const SizedBox(width: 12),
                           DropdownButton<String?>(
-                            value: _classFilter,
-                            hint: const Text('全クラス'),
+                            value: _filter,
+                            hint: const Text('全園児'),
                             items: [
-                              const DropdownMenuItem<String?>(value: null, child: Text('全クラス')),
-                              for (final name in allClassNames)
-                                DropdownMenuItem<String?>(value: name, child: Text(name)),
+                              const DropdownMenuItem<String?>(value: null, child: Text('全園児')),
+                              for (final cat in allCategories)
+                                DropdownMenuItem<String?>(value: cat, child: Text(cat)),
                             ],
-                            onChanged: (v) => setState(() => _classFilter = v),
+                            onChanged: (v) => setState(() => _filter = v),
                           ),
                         ],
                       ),
@@ -126,36 +154,20 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
                         child: ListView(
                           padding: const EdgeInsets.all(16),
                           children: [
-                            for (final className in classNames) ...[
+                            for (final category in categories) ...[
                               Padding(
                                 padding: const EdgeInsets.only(top: 8, bottom: 4),
-                                child: Text(className,
-                                    style: const TextStyle(
+                                child: Text(category,
+                                    style: TextStyle(
                                         fontWeight: FontWeight.w800,
                                         fontSize: 14,
-                                        color: AppColors.leafGreen)),
+                                        color: category == _withdrawnLabel
+                                            ? Colors.grey
+                                            : category == _preEnrollLabel
+                                                ? AppColors.warmOrange
+                                                : AppColors.leafGreen)),
                               ),
-                              for (final c in byClass[className]!)
-                                Card(
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.badge_rounded, color: AppColors.leafGreen),
-                                    title: Text('${c.displayName}${c.honorificSuffix ?? ''}'),
-                                    trailing: const Icon(Icons.chevron_right_rounded),
-                                    onTap: () => Navigator.of(context).push<void>(
-                                      MaterialPageRoute(
-                                        builder: (_) => ChildDetailScreen(
-                                          service: widget.service,
-                                          childId: c.childId,
-                                          childName: '${c.displayName}${c.honorificSuffix ?? ''}',
-                                          officeId: widget.officeId,
-                                          businessDate: widget.businessDate,
-                                          openRegisterTab: true,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              for (final c in byCategory[category]!) _childTile(c, category),
                             ],
                             if (filtered.isEmpty)
                               const Padding(
@@ -168,6 +180,36 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+
+  Widget _childTile(Map<String, dynamic> c, String category) {
+    final display = (c['display_name'] as String?) ?? '';
+    final honorific = (c['honorific_suffix'] as String?) ?? '';
+    final kana = (c['name_kana'] as String?) ?? '';
+    final isWithdrawn = category == _withdrawnLabel;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListTile(
+        leading: Icon(Icons.badge_rounded,
+            color: isWithdrawn ? Colors.grey : AppColors.leafGreen),
+        title: Text('$display$honorific',
+            style: TextStyle(color: isWithdrawn ? Colors.grey : null)),
+        subtitle: kana.isEmpty ? null : Text(kana, style: const TextStyle(fontSize: 12)),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => ChildDetailScreen(
+              service: widget.service,
+              childId: c['child_id'] as String,
+              childName: '$display$honorific',
+              officeId: widget.officeId,
+              businessDate: widget.businessDate,
+              openRegisterTab: true,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

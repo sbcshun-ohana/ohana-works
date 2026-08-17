@@ -1364,6 +1364,13 @@ class ChildcareService {
     await _client.rpc('soft_delete_child_internal_note', params: {'p_note_id': noteId});
   }
 
+  /// 園児台帳の一覧用(217 fetch_children_for_office_master・職員全員可)。
+  /// 在籍状況(入園予定/在籍中/退園済み)・ふりがな・クラスを含む全園児。
+  Future<List<Map<String, dynamic>>> fetchChildrenForOfficeMaster(String officeId) async {
+    final rows = await _client.rpc('fetch_children_for_office_master', params: {'p_office_id': officeId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 園児台帳(221)。children正本+世帯住所+承認済み入園フォームのスナップショット。
   /// 施設の全職員が閲覧可(閲覧専用)。
   Future<Map<String, dynamic>?> fetchChildRegister(String childId) async {
