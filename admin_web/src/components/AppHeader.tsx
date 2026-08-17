@@ -41,8 +41,11 @@ function AppHeaderInner() {
 
   // 保育業務メニュー/施設プルダウンは、機能フラグが有効な施設が1つでもある場合のみ表示(既定OFF)。
   const showChildcare = (offices?.length ?? 0) > 0;
-  // 施設プルダウンは保育業務(/childcare)配下でのみ表示する。他ドメイン(勤怠/シフト等)は対象外。
-  const isChildcarePage = pathname.startsWith("/childcare");
+  // 施設プルダウンは保育業務(/childcare)配下と、保育業務の施設選択に依存するトップレベルページ
+  // (/children=園児マスタ)で表示する。他ドメイン(勤怠/シフト等)は対象外。
+  // ※useChildcareOffices を使うページを /childcare の外へ出す場合はここへ追加すること
+  //  (追加しないと施設プルダウンが出ず、先頭施設が黙って選ばれる)。
+  const isChildcarePage = pathname.startsWith("/childcare") || pathname === "/children";
 
   const navItems = showChildcare
     ? [...NAV_ITEMS, { href: "/childcare/attendance", label: "保育業務" }]
