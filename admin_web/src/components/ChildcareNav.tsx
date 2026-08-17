@@ -20,6 +20,7 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/staff-messages", label: "園内連絡" },
   { href: "/childcare/announcements", label: "一斉配信" },
   { href: "/childcare/guardians", label: "保護者管理" },
+  { href: "/childcare/enrollment-forms", label: "入園手続き" },
   { href: "/childcare/parent-requests", label: "保護者からの連絡" },
   { href: "/childcare/class-photos", label: "クラス写真" },
   { href: "/childcare/emergency-contacts", label: "緊急連絡先" },

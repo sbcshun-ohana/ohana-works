@@ -10,6 +10,7 @@ import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal"
 import { ChildWeeklyScheduleModal } from "@/components/ChildWeeklyScheduleModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
 import { InvitationQrModal } from "@/components/InvitationQrModal";
+import { PromoteProvisionalChildModal } from "@/components/PromoteProvisionalChildModal";
 import { ProvisionalChildModal } from "@/components/ProvisionalChildModal";
 import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
@@ -43,6 +44,7 @@ function ChildcareChildrenPageContent() {
   const [isCreating, setIsCreating] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [qrRow, setQrRow] = useState<ChildMasterRow | null>(null);
+  const [promoteRow, setPromoteRow] = useState<ChildMasterRow | null>(null);
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
@@ -231,6 +233,13 @@ function ChildcareChildrenPageContent() {
                             className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
                           >
                             招待QR
+                          </button>
+                          <button
+                            onClick={() => setPromoteRow(row)}
+                            disabled={classes.length === 0}
+                            className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+                          >
+                            正式入園
                           </button>
                           <button
                             onClick={() => cancelProvisionalChild(row)}
@@ -446,6 +455,18 @@ function ChildcareChildrenPageContent() {
           childId={qrRow.child_id}
           childName={qrRow.full_name}
           onClose={() => setQrRow(null)}
+        />
+      )}
+
+      {promoteRow && (
+        <PromoteProvisionalChildModal
+          row={promoteRow}
+          classes={classes}
+          onClose={() => setPromoteRow(null)}
+          onSaved={() => {
+            setPromoteRow(null);
+            setReloadToken((t) => t + 1);
+          }}
         />
       )}
 

@@ -377,6 +377,36 @@ export const GUARDIAN_INVITATION_STATUS_LABELS: Record<GuardianInvitationRow["st
   revoked: "取消済み",
 };
 
+export type EnrollmentFormRow = {
+  form_id: string;
+  child_id: string;
+  child_full_name: string;
+  child_name_kana: string | null;
+  status: "draft" | "submitted" | "sent_back" | "approved" | "cancelled";
+  current_step: number;
+  last_saved_at: string | null;
+  latest_version: number | null;
+  latest_submitted_at: string | null;
+  latest_review_status: string | null;
+};
+
+export type EnrollmentFormReview = {
+  form_id: string;
+  child_id: string;
+  form_status: string;
+  version: number | null;
+  submitted_at: string | null;
+  review_status: string | null;
+  review_message: string | null;
+  data: Record<string, unknown> | null;
+  current_full_name: string;
+  current_name_kana: string | null;
+  current_display_name: string;
+  current_gender: string | null;
+  current_birth_date: string | null;
+  current_household: Record<string, string | null> | null;
+};
+
 export type ParentRequestRow = {
   request_id: string;
   child_id: string;
