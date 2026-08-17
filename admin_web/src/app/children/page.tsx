@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
+import { ChildRegisterEditModal } from "@/components/ChildRegisterEditModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
 import { ChildWeeklyScheduleModal } from "@/components/ChildWeeklyScheduleModal";
@@ -45,6 +46,7 @@ function ChildcareChildrenPageContent() {
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [qrRow, setQrRow] = useState<ChildMasterRow | null>(null);
   const [promoteRow, setPromoteRow] = useState<ChildMasterRow | null>(null);
+  const [registerEditRow, setRegisterEditRow] = useState<ChildMasterRow | null>(null);
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
@@ -100,22 +102,6 @@ function ChildcareChildrenPageContent() {
     .slice()
     .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
   const today = currentDate();
-
-  async function toggleChildKind(row: ChildMasterRow) {
-    const nextKind = row.child_kind === "temporary" ? "regular" : "temporary";
-    const label = nextKind === "temporary" ? "一時預かり" : "通常在籍";
-    if (!window.confirm(`${row.display_name}${row.honorific_suffix ?? ""}の在籍種別を「${label}」に変更しますか?`)) return;
-    const supabase = createClient();
-    const { error } = await supabase.rpc("set_child_kind", {
-      p_child_id: row.child_id,
-      p_child_kind: nextKind,
-    });
-    if (error) {
-      setRowsError(error.message);
-      return;
-    }
-    setReloadToken((t) => t + 1);
-  }
 
   async function cancelProvisionalChild(row: ChildMasterRow) {
     if (!window.confirm(`${row.full_name}さんの仮登録を取り消しますか?(退園済み扱いになります)`)) return;
@@ -229,6 +215,12 @@ function ChildcareChildrenPageContent() {
                       <td className="px-4 py-2 text-right">
                         <div className="flex justify-end gap-2">
                           <button
+                            onClick={() => setRegisterEditRow(row)}
+                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                          >
+                            園児情報
+                          </button>
+                          <button
                             onClick={() => setQrRow(row)}
                             className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
                           >
@@ -313,17 +305,8 @@ function ChildcareChildrenPageContent() {
                             退園済み{row.withdrawal_date ? `(${row.withdrawal_date})` : ""}
                           </span>
                         ) : (
-                          <div className="space-y-1">
-                            <span className="block text-slate-500">{row.enrollment_status}</span>
-                            {isManager && (
-                              <button
-                                onClick={() => toggleChildKind(row)}
-                                className="text-xs text-slate-400 underline hover:text-slate-600"
-                              >
-                                {row.child_kind === "temporary" ? "通常在籍に戻す" : "一時預かりにする"}
-                              </button>
-                            )}
-                          </div>
+                          // 在籍種別の変更は「園児情報」編集モーダル内に集約(俊指示 2026-08-17: 一覧のリンクは誤操作防止のため廃止)
+                          <span className="text-slate-500">{row.enrollment_status}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -351,6 +334,12 @@ function ChildcareChildrenPageContent() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setRegisterEditRow(row)}
+                            className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                          >
+                            園児情報
+                          </button>
                           {internalNotesEnabled && (
                             <button
                               onClick={() => setInternalNotesRow(row)}
@@ -455,6 +444,17 @@ function ChildcareChildrenPageContent() {
           childId={qrRow.child_id}
           childName={qrRow.full_name}
           onClose={() => setQrRow(null)}
+        />
+      )}
+
+      {registerEditRow && (
+        <ChildRegisterEditModal
+          row={registerEditRow}
+          onClose={() => setRegisterEditRow(null)}
+          onSaved={() => {
+            setRegisterEditRow(null);
+            setReloadToken((t) => t + 1);
+          }}
         />
       )}
 
