@@ -100,16 +100,20 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
       filtered = filtered.where((c) => _category(c) == _filter).toList();
     }
 
-    // 区分別にグループ化。表示順=クラス→クラス未所属→入園前→卒園・退園済み
+    // 区分別にグループ化。表示順=クラス(年齢区分順=fetch_childcare_classesの返却順)→
+    // クラス未所属→入園前→卒園・退園済み。クラス名の50音順ソートはしない(俊指示 2026-08-17)。
     final byCategory = <String, List<Map<String, dynamic>>>{};
     for (final c in filtered) {
       byCategory.putIfAbsent(_category(c), () => []).add(c);
     }
+    final classOrder = <String, int>{
+      for (var i = 0; i < _classes.length; i++) _classes[i].className: i,
+    };
     int rank(String cat) {
-      if (cat == _preEnrollLabel) return 2;
-      if (cat == _withdrawnLabel) return 3;
-      if (cat == _noClassLabel) return 1;
-      return 0;
+      if (cat == _preEnrollLabel) return 1000002;
+      if (cat == _withdrawnLabel) return 1000003;
+      if (cat == _noClassLabel) return 1000001;
+      return classOrder[cat] ?? 1000000; // 既知クラス=年齢順index・未知クラス=クラス群の末尾
     }
     final categories = byCategory.keys.toList()
       ..sort((a, b) {
