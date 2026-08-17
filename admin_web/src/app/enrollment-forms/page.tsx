@@ -3,7 +3,6 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
-import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import {
   ENROLLMENT_SECTION_LABELS,
@@ -365,7 +364,6 @@ function EnrollmentFormsPageContent() {
   return (
     <div className="flex flex-1 flex-col">
       <AppHeader />
-      <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
         <div>
           <h2 className="text-lg font-bold text-slate-800">入園手続き(入園時基本情報)</h2>

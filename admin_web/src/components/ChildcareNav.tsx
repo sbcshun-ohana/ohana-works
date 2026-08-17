@@ -19,15 +19,12 @@ const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/contacts/copy", label: "コピー" },
   { href: "/childcare/staff-messages", label: "園内連絡" },
   { href: "/childcare/announcements", label: "一斉配信" },
-  { href: "/childcare/guardians", label: "保護者管理" },
-  { href: "/childcare/enrollment-forms", label: "入園手続き" },
   { href: "/childcare/parent-requests", label: "保護者からの連絡" },
   { href: "/childcare/class-photos", label: "クラス写真" },
   { href: "/childcare/emergency-contacts", label: "緊急連絡先" },
   { href: THERAPY_HREF, label: "療育記録" },
   { href: "/childcare/support-childcare", label: "支援保育" },
-  // 感染症マスター(205)。閲覧は職員可・編集はRLSで統括園長以上に限定されるためタブは常時表示。
-  { href: "/childcare/infection-masters", label: "感染症マスター" },
+  // 保護者管理・入園手続き・感染症マスターは管理業務としてトップレベルへ移設(俊指示 2026-08-17)。
 ];
 
 export function ChildcareNav() {

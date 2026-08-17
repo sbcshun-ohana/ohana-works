@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
-import { ChildcareNav } from "@/components/ChildcareNav";
 
 // 感染症マスター管理(205・設計指示書§4)。閲覧=職員(RLS)、登録・改訂・確認記録・様式PDF=統括園長以上
 // (RLS/storageポリシーで強制。権限外の操作はサーバー側で拒否されエラー表示になる)。
@@ -164,7 +163,6 @@ function ChildcareInfectionMastersPageContent() {
   return (
     <div className="flex flex-1 flex-col">
       <AppHeader />
-      <ChildcareNav />
       <main className="flex-1 space-y-6 p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-slate-800">感染症マスター</h2>
