@@ -61,7 +61,8 @@ export default function FeatureFlagsPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.rpc("is_system_admin").then(({ data, error }) => {
+    // 219: 機能フラグ管理は統括園長以上(system_admin+executive_director)
+    supabase.rpc("is_executive_director_or_admin").then(({ data, error }) => {
       setCanManage(error ? false : Boolean(data));
     });
   }, []);
