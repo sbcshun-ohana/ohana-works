@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
+import { ChildClassChangeModal } from "@/components/ChildClassChangeModal";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildRegisterEditModal } from "@/components/ChildRegisterEditModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
@@ -47,6 +48,7 @@ function ChildcareChildrenPageContent() {
   const [qrRow, setQrRow] = useState<ChildMasterRow | null>(null);
   const [promoteRow, setPromoteRow] = useState<ChildMasterRow | null>(null);
   const [registerEditRow, setRegisterEditRow] = useState<ChildMasterRow | null>(null);
+  const [classChangeRow, setClassChangeRow] = useState<ChildMasterRow | null>(null);
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
@@ -340,6 +342,15 @@ function ChildcareChildrenPageContent() {
                           >
                             園児情報
                           </button>
+                          {!isWithdrawn && (
+                            <button
+                              onClick={() => setClassChangeRow(row)}
+                              disabled={classes.length === 0}
+                              className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                              クラス変更
+                            </button>
+                          )}
                           {internalNotesEnabled && (
                             <button
                               onClick={() => setInternalNotesRow(row)}
@@ -444,6 +455,18 @@ function ChildcareChildrenPageContent() {
           childId={qrRow.child_id}
           childName={qrRow.full_name}
           onClose={() => setQrRow(null)}
+        />
+      )}
+
+      {classChangeRow && (
+        <ChildClassChangeModal
+          row={classChangeRow}
+          classes={classes}
+          onClose={() => setClassChangeRow(null)}
+          onSaved={() => {
+            setClassChangeRow(null);
+            setReloadToken((t) => t + 1);
+          }}
         />
       )}
 

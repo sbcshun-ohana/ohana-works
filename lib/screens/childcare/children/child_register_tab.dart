@@ -104,6 +104,7 @@ bool _isPhoneKey(String key) => key.contains('phone') || key == 'work_mobile';
 
 class _ChildRegisterTabState extends State<ChildRegisterTab> {
   Map<String, dynamic>? _register;
+  List<Map<String, dynamic>> _classHistory = const [];
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -119,6 +120,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
   Future<void> _load() async {
     try {
       final register = await widget.service.fetchChildRegister(widget.childId);
+      final classHistory = await widget.service.fetchChildClassHistory(widget.childId);
       String? planned;
       if (register != null &&
           register['class_name'] == null &&
@@ -137,6 +139,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
       if (mounted) {
         setState(() {
           _register = register;
+          _classHistory = classHistory;
           _plannedClassLabel = planned;
           _isLoading = false;
         });
@@ -194,6 +197,14 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
             _row('在籍状況',
                 '${r['enrollment_status'] ?? ''}${r['child_kind'] == 'temporary' ? '(一時預かり)' : ''}'),
           ]),
+          if (_classHistory.isNotEmpty)
+            _card('クラス在籍履歴', [
+              for (final h in _classHistory)
+                _row(
+                  (h['class_name'] as String?) ?? '',
+                  '${h['effective_start_date'] ?? ''} 〜 ${h['effective_end_date'] ?? '現在'}',
+                ),
+            ]),
           if (household != null)
             _card('世帯住所', [
               _row('郵便番号', (household['postal_code'] as String?) ?? '—'),

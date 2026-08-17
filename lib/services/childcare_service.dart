@@ -1371,6 +1371,12 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// クラス在籍履歴(223)。進級・転クラスの履歴表示用(全職員閲覧可)。
+  Future<List<Map<String, dynamic>>> fetchChildClassHistory(String childId) async {
+    final rows = await _client.rpc('fetch_child_class_history', params: {'p_child_id': childId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 園児台帳(221)。children正本+世帯住所+承認済み入園フォームのスナップショット。
   /// 施設の全職員が閲覧可(閲覧専用)。
   Future<Map<String, dynamic>?> fetchChildRegister(String childId) async {
