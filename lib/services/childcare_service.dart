@@ -1371,6 +1371,18 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 食材チェックの施設フラグ(224)。
+  Future<bool> isFoodCheckEnabledForOffice(String officeId) async {
+    final result = await _client.rpc('is_food_check_enabled_for_office', params: {'p_office_id': officeId});
+    return result == true;
+  }
+
+  /// 食材チェック進捗(224)。段階ごとの必須完了数(台帳表示用・全職員閲覧可)。
+  Future<List<Map<String, dynamic>>> fetchChildFoodProgress(String childId) async {
+    final rows = await _client.rpc('fetch_child_food_progress', params: {'p_child_id': childId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// クラス在籍履歴(223)。進級・転クラスの履歴表示用(全職員閲覧可)。
   Future<List<Map<String, dynamic>>> fetchChildClassHistory(String childId) async {
     final rows = await _client.rpc('fetch_child_class_history', params: {'p_child_id': childId});

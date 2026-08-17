@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/guardians", label: "保護者管理" },
   { href: "/enrollment-forms", label: "入園手続き" },
   { href: "/infection-masters", label: "感染症マスター" },
+  { href: "/food-checks", label: "食材チェック" },
   { href: "/notices", label: "お知らせ(職員向け)" },
   { href: "/payroll", label: "給与確定" },
   { href: "/settings", label: "設定" },
@@ -26,7 +27,7 @@ const NAV_ITEMS = [
 // 保育業務の施設選択(?office=)に依存するトップレベルページ。
 // useChildcareOffices を使うページを /childcare の外へ出す場合はここへ追加すること
 // (追加しないと施設プルダウンが出ず、先頭施設が黙って選ばれる)。
-const CHILDCARE_OFFICE_PAGES = ["/children", "/guardians", "/enrollment-forms", "/infection-masters"];
+const CHILDCARE_OFFICE_PAGES = ["/children", "/guardians", "/enrollment-forms", "/infection-masters", "/food-checks"];
 
 // useSearchParams はビルド時の静的プリレンダーで Suspense 境界を要求するため、
 // 内側を Suspense でラップする(下部の export function AppHeader)。

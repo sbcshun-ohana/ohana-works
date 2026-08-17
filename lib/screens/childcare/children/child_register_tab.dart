@@ -105,6 +105,7 @@ bool _isPhoneKey(String key) => key.contains('phone') || key == 'work_mobile';
 class _ChildRegisterTabState extends State<ChildRegisterTab> {
   Map<String, dynamic>? _register;
   List<Map<String, dynamic>> _classHistory = const [];
+  List<Map<String, dynamic>> _foodProgress = const [];
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -121,6 +122,12 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
     try {
       final register = await widget.service.fetchChildRegister(widget.childId);
       final classHistory = await widget.service.fetchChildClassHistory(widget.childId);
+      // 食材チェック進捗(224): 施設フラグONのときだけ表示
+      var foodProgress = const <Map<String, dynamic>>[];
+      if (widget.officeId != null &&
+          await widget.service.isFoodCheckEnabledForOffice(widget.officeId!)) {
+        foodProgress = await widget.service.fetchChildFoodProgress(widget.childId);
+      }
       String? planned;
       if (register != null &&
           register['class_name'] == null &&
@@ -140,6 +147,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
         setState(() {
           _register = register;
           _classHistory = classHistory;
+          _foodProgress = foodProgress;
           _plannedClassLabel = planned;
           _isLoading = false;
         });
@@ -203,6 +211,16 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
                 _row(
                   (h['class_name'] as String?) ?? '',
                   '${h['effective_start_date'] ?? ''} 〜 ${h['effective_end_date'] ?? '現在'}',
+                ),
+            ]),
+          if (_foodProgress.isNotEmpty)
+            _card('食材チェック進捗(必須確認食材)', [
+              for (final p in _foodProgress)
+                _row(
+                  (p['stage'] as String?) ?? '',
+                  '${p['required_done'] ?? 0} / ${p['required_total'] ?? 0} 完了'
+                  '${((p['symptom_count'] as num?)?.toInt() ?? 0) > 0 ? '(症状あり ${p['symptom_count']}件)' : ''}',
+                  valueColor: ((p['symptom_count'] as num?)?.toInt() ?? 0) > 0 ? Colors.red : null,
                 ),
             ]),
           if (household != null)

@@ -8,6 +8,7 @@ import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
 import '../enrollment/enrollment_form_screen.dart';
+import '../food_check/food_check_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
 import '../infection/return_notice_screen.dart';
@@ -41,6 +42,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
       String requiredDocument, String documentState, String? formTemplatePath})> _infectionCases = const [];
   // 入園時基本情報フォーム(218)。機能ON かつ 未承認のときだけ案内カードを出す。
   String? _enrollmentFormStatus; // null=非表示 / 'none'=未入力 / draft / submitted / sent_back
+  // 食材チェック(224)。施設フラグONのときグリッドにメニューを出す。
+  bool _foodCheckEnabled = false;
 
   @override
   void initState() {
@@ -49,6 +52,16 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     _loadUnreadCounts();
     _loadInfectionCases();
     _loadEnrollmentFormStatus();
+    _loadFoodCheckEnabled();
+  }
+
+  Future<void> _loadFoodCheckEnabled() async {
+    try {
+      final enabled = await widget.guardianService.isFoodCheckEnabled(widget.child.childId);
+      if (mounted) setState(() => _foodCheckEnabled = enabled);
+    } catch (_) {
+      // 取得失敗時は非表示(安全側)。
+    }
   }
 
   Future<void> _loadEnrollmentFormStatus() async {
@@ -355,6 +368,21 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
               guardianService: widget.guardianService,
               child: widget.child,
               guardianId: widget.guardianId,
+            ),
+          ),
+        ),
+      // 食材チェック(224)
+      if (_foodCheckEnabled)
+        _GridMenuItem(
+          icon: Icons.restaurant_rounded,
+          color: AppColors.leafGreen,
+          label: '食材チェック',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => FoodCheckScreen(
+                guardianService: widget.guardianService,
+                child: widget.child,
+              ),
             ),
           ),
         ),

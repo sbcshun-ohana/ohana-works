@@ -819,6 +819,57 @@ class GuardianService {
     }
   }
 
+  // ===== 食材チェック(M6 Phase 4・migration 224) =====
+
+  /// 食材チェックが対象園児で有効か(施設フラグ+保護者リンク)。
+  Future<bool> isFoodCheckEnabled(String childId) async {
+    final result = await _client.rpc('is_food_check_enabled_for_child', params: {'p_child_id': childId});
+    return result == true;
+  }
+
+  /// チェックリスト(公開中の最新版+項目ごとの状態)。
+  Future<List<Map<String, dynamic>>> fetchFoodChecklist(String childId) async {
+    final rows = await _client.rpc('fetch_food_checklist', params: {'p_child_id': childId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 食材経験の登録。症状ありは園の管理職へ通知される。
+  Future<void> recordFoodIntake({
+    required String childId,
+    required String foodItemId,
+    required DateTime intakeDate,
+    required bool multipleConfirmed,
+    required String result,
+    String? symptoms,
+    String? onsetNote,
+    String? amountNote,
+    String? medicalStatus,
+    String? note,
+  }) async {
+    try {
+      await _client.rpc('record_food_intake', params: {
+        'p_child_id': childId,
+        'p_food_item_id': foodItemId,
+        'p_intake_date': _formatDate(intakeDate),
+        'p_multiple_confirmed': multipleConfirmed,
+        'p_result': result,
+        'p_symptoms': symptoms,
+        'p_onset_note': onsetNote,
+        'p_amount_note': amountNote,
+        'p_medical_status': medicalStatus,
+        'p_note': note,
+      });
+    } on PostgrestException catch (e) {
+      if (e.message.contains('symptoms required')) {
+        throw GuardianServiceException('症状の内容を入力してください');
+      }
+      if (e.message.contains('invalid intake date')) {
+        throw GuardianServiceException('摂取日が正しくありません(未来の日付は登録できません)');
+      }
+      throw GuardianServiceException('登録に失敗しました: ${e.message}');
+    }
+  }
+
   String _translateEnrollmentError(String message) {
     if (message.contains('required fields missing')) {
       return '必須項目が入力されていません。各ステップの必須項目をご確認ください';
