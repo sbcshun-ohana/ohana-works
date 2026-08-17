@@ -43,7 +43,11 @@ class ListGroupDef {
     required this.itemFields,
     this.minItems = 0,
     this.note,
+    this.numberByPriority = false,
   });
+
+  /// true のとき各項目の見出しを「◯◯(優先順位n)」にする(並び順=優先順位。緊急連絡先で使用)。
+  final bool numberByPriority;
 
   /// セクション内の配列キー(例: guardians は section 直下が配列)。
   final String listKey;
@@ -180,12 +184,13 @@ const enrollmentSteps = <StepDef>[
         listKey: 'emergency',
         itemLabel: '緊急連絡先',
         minItems: 3,
-        note: '保護者に連絡がつかない場合の連絡先です。3件のご登録をお願いします(勤務先等の場合は会社名でご記入ください)',
+        numberByPriority: true,
+        note: '保護者に連絡がつかない場合の連絡先です。優先順位の高い順に3件のご登録をお願いします'
+            '(勤務先等の場合は会社名でご記入ください)',
         itemFields: [
           FieldDef('name', '氏名(会社等の場合は会社名)', required: true),
           FieldDef('relationship', '続柄・園児との関係', required: true, hint: '例: 祖母・母の勤務先'),
           FieldDef('phone', '電話番号', type: FieldType.phone, required: true),
-          FieldDef('priority', '連絡優先順位', type: FieldType.number),
         ],
       ),
       ListGroupDef(

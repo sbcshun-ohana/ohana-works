@@ -680,7 +680,8 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Text('${g.itemLabel} ${i + 1}',
+                    child: Text(
+                        g.numberByPriority ? '${g.itemLabel}(優先順位${i + 1})' : '${g.itemLabel} ${i + 1}',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                   ),
                   if (_isEditable)
@@ -841,7 +842,8 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
           if (v == null || (v is String && v.trim().isEmpty) || v == false) continue;
           parts.add(v is bool ? f.label : '${f.label}: $v');
         }
-        rows.add(_summaryRow('${g.itemLabel}${i + 1}',
+        rows.add(_summaryRow(
+            g.numberByPriority ? '${g.itemLabel}(優先順位${i + 1})' : '${g.itemLabel}${i + 1}',
             name.isEmpty ? parts.join(' / ') : '$name${parts.isEmpty ? '' : '(${parts.join(' / ')})'}'));
       }
     }
