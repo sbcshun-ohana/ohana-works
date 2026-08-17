@@ -137,10 +137,12 @@ const enrollmentSteps = <StepDef>[
       FieldDef('pickup_person', '通常の迎え担当者', required: true),
       FieldDef('method', '通園方法', type: FieldType.select, required: true,
           options: ['徒歩', '自転車', '自動車', '公共交通機関']),
-      // 自動車: 書類提出が必要なため車両情報を追加で収集(俊指示 2026-08-17)
+      // 自動車: このフォームの車両情報入力をもって自動車利用の届出扱いとする(俊指示 2026-08-17・別紙書類は不要)
+      // notice の required:true は「必須項目グループ内に表示する」ための指定(未入力チェック対象にはならない)
       FieldDef('car_notice',
-          '自動車で通園される場合は、自動車利用に関する書類のご提出が必要です。園からのご案内に従ってご提出ください。',
-          type: FieldType.notice, visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+          '自動車で通園される場合は、以下の車両情報の入力が必ず必要です(この入力をもって自動車利用の届出となります)。',
+          type: FieldType.notice, required: true,
+          visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
       FieldDef('car_number', '車両ナンバー', required: true,
           hint: '例: 相模 300 あ 12-34', visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
       FieldDef('car_model', '車種・色', required: true, hint: '例: 白のフリード',
@@ -150,7 +152,8 @@ const enrollmentSteps = <StepDef>[
       // 自転車: 保険加入・ヘルメット着用の要請+確認チェック必須(俊指示 2026-08-17)
       FieldDef('bicycle_notice',
           '自転車で送迎される場合は、自転車保険へのご加入と、お子様・保護者様のヘルメット着用をお願いしています。',
-          type: FieldType.notice, visibleWhenKey: 'method', visibleWhenEquals: '自転車'),
+          type: FieldType.notice, required: true,
+          visibleWhenKey: 'method', visibleWhenEquals: '自転車'),
       FieldDef('bicycle_acknowledged', '上記の注意事項(保険加入・ヘルメット着用)を確認しました',
           type: FieldType.toggle, required: true,
           visibleWhenKey: 'method', visibleWhenEquals: '自転車'),
