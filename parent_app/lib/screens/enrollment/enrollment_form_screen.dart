@@ -58,6 +58,13 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
           },
         };
       }
+      // 緊急連絡先は3件必須のため、編集可能な状態なら空の入力枠を3件まで先に用意しておく
+      if (_form == null || _form!.isEditable) {
+        final emergency = _sectionList('pickup', 'emergency');
+        while (emergency.length < 3) {
+          emergency.add(<String, dynamic>{});
+        }
+      }
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       if (mounted) {
@@ -162,14 +169,17 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
 
   // ===== 必須チェック(クライアント側) =====
 
-  /// 未入力の必須項目(該当ステップ番号つき。確認画面からタップでジャンプできるようにする)
+  /// 未入力の必須項目(該当ステップ番号つき。確認画面からタップでジャンプできるようにする)。
+  /// 条件表示(visibleWhen)で非表示のフィールドと、リスト内の必須欄も判定する。
   List<({int step, String stepTitle, String label})> _missingRequired() {
     final missing = <({int step, String stepTitle, String label})>[];
     for (var i = 0; i < enrollmentSteps.length; i++) {
       final step = enrollmentSteps[i];
+      final section = _section(step.sectionKey);
       for (final f in step.fields) {
-        if (!f.required) continue;
-        final v = _section(step.sectionKey)[f.key];
+        if (!f.required || f.type == FieldType.notice) continue;
+        if (!f.isVisible(section)) continue;
+        final v = section[f.key];
         if (v == null || (v is String && v.trim().isEmpty)) {
           missing.add((step: i + 1, stepTitle: step.title, label: f.label));
         }
@@ -177,9 +187,26 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
       for (final g in step.listGroups) {
         final list = _sectionList(step.sectionKey, g.listKey);
         if (g.minItems > 0 && list.length < g.minItems) {
-          missing.add((step: i + 1, stepTitle: step.title, label: '${g.itemLabel}を${g.minItems}名以上登録してください'));
+          missing.add((step: i + 1, stepTitle: step.title, label: '${g.itemLabel}を${g.minItems}件以上登録してください'));
+        }
+        for (var j = 0; j < list.length; j++) {
+          final item = (list[j] as Map).cast<String, dynamic>();
+          for (final f in g.itemFields) {
+            if (!f.required || !f.isVisible(item)) continue;
+            final v = item[f.key];
+            if (v == null || (v is String && v.trim().isEmpty)) {
+              missing.add((step: i + 1, stepTitle: step.title, label: '${g.itemLabel}${j + 1}: ${f.label}'));
+            }
+          }
         }
       }
+    }
+    // 保護者が複数名のときは代表保護者の選択が必須(俊指示 2026-08-17)
+    final guardians = _sectionList('guardians', '');
+    if (guardians.length >= 2 &&
+        !guardians.any((g) => (g as Map)['is_representative'] == true)) {
+      final idx = enrollmentSteps.indexWhere((s) => s.sectionKey == 'guardians');
+      missing.add((step: idx + 1, stepTitle: '保護者・勤務先・連絡先', label: '代表保護者を1名選択してください'));
     }
     return missing;
   }
@@ -407,12 +434,14 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
         if (requiredFields.isNotEmpty) ...[
           _groupHeader('必須項目', AppColors.danger, note: '入力がないと提出できません'),
           for (final f in requiredFields)
-            _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
+            if (f.isVisible(_section(stepDef.sectionKey)))
+              _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
         ],
         if (optionalFields.isNotEmpty) ...[
           _groupHeader('任意項目', AppColors.textSecondary),
           for (final f in optionalFields)
-            _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
+            if (f.isVisible(_section(stepDef.sectionKey)))
+              _fieldWidget(stepDef.sectionKey, _section(stepDef.sectionKey), f),
         ],
         for (final g in stepDef.listGroups) ..._listGroupWidgets(stepDef.sectionKey, g),
         const SizedBox(height: 24),
@@ -451,6 +480,29 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
     final enabled = _isEditable;
     final fieldKey = ValueKey('${keyPrefix ?? sectionKey}.${f.key}.$_step');
     switch (f.type) {
+      case FieldType.notice:
+        // 条件付きの注意書き(自動車の書類提出・自転車の保険/ヘルメット等)。入力欄ではない。
+        return Container(
+          key: fieldKey,
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.warmOrange.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.warmOrange.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.warmOrange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(f.label,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        );
       case FieldType.toggle:
         return SwitchListTile(
           key: fieldKey,
@@ -622,8 +674,9 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
               ),
               // cast() は元Mapへのビューを返すため、書き込みはそのまま _data に反映される
               for (final f in g.itemFields)
-                _fieldWidget(sectionKey, (list[i] as Map).cast<String, dynamic>(), f,
-                    keyPrefix: '$sectionKey.${g.listKey}.$i'),
+                if (f.isVisible((list[i] as Map).cast<String, dynamic>()))
+                  _fieldWidget(sectionKey, (list[i] as Map).cast<String, dynamic>(), f,
+                      keyPrefix: '$sectionKey.${g.listKey}.$i'),
             ],
           ),
         ),

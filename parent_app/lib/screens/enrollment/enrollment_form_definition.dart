@@ -3,7 +3,7 @@
 /// key はセクションJSONB内のキー(サーバの submit_enrollment_form / approve_enrollment_form と契約)。
 library;
 
-enum FieldType { text, kana, multiline, phone, email, number, date, select, toggle, postal }
+enum FieldType { text, kana, multiline, phone, email, number, date, select, toggle, postal, notice }
 
 class FieldDef {
   const FieldDef(
@@ -13,6 +13,8 @@ class FieldDef {
     this.required = false,
     this.options,
     this.hint,
+    this.visibleWhenKey,
+    this.visibleWhenEquals,
   });
 
   final String key;
@@ -21,6 +23,16 @@ class FieldDef {
   final bool required;
   final List<String>? options;
   final String? hint;
+
+  /// 条件表示: 同一セクション内の visibleWhenKey の値が visibleWhenEquals のときだけ表示する
+  /// (例: 通園方法=自動車のときの車両情報)。非表示のときは必須チェックの対象外。
+  final String? visibleWhenKey;
+  final String? visibleWhenEquals;
+
+  bool isVisible(Map<String, dynamic> section) {
+    if (visibleWhenKey == null) return true;
+    return (section[visibleWhenKey!] ?? '').toString() == visibleWhenEquals;
+  }
 }
 
 /// 繰り返しグループ(保護者・緊急連絡先・代理送迎者・家族など)。
@@ -79,10 +91,10 @@ const enrollmentSteps = <StepDef>[
     note: '郵便番号を入力して「住所検索」を押すと都道府県・市区町村・町域が自動入力されます',
     fields: [
       FieldDef('postal_code', '世帯郵便番号', type: FieldType.postal, required: true, hint: '例: 2420001(ハイフン不要)'),
-      FieldDef('prefecture', '都道府県'),
-      FieldDef('city', '市区町村'),
+      FieldDef('prefecture', '都道府県', required: true),
+      FieldDef('city', '市区町村', required: true),
       FieldDef('town', '町域'),
-      FieldDef('address_line', '番地'),
+      FieldDef('address_line', '番地', required: true),
       FieldDef('building', '建物名・部屋番号'),
       FieldDef('child_same', '園児の住所は世帯住所と同じ', type: FieldType.toggle),
       FieldDef('child_address', '園児住所(別居等で異なる場合)', type: FieldType.multiline),
@@ -99,14 +111,14 @@ const enrollmentSteps = <StepDef>[
         note: '保護者は複数人登録できます。園児台帳から電話をかけられるよう、番号の種別ごとにご入力ください',
         itemFields: [
           FieldDef('name', '氏名', required: true),
-          FieldDef('name_kana', 'ふりがな', type: FieldType.kana),
-          FieldDef('relationship', '園児との続柄', hint: '例: 母・父・祖母'),
+          FieldDef('name_kana', 'ふりがな', type: FieldType.kana, required: true),
+          FieldDef('relationship', '園児との続柄', required: true, hint: '例: 母・父・祖母'),
           FieldDef('living', '同居・別居', type: FieldType.select, options: ['同居', '別居']),
           FieldDef('is_representative', '代表保護者', type: FieldType.toggle),
-          FieldDef('priority', '連絡優先順位', type: FieldType.number, hint: '1が最優先'),
-          FieldDef('phone_mobile', '携帯電話番号', type: FieldType.phone),
+          FieldDef('priority', '連絡優先順位', type: FieldType.number, required: true, hint: '1が最優先'),
+          FieldDef('phone_mobile', '携帯電話番号', type: FieldType.phone, required: true),
           FieldDef('phone_home', '自宅電話番号', type: FieldType.phone),
-          FieldDef('email', 'メールアドレス', type: FieldType.email),
+          FieldDef('email', 'メールアドレス', type: FieldType.email, required: true),
           FieldDef('work_name', '勤務先名'),
           FieldDef('work_phone', '勤務先電話番号', type: FieldType.phone),
           FieldDef('work_mobile', '勤務先の直通携帯', type: FieldType.phone),
@@ -121,20 +133,35 @@ const enrollmentSteps = <StepDef>[
     title: '緊急連絡先・送迎・引き渡し',
     sectionKey: 'pickup',
     fields: [
-      FieldDef('drop_person', '通常の送り担当者'),
-      FieldDef('pickup_person', '通常の迎え担当者'),
-      FieldDef('method', '通園方法', hint: '例: 徒歩・自転車・車'),
-      FieldDef('duration', '所要時間', hint: '例: 10分'),
+      FieldDef('drop_person', '通常の送り担当者', required: true),
+      FieldDef('pickup_person', '通常の迎え担当者', required: true),
+      FieldDef('method', '通園方法', type: FieldType.select, required: true,
+          options: ['徒歩', '自転車', '自動車', '公共交通機関']),
+      // 自動車: 書類提出が必要なため車両情報を追加で収集(俊指示 2026-08-17)
+      FieldDef('car_notice',
+          '自動車で通園される場合は、自動車利用に関する書類のご提出が必要です。園からのご案内に従ってご提出ください。',
+          type: FieldType.notice, visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      FieldDef('car_number', '車両ナンバー', required: true,
+          hint: '例: 相模 300 あ 12-34', visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      FieldDef('car_model', '車種・色', hint: '例: 白のフリード',
+          visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      FieldDef('car_driver', '主な運転者', visibleWhenKey: 'method', visibleWhenEquals: '自動車'),
+      // 自転車: 保険加入・ヘルメット着用の要請(俊指示 2026-08-17)
+      FieldDef('bicycle_notice',
+          '自転車で送迎される場合は、自転車保険へのご加入と、お子様・保護者様のヘルメット着用をお願いしています。',
+          type: FieldType.notice, visibleWhenKey: 'method', visibleWhenEquals: '自転車'),
+      FieldDef('duration', '所要時間', required: true, hint: '例: 10分'),
     ],
     listGroups: [
       ListGroupDef(
         listKey: 'emergency',
         itemLabel: '緊急連絡先',
-        note: '保護者に連絡がつかない場合の連絡先です',
+        minItems: 3,
+        note: '保護者に連絡がつかない場合の連絡先です。3件のご登録をお願いします(勤務先等の場合は会社名でご記入ください)',
         itemFields: [
-          FieldDef('name', '氏名', required: true),
-          FieldDef('relationship', '続柄'),
-          FieldDef('phone', '電話番号', type: FieldType.phone),
+          FieldDef('name', '氏名(会社等の場合は会社名)', required: true),
+          FieldDef('relationship', '続柄・園児との関係', required: true, hint: '例: 祖母・母の勤務先'),
+          FieldDef('phone', '電話番号', type: FieldType.phone, required: true),
           FieldDef('priority', '連絡優先順位', type: FieldType.number),
         ],
       ),
@@ -160,11 +187,11 @@ const enrollmentSteps = <StepDef>[
         itemLabel: '同居家族・兄弟姉妹',
         itemFields: [
           FieldDef('name', '氏名', required: true),
-          FieldDef('name_kana', 'ふりがな', type: FieldType.kana),
-          FieldDef('relationship', '続柄'),
-          FieldDef('birth_date', '生年月日', type: FieldType.date),
-          FieldDef('occupation_school', '職業または学校等'),
-          FieldDef('sibling_facility', '在籍施設(兄弟姉妹の場合)'),
+          FieldDef('name_kana', 'ふりがな', type: FieldType.kana, required: true),
+          FieldDef('relationship', '続柄', required: true),
+          FieldDef('birth_date', '生年月日', type: FieldType.date, required: true),
+          FieldDef('occupation_school', '職業または学校等', required: true, hint: 'ない場合は「なし」'),
+          FieldDef('sibling_facility', '在籍施設(保育園・学校等)', required: true, hint: 'ない場合は「なし」'),
         ],
       ),
     ],
@@ -172,25 +199,27 @@ const enrollmentSteps = <StepDef>[
   StepDef(
     title: '出生・生育歴',
     sectionKey: 'birth_growth',
+    // 児童票に必要な情報のため必須ベース(俊指示 2026-08-17)
+    note: '児童票の作成に必要な情報です。特記が無い項目は「なし」「特になし」とご記入ください',
     fields: [
-      FieldDef('gestational_weeks', '在胎週数', type: FieldType.number, hint: '例: 39'),
-      FieldDef('birth_order', '第何子か', type: FieldType.number),
-      FieldDef('birth_height', '出生時身長(cm)', type: FieldType.number),
-      FieldDef('birth_weight', '出生時体重(g)', type: FieldType.number),
-      FieldDef('newborn_notes', '出生時・新生児期の特記事項', type: FieldType.multiline),
-      FieldDef('feeding_method', '授乳方法', type: FieldType.select, options: ['母乳', '混合', '人工']),
-      FieldDef('weaning_age', '断乳・離乳時期', hint: '例: 1歳2か月'),
-      FieldDef('baby_food_start', '離乳食開始時期', hint: '例: 6か月'),
-      FieldDef('milestones', '首すわり・おすわり・はいはい・初歯・初語等の時期', type: FieldType.multiline),
-      FieldDef('care_history', 'これまでの養育者・生育環境', type: FieldType.multiline),
+      FieldDef('gestational_weeks', '在胎週数', type: FieldType.number, required: true, hint: '例: 39'),
+      FieldDef('birth_order', '第何子か', type: FieldType.number, required: true),
+      FieldDef('birth_height', '出生時身長(cm)', type: FieldType.number, required: true),
+      FieldDef('birth_weight', '出生時体重(g)', type: FieldType.number, required: true),
+      FieldDef('newborn_notes', '出生時・新生児期の特記事項', type: FieldType.multiline, required: true, hint: '無い場合は「なし」'),
+      FieldDef('feeding_method', '授乳方法', type: FieldType.select, required: true, options: ['母乳', '混合', '人工']),
+      FieldDef('weaning_age', '断乳・離乳時期', required: true, hint: '例: 1歳2か月(まだの場合は「未」)'),
+      FieldDef('baby_food_start', '離乳食開始時期', required: true, hint: '例: 6か月(まだの場合は「未」)'),
+      FieldDef('milestones', '首すわり・おすわり・はいはい・初歯・初語等の時期', type: FieldType.multiline, required: true),
+      FieldDef('care_history', 'これまでの養育者・生育環境', type: FieldType.multiline, required: true),
     ],
   ),
   StepDef(
     title: '健康・医療・アレルギー',
     sectionKey: 'health',
     fields: [
-      FieldDef('doctor_name', 'かかりつけ医(医療機関名)'),
-      FieldDef('doctor_phone', 'かかりつけ医 電話番号', type: FieldType.phone),
+      FieldDef('doctor_name', 'かかりつけ医(医療機関名)', required: true),
+      FieldDef('doctor_phone', 'かかりつけ医 電話番号', type: FieldType.phone, required: true),
       FieldDef('doctor_address', 'かかりつけ医 住所', type: FieldType.multiline),
       FieldDef('medical_history', '既往歴・発症時期・現在の状態', type: FieldType.multiline),
       FieldDef('episode_notes', 'けいれん・脱臼・繰り返しやすい疾病等', type: FieldType.multiline),
@@ -199,7 +228,7 @@ const enrollmentSteps = <StepDef>[
       FieldDef('allergy_diagnosed', '医師の診断あり', type: FieldType.toggle),
       FieldDef('allergy_doc_state', '診断書の提出状況', type: FieldType.select, options: ['未提出', '提出予定', '提出済み']),
       FieldDef('care_notes', '園生活上の注意事項', type: FieldType.multiline),
-      FieldDef('normal_temp', '平熱(℃)', type: FieldType.number, hint: '例: 36.5(小数第1位まで)'),
+      FieldDef('normal_temp', '平熱(℃)', type: FieldType.number, required: true, hint: '例: 36.5(小数第1位まで)'),
     ],
     listGroups: [
       ListGroupDef(
@@ -217,32 +246,35 @@ const enrollmentSteps = <StepDef>[
   StepDef(
     title: '食事・睡眠・排泄・生活習慣',
     sectionKey: 'lifestyle',
-    note: '現在のご家庭での様子をお書きください',
+    // 児童票に必要な情報のため必須ベース(俊指示 2026-08-17)
+    note: '児童票の作成に必要な情報です。現在のご家庭での様子をお書きください(該当しない項目は「なし」)',
     fields: [
-      FieldDef('feeding', '授乳(回数・量・夜間授乳・使用ミルク)', type: FieldType.multiline),
-      FieldDef('meal', '離乳食・食事(回数・量・食べ方)', type: FieldType.multiline),
-      FieldDef('self_feeding', '自分で食べる状況・使用器具・食事中の様子', type: FieldType.multiline),
-      FieldDef('likes_dislikes', '好きな食べ物・苦手な食べ物・間食', type: FieldType.multiline),
-      FieldDef('sleep', '起床・就寝・昼寝・寝る姿勢・添い寝等', type: FieldType.multiline),
-      FieldDef('excretion', '排尿・排便・おむつ・排泄の自立状況', type: FieldType.multiline),
-      FieldDef('hygiene', '手洗い・洗顔・うがい・歯磨き等', type: FieldType.multiline),
-      FieldDef('clothing', '着脱できる衣類・援助が必要な衣類', type: FieldType.multiline),
-      FieldDef('language', '言葉の発達や伝わり方', type: FieldType.multiline),
-      FieldDef('social', '人見知り・他児との遊び・大人との関わり', type: FieldType.multiline),
-      FieldDef('play', '好きな遊び・玩具・興味', type: FieldType.multiline),
+      FieldDef('feeding', '授乳(回数・量・夜間授乳・使用ミルク)', type: FieldType.multiline, required: true, hint: '卒乳済みの場合は「なし」'),
+      FieldDef('meal', '離乳食・食事(回数・量・食べ方)', type: FieldType.multiline, required: true),
+      FieldDef('self_feeding', '自分で食べる状況・使用器具・食事中の様子', type: FieldType.multiline, required: true),
+      FieldDef('likes_dislikes', '好きな食べ物・苦手な食べ物・間食', type: FieldType.multiline, required: true),
+      FieldDef('sleep', '起床・就寝・昼寝・寝る姿勢・添い寝等', type: FieldType.multiline, required: true),
+      FieldDef('excretion', '排尿・排便・おむつ・排泄の自立状況', type: FieldType.multiline, required: true),
+      FieldDef('hygiene', '手洗い・洗顔・うがい・歯磨き等', type: FieldType.multiline, required: true),
+      FieldDef('clothing', '着脱できる衣類・援助が必要な衣類', type: FieldType.multiline, required: true),
+      FieldDef('language', '言葉の発達や伝わり方', type: FieldType.multiline, required: true),
+      FieldDef('social', '人見知り・他児との遊び・大人との関わり', type: FieldType.multiline, required: true),
+      FieldDef('play', '好きな遊び・玩具・興味', type: FieldType.multiline, required: true),
     ],
   ),
   StepDef(
     title: '性格・遊び・家庭の希望',
     sectionKey: 'thoughts',
+    // 児童票に必要な情報のため必須ベース(俊指示 2026-08-17)
+    note: '児童票の作成に必要な情報です(特に無い項目は「なし」「特になし」)',
     fields: [
-      FieldDef('good_points', '保護者から見た園児の良いところ', type: FieldType.multiline),
-      FieldDef('worries', '心配していること・気になる癖', type: FieldType.multiline),
-      FieldDef('hopes', 'どのように育ってほしいか', type: FieldType.multiline),
-      FieldDef('values', '子育てで大切にしていること', type: FieldType.multiline),
-      FieldDef('requests', '園への希望', type: FieldType.multiline),
-      FieldDef('health_notes', '健康・身体上の特記事項', type: FieldType.multiline),
-      FieldDef('other', 'その他伝えておきたいこと', type: FieldType.multiline),
+      FieldDef('good_points', '保護者から見た園児の良いところ', type: FieldType.multiline, required: true),
+      FieldDef('worries', '心配していること・気になる癖', type: FieldType.multiline, required: true),
+      FieldDef('hopes', 'どのように育ってほしいか', type: FieldType.multiline, required: true),
+      FieldDef('values', '子育てで大切にしていること', type: FieldType.multiline, required: true),
+      FieldDef('requests', '園への希望', type: FieldType.multiline, required: true, hint: '特に無い場合は「なし」'),
+      FieldDef('health_notes', '健康・身体上の特記事項', type: FieldType.multiline, required: true, hint: '無い場合は「なし」'),
+      FieldDef('other', 'その他伝えておきたいこと', type: FieldType.multiline, required: true, hint: '無い場合は「なし」'),
     ],
   ),
   StepDef(
