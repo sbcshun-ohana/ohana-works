@@ -18,9 +18,9 @@ int? estimateCohortAge(String? birthDate, String? enrollmentDate) {
   return age < 0 ? null : age;
 }
 
-/// age_group「クラス名/◯歳児」等から歳児数を取り出す
+/// age_group「0歳」「2歳」「◯歳児」等から先頭の歳数を取り出す(表記ゆれ対応: 歳/歳児どちらも可)
 int? parseClassAge(String ageGroup) {
-  final m = RegExp(r'(\d+)\s*歳児').firstMatch(ageGroup);
+  final m = RegExp(r'(\d+)\s*歳').firstMatch(ageGroup);
   return m == null ? null : int.tryParse(m.group(1)!);
 }
 

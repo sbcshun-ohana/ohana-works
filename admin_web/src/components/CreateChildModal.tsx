@@ -12,9 +12,9 @@ type Props = {
   onSaved: () => void;
 };
 
-/// age_groupは「クラス名／◯歳児」形式(例:「はな組／0歳児」)から歳児数を取り出す。
+/// age_group「0歳」「2歳」「◯歳児」等から先頭の歳数を取り出す(表記ゆれ対応: 歳/歳児どちらも可)。
 export function parseClassAge(ageGroup: string): number | null {
-  const match = ageGroup.match(/(\d+)\s*歳児/);
+  const match = ageGroup.match(/(\d+)\s*歳/);
   return match ? Number(match[1]) : null;
 }
 
