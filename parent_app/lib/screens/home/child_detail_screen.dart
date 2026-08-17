@@ -7,6 +7,7 @@ import '../../widgets/child_context_app_bar_title.dart';
 import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
+import '../enrollment/enrollment_form_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
 import '../infection/return_notice_screen.dart';
@@ -38,6 +39,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   // 感染症の手続き表示(206)。進行中案件があるときだけカードを出す。
   List<({String caseId, String origin, String status, String? diseaseName, String? returnCriteria,
       String requiredDocument, String documentState, String? formTemplatePath})> _infectionCases = const [];
+  // 入園時基本情報フォーム(218)。機能ON かつ 未承認のときだけ案内カードを出す。
+  String? _enrollmentFormStatus; // null=非表示 / 'none'=未入力 / draft / submitted / sent_back
 
   @override
   void initState() {
@@ -45,6 +48,20 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     _loadFeatureFlags();
     _loadUnreadCounts();
     _loadInfectionCases();
+    _loadEnrollmentFormStatus();
+  }
+
+  Future<void> _loadEnrollmentFormStatus() async {
+    try {
+      final enabled = await widget.guardianService.isEnrollmentFormEnabled(widget.child.childId);
+      if (!enabled) return;
+      final form = await widget.guardianService.fetchEnrollmentForm(widget.child.childId);
+      final status = form?.status ?? 'none';
+      if (status == 'approved' || status == 'cancelled') return; // 完了後は案内を出さない
+      if (mounted) setState(() => _enrollmentFormStatus = status);
+    } catch (_) {
+      // 取得失敗時は非表示(安全側)。
+    }
   }
 
   Future<void> _loadInfectionCases() async {
@@ -176,6 +193,58 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     );
   }
 
+  // 入園時基本情報の案内カード(218・草案§8)。状態に応じて文言を変える。
+  Widget _enrollmentFormCard() {
+    final status = _enrollmentFormStatus!;
+    final (title, subtitle, color) = switch (status) {
+      'sent_back' => ('入園時基本情報に園から確認依頼があります', '内容を修正して再提出してください', AppColors.warmOrange),
+      'submitted' => ('入園時基本情報を園で確認中です', '確認が完了すると通知でお知らせします', AppColors.skyBlue),
+      'draft' => ('入園時基本情報の入力を再開できます', '前回の続きから入力できます', AppColors.skyBlue),
+      _ => ('入園時基本情報のご入力をお願いします', '10段階のフォームです。途中保存できます', AppColors.skyBlue),
+    };
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.assignment_ind_rounded, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(subtitle, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: () async {
+              final changed = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => EnrollmentFormScreen(
+                    guardianService: widget.guardianService,
+                    child: widget.child,
+                  ),
+                ),
+              );
+              if (changed == true) _loadEnrollmentFormStatus();
+            },
+            icon: const Icon(Icons.edit_note_rounded, size: 18),
+            label: Text(status == 'submitted' ? '入力内容を見る' : '入力する'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadFeatureFlags() async {
     final flags = await widget.guardianService.fetchGuardianFeatureFlags(widget.child.childId);
     if (!mounted) return;
@@ -212,6 +281,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (_enrollmentFormStatus != null) _enrollmentFormCard(),
                 for (final c in _infectionCases) _infectionCaseCard(c),
                 Expanded(child: _buildGrid()),
               ],

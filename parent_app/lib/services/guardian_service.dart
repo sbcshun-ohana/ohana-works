@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/class_photo.dart';
 import '../models/communication_book_entry.dart';
+import '../models/enrollment_form.dart';
 import '../models/family_daily_report.dart';
 import '../models/guardian_broadcast_notice.dart';
 import '../models/guardian_profile.dart';
@@ -762,5 +763,63 @@ class GuardianService {
   Future<String?> createClassPhotoSignedUrl(String storagePath) async {
     final url = await _client.storage.from('class-photos').createSignedUrl(storagePath, 300);
     return url;
+  }
+
+  // ===== 入園時基本情報フォーム(M6 Phase 2・migration 218) =====
+
+  /// フォーム機能が対象園児で有効か(施設フラグ+保護者リンク)。
+  Future<bool> isEnrollmentFormEnabled(String childId) async {
+    final result = await _client.rpc('is_enrollment_form_enabled_for_child', params: {'p_child_id': childId});
+    return result == true;
+  }
+
+  /// 自分のフォーム(未作成ならnull)。
+  Future<EnrollmentFormState?> fetchEnrollmentForm(String childId) async {
+    final rows = await _client.rpc('fetch_my_enrollment_form', params: {'p_child_id': childId});
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    if (list.isEmpty) return null;
+    return EnrollmentFormState.fromJson(list.first);
+  }
+
+  /// 初期値(園の仮登録値+兄弟の承認済みフォームからの複製)。
+  Future<Map<String, dynamic>> fetchEnrollmentPrefill(String childId) async {
+    final result = await _client.rpc('fetch_enrollment_prefill', params: {'p_child_id': childId});
+    return (result as Map<String, dynamic>?) ?? <String, dynamic>{};
+  }
+
+  /// 下書き保存(無ければ作成)。
+  Future<void> saveEnrollmentDraft(String childId, Map<String, dynamic> formData, int currentStep) async {
+    try {
+      await _client.rpc('save_enrollment_form_draft', params: {
+        'p_child_id': childId,
+        'p_form_data': formData,
+        'p_current_step': currentStep,
+      });
+    } on PostgrestException catch (e) {
+      throw GuardianServiceException(_translateEnrollmentError(e.message));
+    }
+  }
+
+  /// 提出。戻り値=提出版数。
+  Future<int> submitEnrollmentForm(String childId) async {
+    try {
+      final result = await _client.rpc('submit_enrollment_form', params: {'p_child_id': childId});
+      return (result as num).toInt();
+    } on PostgrestException catch (e) {
+      throw GuardianServiceException(_translateEnrollmentError(e.message));
+    }
+  }
+
+  String _translateEnrollmentError(String message) {
+    if (message.contains('required fields missing')) {
+      return '必須項目が入力されていません。各ステップの必須項目をご確認ください';
+    }
+    if (message.contains('must be acknowledged')) {
+      return '平熱が37.5℃以上のため、注意事項の確認にチェックしてから提出してください';
+    }
+    if (message.contains('not editable') || message.contains('not submittable')) {
+      return '現在のフォームの状態では操作できません(園の確認中または承認済みです)';
+    }
+    return '処理に失敗しました: $message';
   }
 }
