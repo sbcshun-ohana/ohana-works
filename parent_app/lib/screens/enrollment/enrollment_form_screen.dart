@@ -162,20 +162,22 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
 
   // ===== 必須チェック(クライアント側) =====
 
-  List<String> _missingRequired() {
-    final missing = <String>[];
-    for (final step in enrollmentSteps) {
+  /// 未入力の必須項目(該当ステップ番号つき。確認画面からタップでジャンプできるようにする)
+  List<({int step, String stepTitle, String label})> _missingRequired() {
+    final missing = <({int step, String stepTitle, String label})>[];
+    for (var i = 0; i < enrollmentSteps.length; i++) {
+      final step = enrollmentSteps[i];
       for (final f in step.fields) {
         if (!f.required) continue;
         final v = _section(step.sectionKey)[f.key];
         if (v == null || (v is String && v.trim().isEmpty)) {
-          missing.add('${step.title}: ${f.label}');
+          missing.add((step: i + 1, stepTitle: step.title, label: f.label));
         }
       }
       for (final g in step.listGroups) {
         final list = _sectionList(step.sectionKey, g.listKey);
         if (g.minItems > 0 && list.length < g.minItems) {
-          missing.add('${step.title}: ${g.itemLabel}を${g.minItems}名以上登録してください');
+          missing.add((step: i + 1, stepTitle: step.title, label: '${g.itemLabel}を${g.minItems}名以上登録してください'));
         }
       }
     }
@@ -623,8 +625,30 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
               children: [
                 const Text('未入力の必須項目があります',
                     style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.danger)),
+                const Text('項目をタップすると入力画面へ移動します',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                 const SizedBox(height: 6),
-                for (final m in missing) Text('・$m', style: const TextStyle(fontSize: 13)),
+                // タップで該当ステップへ直接ジャンプ(前へを連打しなくてよいように)
+                for (final m in missing)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _goToStep(m.step),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text('${m.stepTitle}: ${m.label}',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline)),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.danger),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -710,18 +734,33 @@ class _EnrollmentFormScreenState extends State<EnrollmentFormScreen> {
       }
     }
     if (rows.isEmpty) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(step.title,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.skyBlue)),
-          const SizedBox(height: 6),
-          ...rows,
-        ],
+    // カードタップでも該当ステップへ移動できる(修正したい箇所へ直接戻る導線)
+    final stepNumber = enrollmentSteps.indexOf(step) + 1;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: _isEditable ? () => _goToStep(stepNumber) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(step.title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.skyBlue)),
+                ),
+                if (_isEditable)
+                  const Icon(Icons.edit_rounded, size: 16, color: AppColors.textSecondary),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...rows,
+          ],
+        ),
       ),
     );
   }
