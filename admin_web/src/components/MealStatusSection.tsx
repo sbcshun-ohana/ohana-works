@@ -8,6 +8,7 @@ type MealRow = {
   child_id: string;
   child_name: string;
   class_name: string | null;
+  enrollment_status: string;
   meal_status: string;
   candidate_stage: string | null;
   current_stage: string | null;
@@ -85,9 +86,10 @@ export function MealStatusSection({ officeId }: { officeId: string }) {
 
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-bold text-slate-700">給食状態・段階の承認(在籍児)</h3>
+      <h3 className="text-sm font-bold text-slate-700">給食状態・段階の承認(在籍児・入園予定児)</h3>
       <p className="text-xs text-slate-400">
         食材チェックと月齢から段階の候補を自動判定します。候補が出た園児は内容を確認のうえ承認してください(提供開始日は承認と分けて指定・原則2日後)。
+        入園予定児も入園前の準備として表示されます。
       </p>
       {error && <p className="text-sm font-medium text-red-500">{error}</p>}
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
@@ -113,7 +115,14 @@ export function MealStatusSection({ officeId }: { officeId: string }) {
             )}
             {rows.map((r) => (
               <tr key={r.child_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-800">{r.child_name}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">
+                  {r.child_name}
+                  {r.enrollment_status === "入園予定" && (
+                    <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                      入園予定
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">{r.class_name ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${mealStatusBadgeClass(r.meal_status)}`}>

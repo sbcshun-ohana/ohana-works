@@ -138,8 +138,15 @@ class _SessionBannerState extends State<SessionBanner> {
       ),
     );
     if (picked == null) return;
+    if (picked.officeId == current.officeId) return;
     childcareActiveOfficeId.value = picked.officeId;
     childcareActiveOfficeName.value = picked.officeName;
+    // 開いている画面は旧施設のofficeIdを保持しているため、切替時はホームへ戻して
+    // 全画面が新施設のデータで開き直されるようにする(俊指摘 2026-08-18)。
+    final nav = rootNavigatorKey.currentState;
+    if (nav != null) {
+      nav.popUntil((route) => route.isFirst);
+    }
   }
 
   Future<void> _signOut() async {

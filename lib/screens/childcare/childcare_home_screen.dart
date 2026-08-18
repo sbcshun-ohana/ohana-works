@@ -148,8 +148,13 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
             _selectedOffice = offices.first;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               // build中のNotifier更新を避けフレーム後に反映(共通ヘッダーの操作中施設)。
-              childcareActiveOfficeName.value = offices.first.officeName;
-              childcareActiveOfficeId.value = offices.first.officeId;
+              // 既定施設は大和オハナ保育園(無ければ先頭施設)(俊指示 2026-08-18・adminと同じ既定)。
+              final defaultOffice = offices.firstWhere(
+                (o) => o.officeName == '大和オハナ保育園',
+                orElse: () => offices.first,
+              );
+              childcareActiveOfficeName.value = defaultOffice.officeName;
+              childcareActiveOfficeId.value = defaultOffice.officeId;
               _loadInternalNotesFlag();
             });
           }
