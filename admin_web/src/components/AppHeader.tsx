@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/enrollment-forms", label: "入園手続き" },
   { href: "/infection-masters", label: "感染症マスター" },
   { href: "/food-checks", label: "食材チェック" },
+  { href: "/development-masters", label: "発達記録マスター" },
   { href: "/notices", label: "お知らせ(職員向け)" },
   { href: "/payroll", label: "給与確定" },
   { href: "/settings", label: "設定" },
