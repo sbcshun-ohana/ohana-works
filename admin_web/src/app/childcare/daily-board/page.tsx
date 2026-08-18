@@ -145,6 +145,10 @@ function ChildcareDailyBoardPageContent() {
   const [reloadToken, setReloadToken] = useState(0);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [internalNotesChild, setInternalNotesChild] = useState<{ id: string; name: string } | null>(null);
+  // 登園メモ(244・職員内部・当日状況把握用)。child_id→本文。編集中の下書きは別マップで保持。
+  const [arrivalNoteByChild, setArrivalNoteByChild] = useState<Record<string, string>>({});
+  const [arrivalDraftByChild, setArrivalDraftByChild] = useState<Record<string, string>>({});
+  const [savingArrivalChild, setSavingArrivalChild] = useState<string | null>(null);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
   // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
@@ -160,6 +164,41 @@ function ChildcareDailyBoardPageContent() {
     }
     loadFlag();
   }, [selectedOffice]);
+
+  // 登園メモの当日分を取得(施設×日)。下書きも取得値で初期化する。
+  useEffect(() => {
+    if (!selectedOffice) return;
+    createClient()
+      .rpc("fetch_arrival_notes_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
+      .then(({ data }) => {
+        const map: Record<string, string> = {};
+        for (const r of (data ?? []) as { child_id: string; body: string }[]) map[r.child_id] = r.body;
+        setArrivalNoteByChild(map);
+        setArrivalDraftByChild(map);
+      });
+  }, [selectedOffice, businessDate, reloadToken]);
+
+  async function saveArrivalNote(childId: string) {
+    const draft = arrivalDraftByChild[childId] ?? "";
+    if (draft === (arrivalNoteByChild[childId] ?? "")) return; // 変更なし
+    setSavingArrivalChild(childId);
+    const { error } = await createClient().rpc("upsert_child_arrival_note", {
+      p_child_id: childId,
+      p_business_date: businessDate,
+      p_body: draft,
+    });
+    setSavingArrivalChild(null);
+    if (error) {
+      setToast(`登園メモの保存に失敗しました: ${error.message}`);
+      return;
+    }
+    setArrivalNoteByChild((m) => {
+      const next = { ...m };
+      if (draft.trim() === "") delete next[childId];
+      else next[childId] = draft;
+      return next;
+    });
+  }
 
   useEffect(() => {
     function loadRows() {
@@ -763,19 +802,20 @@ function ChildcareDailyBoardPageContent() {
                 <th className="px-4 py-3">お迎え変更</th>
                 <th className="px-4 py-3">連絡帳公開</th>
                 {internalNotesEnabled && <th className="px-4 py-3">園内記録</th>}
+                <th className="px-4 py-3">登園メモ</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 8 : 7} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && presentRows.length === 0 && (
                 <tr>
-                  <td colSpan={internalNotesEnabled ? 8 : 7} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
                     出席・登園予定の園児はいません
                   </td>
                 </tr>
@@ -985,6 +1025,24 @@ function ChildcareDailyBoardPageContent() {
                         </button>
                       </td>
                     )}
+                    {/* 登園メモ(職員内部・保護者非公開)。インライン編集・フォーカスを外すと保存。 */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-start gap-1">
+                        <textarea
+                          value={arrivalDraftByChild[row.child_id] ?? ""}
+                          onChange={(e) =>
+                            setArrivalDraftByChild((m) => ({ ...m, [row.child_id]: e.target.value }))
+                          }
+                          onBlur={() => saveArrivalNote(row.child_id)}
+                          rows={1}
+                          placeholder="口頭連絡メモ"
+                          className="min-h-[2rem] w-44 resize-y rounded-lg border border-slate-200 px-2 py-1 text-xs focus:border-sky-400 focus:outline-none"
+                        />
+                        {savingArrivalChild === row.child_id && (
+                          <span className="mt-1 text-[10px] text-slate-400">保存中</span>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
             </tbody>
