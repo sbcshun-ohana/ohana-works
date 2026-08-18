@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
 import { ChildClassChangeModal } from "@/components/ChildClassChangeModal";
+import { ChildDevelopmentModal } from "@/components/ChildDevelopmentModal";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
+import { DevelopmentApprovalPanel } from "@/components/DevelopmentApprovalPanel";
 import { ChildRegisterEditModal } from "@/components/ChildRegisterEditModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
@@ -55,6 +57,8 @@ function ChildcareChildrenPageContent() {
   const [therapyRow, setTherapyRow] = useState<ChildMasterRow | null>(null);
   const [therapyEnabled, setTherapyEnabled] = useState(false);
   const [weeklyRow, setWeeklyRow] = useState<ChildMasterRow | null>(null);
+  const [developmentRow, setDevelopmentRow] = useState<ChildMasterRow | null>(null);
+  const [developmentEnabled, setDevelopmentEnabled] = useState(false);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -70,6 +74,9 @@ function ChildcareChildrenPageContent() {
       supabase
         .rpc("is_therapy_outing_enabled_for_office", { p_office_id: selectedOffice })
         .then(({ data }) => setTherapyEnabled(Boolean(data)));
+      supabase
+        .rpc("is_development_records_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setDevelopmentEnabled(Boolean(data)));
     }
     load();
   }, [selectedOffice]);
@@ -171,6 +178,10 @@ function ChildcareChildrenPageContent() {
             </button>
           </div>
         </div>
+
+        {developmentEnabled && isManager && selectedOffice && (
+          <DevelopmentApprovalPanel officeId={selectedOffice} />
+        )}
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
           <div>
@@ -359,6 +370,14 @@ function ChildcareChildrenPageContent() {
                               園内記録
                             </button>
                           )}
+                          {developmentEnabled && (
+                            <button
+                              onClick={() => setDevelopmentRow(row)}
+                              className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                            >
+                              発達記録
+                            </button>
+                          )}
                           {!classDefaultRequired && (
                             <button
                               onClick={() => setEditingRow(row)}
@@ -522,6 +541,16 @@ function ChildcareChildrenPageContent() {
           childName={`${internalNotesRow.display_name}${internalNotesRow.honorific_suffix ?? ""}`}
           officeId={selectedOffice}
           onClose={() => setInternalNotesRow(null)}
+        />
+      )}
+
+      {developmentRow && (
+        <ChildDevelopmentModal
+          childId={developmentRow.child_id}
+          childName={`${developmentRow.display_name}${developmentRow.honorific_suffix ?? ""}`}
+          officeId={selectedOffice}
+          isManager={isManager}
+          onClose={() => setDevelopmentRow(null)}
         />
       )}
 
