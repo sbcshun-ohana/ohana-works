@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/childcare.dart';
+import '../models/development_record.dart';
 import '../models/guardian_app.dart';
 import '../models/nap.dart';
 
@@ -1299,6 +1300,63 @@ class ChildcareService {
       params: {'p_office_id': officeId},
     );
     return result as bool? ?? false;
+  }
+
+  // ------------------------------------------------------------------
+  // 発達記録(239/240/241)。閲覧=全職員、達成申請=担任・担当クラス。
+  // ------------------------------------------------------------------
+
+  Future<bool> isDevelopmentRecordsEnabledForOffice(String officeId) async {
+    try {
+      final result = await _client.rpc(
+        'is_development_records_enabled_for_office',
+        params: {'p_office_id': officeId},
+      );
+      return result == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<DevelopmentHeader?> fetchChildDevelopmentHeader(String childId) async {
+    final rows = await _client
+        .rpc('fetch_child_development_header', params: {'p_child_id': childId}) as List;
+    if (rows.isEmpty) return null;
+    return DevelopmentHeader.fromJson(rows.first as Map<String, dynamic>);
+  }
+
+  Future<List<DevelopmentRecord>> fetchChildDevelopmentRecords(
+    String childId, {
+    String? ageBandCode,
+  }) async {
+    final rows = await _client.rpc('fetch_child_development_records', params: {
+      'p_child_id': childId,
+      'p_age_band_code': ageBandCode,
+    }) as List;
+    return rows
+        .map((r) => DevelopmentRecord.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> submitDevelopmentAchievementRequest({
+    required String childId,
+    required String itemId,
+    String? note,
+  }) async {
+    await _client.rpc('submit_development_achievement_request', params: {
+      'p_child_id': childId,
+      'p_item_id': itemId,
+      'p_source': 'manual',
+      'p_ai_candidate_id': null,
+      'p_note': note,
+    });
+  }
+
+  Future<void> withdrawDevelopmentAchievementRequest(String requestId) async {
+    await _client.rpc('withdraw_development_achievement_request', params: {
+      'p_request_id': requestId,
+      'p_note': null,
+    });
   }
 
   /// 表示制御のみに使う(編集・削除ボタンの出し分け)。実際の許可判定は必ずRPC側で行う。

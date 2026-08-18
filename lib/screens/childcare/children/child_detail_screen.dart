@@ -4,6 +4,7 @@ import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../../../widgets/time_dropdown_picker.dart';
+import 'child_development_tab.dart';
 import 'child_internal_notes_tab.dart';
 import 'child_register_tab.dart';
 import '../family_daily_report_summary_view.dart';
@@ -35,13 +36,16 @@ class ChildDetailScreen extends StatefulWidget {
 }
 
 class _ChildDetailScreenState extends State<ChildDetailScreen> {
-  late Future<bool> _internalNotesEnabledFuture;
+  // 園内記録・発達記録の機能フラグをまとめて取得する([internalNotes, development])。
+  late Future<List<bool>> _flagsFuture;
 
   @override
   void initState() {
     super.initState();
-    _internalNotesEnabledFuture =
-        widget.service.isChildInternalNotesEnabledForOffice(widget.officeId);
+    _flagsFuture = Future.wait([
+      widget.service.isChildInternalNotesEnabledForOffice(widget.officeId),
+      widget.service.isDevelopmentRecordsEnabledForOffice(widget.officeId),
+    ]);
   }
 
   Future<void> _openWeeklySchedule() async {
@@ -58,8 +62,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _internalNotesEnabledFuture,
+    return FutureBuilder<List<bool>>(
+      future: _flagsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return Scaffold(
@@ -71,10 +75,12 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
             body: const Center(child: CircularProgressIndicator()),
           );
         }
-        final internalNotesEnabled = snapshot.data ?? false;
+        final internalNotesEnabled = snapshot.data?[0] ?? false;
+        final developmentEnabled = snapshot.data?[1] ?? false;
         final tabs = <Tab>[
           const Tab(text: '家庭連絡帳'),
           if (internalNotesEnabled) const Tab(text: '園内記録'),
+          if (developmentEnabled) const Tab(text: '発達記録'),
           const Tab(text: '台帳'),
         ];
         return DefaultTabController(
@@ -106,6 +112,11 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
                     service: widget.service,
                     childId: widget.childId,
                     officeId: widget.officeId,
+                  ),
+                if (developmentEnabled)
+                  ChildDevelopmentTab(
+                    service: widget.service,
+                    childId: widget.childId,
                   ),
                 // 園児台帳(221)。全職員閲覧可・閲覧専用
                 ChildRegisterTab(
