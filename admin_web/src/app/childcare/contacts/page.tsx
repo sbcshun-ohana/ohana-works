@@ -46,7 +46,7 @@ function ChildcareContactsPageContent() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-  const [form, setForm] = useState({ guardian_message: "", child_today_notes: "", free_notes: "" });
+  const [form, setForm] = useState({ child_today_notes: "", free_notes: "" });
   const [napPeriods, setNapPeriods] = useState<{ start: string; end: string }[]>([]);
   const [toiletingRecords, setToiletingRecords] = useState<{ time: string; type: string }[]>([]);
   const [mealCompletionPct, setMealCompletionPct] = useState<number | "">("");
@@ -175,7 +175,6 @@ function ChildcareContactsPageContent() {
     function syncForm() {
       if (!selectedRow) return;
       setForm({
-        guardian_message: selectedRow.guardian_message ?? "",
         child_today_notes: selectedRow.child_today_notes ?? "",
         free_notes: selectedRow.free_notes ?? "",
       });
@@ -701,16 +700,8 @@ function ChildcareContactsPageContent() {
                   )}
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">保護者からの連絡内容</label>
-                  <textarea
-                    value={form.guardian_message}
-                    onChange={(e) => setForm((f) => ({ ...f, guardian_message: e.target.value }))}
-                    disabled={!canEditInput}
-                    rows={2}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
-                  />
-                </div>
+                {/* 「保護者からの連絡内容」欄は廃止(俊指示 2026-08-19)。保護者の内容は上部の
+                    家庭連絡帳(保護者記入)、受け入れ時の口頭連絡はデイリーボードの登園メモへ集約。 */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">今日の園児の様子</label>
                   <textarea
