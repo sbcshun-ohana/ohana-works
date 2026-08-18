@@ -132,56 +132,77 @@ function ChildcareEmergencyContactsPageContent() {
 
         {groups.map(([className, kids]) => (
           <section key={className} className="space-y-2">
-            <h3 className="text-sm font-bold text-slate-700">{className}</h3>
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-500">
-                  <tr>
-                    <th className="w-40 px-3 py-2">園児</th>
-                    <th className="px-3 py-2">緊急連絡先(優先順)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {kids.map((child) => {
-                    const contacts = contactsByChild.get(child.child_id) ?? [];
-                    return (
-                      <tr key={child.child_id} className="align-top">
-                        <td className="px-3 py-2 font-medium text-slate-800">
-                          {child.display_name}
-                          {child.honorific_suffix ?? ""}
-                        </td>
-                        <td className="px-3 py-2">
-                          {contacts.length === 0 ? (
-                            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                              未登録
+            <h3 className="text-sm font-bold text-slate-700">
+              {className}
+              <span className="ml-2 text-xs font-normal text-slate-400">{kids.length}名</span>
+            </h3>
+            {/* 園児カードのグリッド。広い画面は2列、iPad縦/スマホは1列。 */}
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {kids.map((child) => {
+                const contacts = contactsByChild.get(child.child_id) ?? [];
+                // 最低3枠。登録がそれ以上なら全件表示。
+                const slotCount = Math.max(3, contacts.length);
+                const slots = Array.from({ length: slotCount }, (_, i) => contacts[i] ?? null);
+                return (
+                  <div key={child.child_id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-base font-bold text-slate-800">
+                        {child.display_name}
+                        {child.honorific_suffix ?? ""}
+                      </p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          contacts.length >= 3
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {contacts.length}/3件
+                      </span>
+                    </div>
+                    {/* 優先枠: 広い画面=横並び(左から1・2・3)、狭い画面=縦積み(上から1・2・3)。 */}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {slots.map((c, i) => (
+                        <div
+                          key={c?.id ?? `empty-${i}`}
+                          className={`rounded-xl border p-2.5 ${
+                            c ? "border-slate-200 bg-slate-50" : "border-dashed border-slate-200 bg-white"
+                          }`}
+                        >
+                          <div className="mb-1 flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
+                                c ? "bg-sky-600 text-white" : "bg-slate-200 text-slate-400"
+                              }`}
+                            >
+                              {i + 1}
                             </span>
+                            <span className="text-xs font-medium text-slate-400">優先{i + 1}</span>
+                          </div>
+                          {c ? (
+                            <>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {c.name}
+                                {c.relationship && (
+                                  <span className="ml-1 text-xs font-normal text-slate-400">({c.relationship})</span>
+                                )}
+                              </p>
+                              <a
+                                href={`tel:${c.phone}`}
+                                className="mt-0.5 block text-base font-bold text-sky-700 hover:underline"
+                              >
+                                {c.phone}
+                              </a>
+                            </>
                           ) : (
-                            <div className="flex flex-col gap-1">
-                              {contacts.map((c, i) => (
-                                <div key={c.id} className="flex flex-wrap items-center gap-2">
-                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
-                                    {i + 1}
-                                  </span>
-                                  <span className="font-medium text-slate-800">{c.name}</span>
-                                  {c.relationship && (
-                                    <span className="text-xs text-slate-400">({c.relationship})</span>
-                                  )}
-                                  <a
-                                    href={`tel:${c.phone}`}
-                                    className="font-semibold text-sky-700 hover:underline"
-                                  >
-                                    {c.phone}
-                                  </a>
-                                </div>
-                              ))}
-                            </div>
+                            <p className="text-sm text-slate-300">未登録</p>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         ))}
