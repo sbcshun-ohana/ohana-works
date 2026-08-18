@@ -12,6 +12,7 @@ import '../services/therapy_qr_service.dart';
 import '../time_format.dart';
 import '../token_classifier.dart';
 import 'guardian_checkin_result_screen.dart';
+import 'family_checkin_screen.dart';
 import 'proxy_punch_screen.dart';
 import 'punch_confirm_screen.dart';
 import 'therapy_result_screen.dart';
@@ -115,11 +116,23 @@ class _KioskScanScreenState extends State<KioskScanScreen> {
         deviceId: widget.device.deviceId,
       );
       if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => GuardianCheckInResultScreen(resolution: resolution),
-        ),
-      );
+      // 234: 兄弟一括モードは確認画面へ。それ以外は従来の結果画面。
+      if (resolution.isFamily) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => FamilyCheckinScreen(
+              resolution: resolution,
+              service: _guardianQrService,
+            ),
+          ),
+        );
+      } else {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => GuardianCheckInResultScreen(resolution: resolution),
+          ),
+        );
+      }
     } on GuardianQrException catch (e) {
       setState(() => _statusMessage = e.message);
     }
