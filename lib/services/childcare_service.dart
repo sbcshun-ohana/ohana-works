@@ -1383,6 +1383,13 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 給食状態(227/228)。5区分+候補+現在段階(台帳表示用・全職員閲覧可)。
+  Future<Map<String, dynamic>?> fetchChildMealStatus(String childId) async {
+    final rows = await _client.rpc('fetch_child_meal_status', params: {'p_child_id': childId});
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
   /// クラス在籍履歴(223)。進級・転クラスの履歴表示用(全職員閲覧可)。
   Future<List<Map<String, dynamic>>> fetchChildClassHistory(String childId) async {
     final rows = await _client.rpc('fetch_child_class_history', params: {'p_child_id': childId});

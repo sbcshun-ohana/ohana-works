@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
+import { MealStatusSection } from "@/components/MealStatusSection";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 type SymptomRow = {
@@ -93,14 +94,15 @@ function FoodChecksPageContent() {
       <AppHeader />
       <main className="flex-1 space-y-6 p-6">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">食材チェック(症状あり報告の確認)</h2>
+          <h2 className="text-lg font-bold text-slate-800">食材チェック・給食管理</h2>
           <p className="text-xs text-slate-400">
-            保護者から「症状あり」の報告があった食材の一覧です。内容を確認して記録してください(確認するまで未処理として残ります)。
-            症状のあった食材は完了扱いにならず、給食提供は開始保留になります。
+            保護者からの「症状あり」報告の確認と、給食段階(後期食/完了食/幼児食)の承認・アレルギー診断書の管理を行います(管理者以上)。
           </p>
         </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
+
+        {!rowsError && selectedOffice && <MealStatusSection officeId={selectedOffice} />}
 
         <section className="space-y-2">
           <h3 className="text-sm font-bold text-red-600">未処理({pending.length}件)</h3>

@@ -106,6 +106,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
   Map<String, dynamic>? _register;
   List<Map<String, dynamic>> _classHistory = const [];
   List<Map<String, dynamic>> _foodProgress = const [];
+  Map<String, dynamic>? _mealStatus;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -122,11 +123,13 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
     try {
       final register = await widget.service.fetchChildRegister(widget.childId);
       final classHistory = await widget.service.fetchChildClassHistory(widget.childId);
-      // 食材チェック進捗(224): 施設フラグONのときだけ表示
+      // 食材チェック進捗(224)・給食状態(227): 施設フラグONのときだけ表示
       var foodProgress = const <Map<String, dynamic>>[];
+      Map<String, dynamic>? mealStatus;
       if (widget.officeId != null &&
           await widget.service.isFoodCheckEnabledForOffice(widget.officeId!)) {
         foodProgress = await widget.service.fetchChildFoodProgress(widget.childId);
+        mealStatus = await widget.service.fetchChildMealStatus(widget.childId);
       }
       String? planned;
       if (register != null &&
@@ -148,6 +151,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
           _register = register;
           _classHistory = classHistory;
           _foodProgress = foodProgress;
+          _mealStatus = mealStatus;
           _plannedClassLabel = planned;
           _isLoading = false;
         });
@@ -213,6 +217,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
                   '${h['effective_start_date'] ?? ''} 〜 ${h['effective_end_date'] ?? '現在'}',
                 ),
             ]),
+          if (_mealStatus != null) _mealStatusCard(_mealStatus!),
           if (_foodProgress.isNotEmpty)
             _card('食材チェック進捗(必須確認食材)', [
               for (final p in _foodProgress)
@@ -256,6 +261,58 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  static const _stageLabels = {'late': '後期食', 'complete': '完了食', 'toddler': '幼児食'};
+
+  /// 給食状態カード(227/228・本案§3-1の5区分)
+  Widget _mealStatusCard(Map<String, dynamic> s) {
+    final status = (s['meal_status'] as String?) ?? '';
+    final color = switch (status) {
+      '給食開始保留' => Colors.red,
+      '弁当持参' => Colors.orange,
+      '共通除去食' => Colors.purple,
+      '通常食' => Colors.green,
+      _ => Colors.grey, // 給食提供前(正常な経過)
+    };
+    final current = s['current_stage'] as String?;
+    final candidate = s['candidate_stage'] as String?;
+    final approved = s['approved_stage'] as String?;
+    final targets = (s['active_elimination_targets'] as List?)?.cast<String>() ?? const [];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('給食状態',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.teal)),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(status,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (current != null) _row('現在の段階', _stageLabels[current] ?? current),
+          if (approved != null && current == null)
+            _row('承認済み', '${_stageLabels[approved] ?? approved}(${s['approved_serving_start']}開始予定)'),
+          if (candidate != null && candidate != current)
+            _row('候補', '${_stageLabels[candidate] ?? candidate}(承認待ち)', valueColor: Colors.blue),
+          if (targets.isNotEmpty) _row('除去対象', targets.join('・'), valueColor: Colors.red),
+          if ((s['months_old'] as num?) != null) _row('月齢', '${s['months_old']}か月'),
         ],
       ),
     );
