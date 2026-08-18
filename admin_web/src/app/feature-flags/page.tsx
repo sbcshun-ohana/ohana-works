@@ -109,6 +109,8 @@ export default function FeatureFlagsPage() {
       .from("childcare_classes")
       .select("id, class_name, age_group")
       .eq("office_id", selectedOfficeId)
+      // 年齢順(0歳→5歳)に統一。fetch_childcare_classes(162)と同じ規則。
+      .order("age_group")
       .order("class_name")
       .then(({ data, error }) => {
         if (error) return;

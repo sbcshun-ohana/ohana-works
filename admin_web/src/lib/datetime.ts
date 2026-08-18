@@ -69,3 +69,19 @@ export function formatDurationMinutes(minutes: number | null): string {
   const remainder = minutes % 60;
   return `${hours}:${String(remainder).padStart(2, "0")}`;
 }
+
+/// シフト時刻選択用の15分刻み(00:00〜23:45)。俊指示 2026-08-18: 時刻はプルダウンで。
+export const QUARTER_HOUR_TIMES: string[] = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = Math.floor(i / 4);
+  const m = (i % 4) * 15;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+});
+
+/// value が15分刻みの一覧に無い場合(既存データが端数時刻)でも選べるよう、value を含めた選択肢を返す。
+export function quarterHourOptionsWith(value: string | null | undefined): string[] {
+  const v = value?.slice(0, 5);
+  if (v && !QUARTER_HOUR_TIMES.includes(v)) {
+    return [v, ...QUARTER_HOUR_TIMES].sort();
+  }
+  return QUARTER_HOUR_TIMES;
+}

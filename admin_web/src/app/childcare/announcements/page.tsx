@@ -80,6 +80,7 @@ function AnnouncementsPageContent() {
 
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [children, setChildren] = useState<ChildOption[]>([]);
+  const [childSearch, setChildSearch] = useState("");
 
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -574,20 +575,59 @@ function AnnouncementsPageContent() {
                     </div>
 
                     <div>
-                      <div className="mb-1 text-xs font-medium text-slate-500">園児単位(選択中施設: {children.length}名)</div>
-                      <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-slate-500">園児単位(選択中施設: {children.length}名)</span>
+                        <input
+                          type="search"
+                          value={childSearch}
+                          onChange={(e) => setChildSearch(e.target.value)}
+                          placeholder="氏名で検索"
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-sky-400 focus:outline-none"
+                        />
+                      </div>
+                      {/* クラス別(年齢順=classesの並び順)に分けて表示。未所属は末尾にまとめる。 */}
+                      <div className="max-h-56 space-y-2 overflow-y-auto">
                         {children.length === 0 && <span className="text-xs text-slate-400">園児がいません。</span>}
-                        {children.map((c) => (
-                          <label key={c.child_id} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={targetChildren.has(c.child_id)}
-                              onChange={() => setTargetChildren(toggle(targetChildren, c.child_id))}
-                            />
-                            {c.display_name}
-                            {c.class_name ? <span className="text-slate-400">({c.class_name})</span> : null}
-                          </label>
-                        ))}
+                        {(() => {
+                          const kw = childSearch.trim();
+                          const matched = kw
+                            ? children.filter((c) => c.display_name.includes(kw))
+                            : children;
+                          // classes は fetch_childcare_classes(年齢順)。その順でグループ化し、
+                          // クラス未所属/一覧に無いクラスは「その他」として最後にまとめる。
+                          const groups: { key: string; label: string; items: ChildOption[] }[] = classes.map((cl) => ({
+                            key: cl.class_id,
+                            label: cl.class_name,
+                            items: matched.filter((c) => c.class_name === cl.class_name),
+                          }));
+                          const known = new Set(classes.map((cl) => cl.class_name));
+                          const others = matched.filter((c) => !c.class_name || !known.has(c.class_name));
+                          if (others.length > 0) groups.push({ key: "__other__", label: "その他・未所属", items: others });
+                          const visible = groups.filter((g) => g.items.length > 0);
+                          if (visible.length === 0) {
+                            return <span className="text-xs text-slate-400">該当する園児がいません。</span>;
+                          }
+                          return visible.map((g) => (
+                            <div key={g.key}>
+                              <div className="mb-1 text-[11px] font-semibold text-slate-400">{g.label}</div>
+                              <div className="flex flex-wrap gap-2">
+                                {g.items.map((c) => (
+                                  <label
+                                    key={c.child_id}
+                                    className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={targetChildren.has(c.child_id)}
+                                      onChange={() => setTargetChildren(toggle(targetChildren, c.child_id))}
+                                    />
+                                    {c.display_name}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ));
+                        })()}
                       </div>
                     </div>
                   </div>

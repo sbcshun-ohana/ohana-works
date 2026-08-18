@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ShiftExceptionModal } from "@/components/ShiftExceptionModal";
-import { currentYearMonth, dayOfWeekLabel, formatTimeOnly, monthRange } from "@/lib/datetime";
+import { currentYearMonth, dayOfWeekLabel, formatTimeOnly, monthRange, quarterHourOptionsWith } from "@/lib/datetime";
 import {
   WEEKDAY_LABELS,
   type ManageableOffice,
@@ -284,20 +284,26 @@ export default function ShiftsPage() {
                         <tr key={weekday} className="border-b border-slate-100 last:border-0">
                           <td className="px-4 py-3 font-medium text-slate-800">{label}曜日</td>
                           <td className="px-4 py-3">
-                            <input
-                              type="time"
+                            <select
                               value={row.startTime}
                               onChange={(e) => updateWeeklyRow(weekday, { startTime: e.target.value })}
                               className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-sky-400 focus:outline-none"
-                            />
+                            >
+                              {quarterHourOptionsWith(row.startTime).map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3">
-                            <input
-                              type="time"
+                            <select
                               value={row.endTime}
                               onChange={(e) => updateWeeklyRow(weekday, { endTime: e.target.value })}
                               className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-sky-400 focus:outline-none"
-                            />
+                            >
+                              {quarterHourOptionsWith(row.endTime).map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3">
                             <input
