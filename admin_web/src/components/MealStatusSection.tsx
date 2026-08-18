@@ -394,13 +394,20 @@ function DiagnosisModal({ row, onClose }: { row: MealRow; onClose: () => void })
 
         <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
           {error && <p className="text-sm font-medium text-red-500">{error}</p>}
-          <button
-            onClick={createRequest}
-            disabled={isActing}
-            className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50"
-          >
-            + 診断書の提出を依頼する(依頼中は給食状態が「弁当持参」になります)
-          </button>
+          {/* 依頼中が既にあるときは重複作成を防ぐ(サーバ側231ガードと二重) */}
+          {diagnoses.some((d) => d.status === "requested") ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              提出依頼済みです。原本が届いたら下の「原本受領を記録」から確定してください。
+            </p>
+          ) : (
+            <button
+              onClick={createRequest}
+              disabled={isActing}
+              className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+            >
+              + 診断書の提出を依頼する(依頼中は給食状態が「弁当持参」になります)
+            </button>
+          )}
 
           {diagnoses.length === 0 && <p className="text-sm text-slate-400">診断書の記録はありません</p>}
           {diagnoses.map((d) => (
