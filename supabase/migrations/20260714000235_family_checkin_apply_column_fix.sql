@@ -1,6 +1,8 @@
 -- 235: apply_family_checkin の child_id 列名衝突修正(234のバグ・staging適用済 2026-08-18)。
 -- OUT列 child_id と guardian_child_links.child_id が曖昧(42702)。OUT列名を out_child_id へ・内部参照を修飾。
-create or replace function apply_family_checkin(
+drop function if exists apply_family_checkin(uuid, jsonb, date);
+
+create function apply_family_checkin(
   p_session_id uuid, p_selections jsonb, p_business_date date
 )
 returns table (out_child_id uuid, result text, reason text)
