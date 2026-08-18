@@ -1,119 +1,89 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
-import { useChildcareClass } from "@/hooks/useChildcareClass";
-import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
+import { classOrderIndex } from "@/lib/childcareClassSort";
 import type { ChildForAssignment, EmergencyContact } from "@/lib/types";
+import { useChildcareClass } from "@/hooks/useChildcareClass";
 
+/// 緊急連絡先 一覧(閲覧用・俊指示 2026-08-18)。
+/// 保護者が基本情報/台帳で登録した緊急連絡先(guardian_emergency_contacts)を施設横断でまとめ、
+/// 非常時に園児1人ずつ台帳を開かなくても確認できるようにする。登録・修正は各園児の台帳側で行う。
 function ChildcareEmergencyContactsPageContent() {
-  // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
   const { offices, officesError, selectedOffice } = useChildcareOffices();
-  const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
+  const { classes } = useChildcareClass(selectedOffice);
 
   const [children, setChildren] = useState<ChildForAssignment[]>([]);
-  const [selectedChildId, setSelectedChildId] = useState<string>("");
-  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [contactsByChild, setContactsByChild] = useState<Map<string, EmergencyContact[]>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  const [newName, setNewName] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newRelationship, setNewRelationship] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!selectedOffice) return;
+    setIsLoading(true);
+    setRowsError(null);
     const supabase = createClient();
     supabase.rpc("fetch_children_for_office", { p_office_id: selectedOffice }).then(({ data, error }) => {
       if (error) {
         setRowsError(error.message);
+        setIsLoading(false);
         return;
       }
       const list = (data ?? []) as ChildForAssignment[];
       setChildren(list);
-      setSelectedChildId(list.length > 0 ? list[0].child_id : "");
+      const ids = list.map((c) => c.child_id);
+      if (ids.length === 0) {
+        setContactsByChild(new Map());
+        setIsLoading(false);
+        return;
+      }
+      supabase
+        .from("guardian_emergency_contacts")
+        .select("id, child_id, name, phone, relationship, sort_order")
+        .in("child_id", ids)
+        .order("sort_order")
+        .then(({ data: cData, error: cErr }) => {
+          setIsLoading(false);
+          if (cErr) {
+            setRowsError(cErr.message);
+            return;
+          }
+          const map = new Map<string, EmergencyContact[]>();
+          for (const row of (cData ?? []) as EmergencyContact[]) {
+            const arr = map.get(row.child_id) ?? [];
+            arr.push(row);
+            map.set(row.child_id, arr);
+          }
+          setContactsByChild(map);
+        });
     });
   }, [selectedOffice]);
 
-  useEffect(() => {
-    function loadRows() {
-      if (!selectedChildId) return null;
-      setIsLoading(true);
-      setRowsError(null);
-      return createClient();
-    }
+  const classOrder = useMemo(() => classOrderIndex(classes), [classes]);
 
-    const supabase = loadRows();
-    if (!supabase) return;
-    supabase
-      .from("guardian_emergency_contacts")
-      .select("id, child_id, name, phone, relationship, sort_order, duplicate_approved_by, duplicate_approved_reason")
-      .eq("child_id", selectedChildId)
-      .order("sort_order")
-      .then(({ data, error }) => {
-        setIsLoading(false);
-        if (error) {
-          setRowsError(error.message);
-          return;
-        }
-        setContacts((data ?? []) as EmergencyContact[]);
-      });
-  }, [selectedChildId, reloadToken]);
-
-  async function addContact() {
-    if (!newName.trim() || !newPhone.trim() || !selectedChildId) return;
-    setIsSaving(true);
-    setRowsError(null);
-    const supabase = createClient();
-    const { error } = await supabase.from("guardian_emergency_contacts").insert({
-      child_id: selectedChildId,
-      name: newName.trim(),
-      phone: newPhone.trim(),
-      relationship: newRelationship.trim() || null,
-      sort_order: contacts.length,
+  // クラス(年齢順)→ 園児名でグループ化。氏名検索でフィルタ。未所属は末尾。
+  const groups = useMemo(() => {
+    const kw = search.trim();
+    const filtered = kw ? children.filter((c) => c.display_name.includes(kw)) : children;
+    const sorted = filtered.slice().sort((a, b) => {
+      const ai = a.class_name != null ? classOrder.get(a.class_name) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+      const bi = b.class_name != null ? classOrder.get(b.class_name) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return a.display_name.localeCompare(b.display_name, "ja");
     });
-    setIsSaving(false);
-    if (error) {
-      setRowsError(error.message);
-      return;
+    const byClass = new Map<string, ChildForAssignment[]>();
+    for (const c of sorted) {
+      const key = c.class_name ?? "その他・未所属";
+      const arr = byClass.get(key) ?? [];
+      arr.push(c);
+      byClass.set(key, arr);
     }
-    setNewName("");
-    setNewPhone("");
-    setNewRelationship("");
-    setReloadToken((t) => t + 1);
-  }
-
-  async function removeContact(contact: EmergencyContact) {
-    if (!window.confirm(`${contact.name}(${contact.phone})を削除しますか？`)) return;
-    const supabase = createClient();
-    const { error } = await supabase.from("guardian_emergency_contacts").delete().eq("id", contact.id);
-    if (error) {
-      setRowsError(error.message);
-      return;
-    }
-    setReloadToken((t) => t + 1);
-  }
-
-  const classOrder = classOrderIndex(classes);
-  const filteredChildren = (selectedClassName === null ? children : children.filter((c) => c.class_name === selectedClassName))
-    .slice()
-    .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
-
-  // クラス変更時: 絞り込み後の先頭園児へ選択を移す(選択中の園児が絞り込みで消えるため)。
-  function onClassChange(classId: string) {
-    setSelectedClass(classId);
-    const name = classes.find((c) => c.class_id === classId)?.class_name ?? null;
-    const next = name === null ? children : children.filter((c) => c.class_name === name);
-    const sorted = next
-      .slice()
-      .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
-    setSelectedChildId(sorted.length > 0 ? sorted[0].child_id : "");
-  }
+    return Array.from(byClass.entries());
+  }, [children, search, classOrder]);
 
   if (officesError) {
     return (
@@ -136,137 +106,85 @@ function ChildcareEmergencyContactsPageContent() {
     <div className="flex flex-1 flex-col">
       <AppHeader />
       <ChildcareNav />
-      <main className="flex-1 space-y-6 p-6">
-        <h2 className="text-lg font-bold text-slate-800">緊急連絡先の管理</h2>
-        <p className="text-xs text-slate-400">
-          園児ごとに最低2件の登録を推奨します。きょうだい間で同じ連絡先を登録することは問題ありません。
-        </p>
-
-        <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
+      <main className="flex-1 space-y-4 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">クラス</label>
-            <select
-              value={selectedClass}
-              onChange={(e) => onClassChange(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              <option value="">全クラス</option>
-              {classes.map((c) => (
-                <option key={c.class_id} value={c.class_id}>
-                  {c.class_name}
-                </option>
-              ))}
-            </select>
+            <h2 className="text-lg font-bold text-slate-800">緊急連絡先 一覧(非常時確認用)</h2>
+            <p className="text-xs text-slate-400">
+              保護者が基本情報・台帳で登録した緊急連絡先の一覧です。非常時にこの画面でまとめて確認できます。
+              登録・修正は各園児の台帳(基本情報)で行います。番号はタップで発信できます。
+            </p>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">園児</label>
-            <select
-              value={selectedChildId}
-              onChange={(e) => setSelectedChildId(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-            >
-              {filteredChildren.map((c) => (
-                <option key={c.child_id} value={c.child_id}>
-                  {c.display_name}
-                  {c.honorific_suffix ?? ""}
-                  {c.class_name ? `(${c.class_name})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="氏名で検索"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+          />
         </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
+        {isLoading && <p className="text-sm text-slate-400">読み込み中…</p>}
+        {!isLoading && groups.length === 0 && (
+          <p className="rounded-xl bg-white p-4 text-sm text-slate-400 shadow-sm">該当する園児がいません。</p>
+        )}
 
-        <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-800">登録済みの連絡先</h3>
-            {!isLoading && contacts.length < 2 && (
-              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                現在{contacts.length}件(推奨2件以上)
-              </span>
-            )}
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
-                  <th className="px-4 py-3">氏名</th>
-                  <th className="px-4 py-3">電話番号</th>
-                  <th className="px-4 py-3">続柄</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading && (
+        {groups.map(([className, kids]) => (
+          <section key={className} className="space-y-2">
+            <h3 className="text-sm font-bold text-slate-700">{className}</h3>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-500">
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                      読み込み中…
-                    </td>
+                    <th className="w-40 px-3 py-2">園児</th>
+                    <th className="px-3 py-2">緊急連絡先(優先順)</th>
                   </tr>
-                )}
-                {!isLoading && contacts.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                      緊急連絡先が登録されていません
-                    </td>
-                  </tr>
-                )}
-                {!isLoading &&
-                  contacts.map((c) => (
-                    <tr key={c.id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
-                      <td className="px-4 py-3 text-slate-500">{c.phone}</td>
-                      <td className="px-4 py-3 text-slate-500">{c.relationship ?? "—"}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => removeContact(c)}
-                          className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                        >
-                          削除
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">氏名</label>
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-              />
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {kids.map((child) => {
+                    const contacts = contactsByChild.get(child.child_id) ?? [];
+                    return (
+                      <tr key={child.child_id} className="align-top">
+                        <td className="px-3 py-2 font-medium text-slate-800">
+                          {child.display_name}
+                          {child.honorific_suffix ?? ""}
+                        </td>
+                        <td className="px-3 py-2">
+                          {contacts.length === 0 ? (
+                            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              未登録
+                            </span>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              {contacts.map((c, i) => (
+                                <div key={c.id} className="flex flex-wrap items-center gap-2">
+                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
+                                    {i + 1}
+                                  </span>
+                                  <span className="font-medium text-slate-800">{c.name}</span>
+                                  {c.relationship && (
+                                    <span className="text-xs text-slate-400">({c.relationship})</span>
+                                  )}
+                                  <a
+                                    href={`tel:${c.phone}`}
+                                    className="font-semibold text-sky-700 hover:underline"
+                                  >
+                                    {c.phone}
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">電話番号</label>
-              <input
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">続柄(任意)</label>
-              <input
-                value={newRelationship}
-                onChange={(e) => setNewRelationship(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
-              />
-            </div>
-            <button
-              onClick={addContact}
-              disabled={isSaving || !newName.trim() || !newPhone.trim()}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
-            >
-              {isSaving ? "追加中…" : "追加する"}
-            </button>
-          </div>
-        </div>
+          </section>
+        ))}
       </main>
     </div>
   );
