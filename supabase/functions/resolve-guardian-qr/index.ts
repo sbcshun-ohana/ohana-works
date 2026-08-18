@@ -30,13 +30,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers });
 
   try {
-    const { token, device_id } = await req.json();
-    if (!token || !device_id) {
-      return new Response(
-        JSON.stringify({ error: "token/device_idが必要です" }),
-        { status: 400, headers },
-      );
-    }
+    const body = await req.json();
+    const { token, device_id, session_id, selections } = body as {
+      token?: string;
+      device_id?: string;
+      session_id?: string;
+      selections?: { child_id: string; action: string }[];
+    };
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = getServiceSecretKey();
@@ -44,6 +44,55 @@ Deno.serve(async (req) => {
     if (!tokenSecret) throw new Error("GUARDIAN_QR_TOKEN_SECRET が未設定です");
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // 234: 兄弟一括登降園の「確定」パス。スキャンで作られたセッションで選択を適用する。
+    // トークンは不要(スキャン時に検証・消費済み。セッションが認可を担う)。
+    if (session_id && Array.isArray(selections)) {
+      const { dateStr: businessDate } = tokyoDayBounds();
+      const { data: results, error: applyErr } = await adminClient.rpc("apply_family_checkin", {
+        p_session_id: session_id,
+        p_selections: selections,
+        p_business_date: businessDate,
+      });
+      if (applyErr) {
+        return new Response(
+          JSON.stringify({ error: "登降園の確定に失敗しました", detail: applyErr.message }),
+          { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
+        );
+      }
+      // 確定後、各児の保護者へ登降園プッシュ(checked_in/checked_out のみ)。
+      for (const r of (results ?? []) as { out_child_id: string; result: string }[]) {
+        if (r.result !== "checked_in" && r.result !== "checked_out") continue;
+        const { data: c } = await adminClient
+          .from("children").select("display_name, honorific_suffix").eq("id", r.out_child_id).maybeSingle();
+        const label = r.result === "checked_in" ? "登園" : "降園";
+        const { data: gts } = await adminClient
+          .from("guardian_child_links").select("guardian_id").eq("child_id", r.out_child_id);
+        for (const g of gts ?? []) {
+          const { data: tokens } = await adminClient
+            .from("push_device_tokens").select("fcm_token").eq("guardian_id", (g as { guardian_id: string }).guardian_id);
+          for (const t of tokens ?? []) {
+            await sendFcmPush({
+              fcmToken: (t as { fcm_token: string }).fcm_token,
+              title: `${c?.display_name ?? ""}${c?.honorific_suffix ?? ""}が${label}しました`,
+              body: `${label}しました`,
+              data: { type: "childcare_attendance", child_id: r.out_child_id },
+            });
+          }
+        }
+      }
+      return new Response(
+        JSON.stringify({ mode: "family_applied", results }),
+        { headers: { ...headers, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!token || !device_id) {
+      return new Response(
+        JSON.stringify({ error: "token/device_idが必要です" }),
+        { status: 400, headers },
+      );
+    }
 
     const { data: device } = await adminClient
       .from("devices")
@@ -114,6 +163,44 @@ Deno.serve(async (req) => {
     }
 
     const { dateStr: businessDate } = tokyoDayBounds();
+
+    // 234: 兄弟一括登降園。施設フラグONなら、単独処理せず家族候補+セッションを返す。
+    // キオスクは確認画面を表示し、選択を session_id 付きで再送(family_applied)する。
+    const { data: familyEnabled } = await adminClient.rpc("is_family_checkin_enabled_for_office", {
+      p_office_id: device.office_id,
+    });
+    if (familyEnabled === true) {
+      const { data: candidates, error: candErr } = await adminClient.rpc("fetch_family_checkin_candidates", {
+        p_guardian_id: qrToken.guardian_id,
+        p_office_id: device.office_id,
+        p_scanned_child_id: child.id,
+        p_business_date: businessDate,
+      });
+      if (candErr) throw candErr;
+      const direction = (candidates?.[0]?.direction as string) ?? "arrival";
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const { data: session, error: sessErr } = await adminClient
+        .from("family_checkin_sessions")
+        .insert({
+          guardian_id: qrToken.guardian_id,
+          office_id: device.office_id,
+          device_id,
+          direction,
+          expires_at: expiresAt,
+        })
+        .select("id")
+        .single();
+      if (sessErr) throw sessErr;
+      return new Response(
+        JSON.stringify({
+          mode: "family",
+          session_id: session.id,
+          direction,
+          candidates,
+        }),
+        { headers: { ...headers, "Content-Type": "application/json" } },
+      );
+    }
 
     const { data: dailyStatus } = await adminClient
       .from("daily_child_status")
