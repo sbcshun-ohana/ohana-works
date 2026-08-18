@@ -60,6 +60,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   Map<String, ({List<String> kinds, bool hasAntipyretic, String? symptom})> _medicationByChild = const {};
   // 欠席児童一覧の「保護者からの連絡」。childId→承認済み欠席申請の理由。
   Map<String, String> _absenceCommentByChild = const {};
+  // 登園メモ(244・職員内部)。childId→本文。
+  Map<String, String> _arrivalNoteByChild = const {};
   // 承認済み 遅刻/早退 のバッジ用。childId→リスト(種別/予定時刻/理由)。
   Map<String, List<({String type, String? time, String? reason})>> _timeChangeByChild = const {};
   // 感染症案件バッジ用(206)。childId→リスト(病名/必要書類/書類状態)。
@@ -250,6 +252,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       try {
       final c = await widget.service.fetchApprovedAbsenceCommentsForOffice(_officeId, _businessDate);
       if (mounted) setState(() => _absenceCommentByChild = c);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+    try {
+      final an = await widget.service.fetchArrivalNotesForOffice(_officeId, _businessDate);
+      if (mounted) setState(() => _arrivalNoteByChild = an);
     } catch (_) {
       // 取得失敗時は前回値のまま/非表示。
     }
@@ -802,6 +810,72 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   // K5(iii)/Phase A: 園児行から当日の連絡帳(園側 日誌・連絡帳)へ。既存詳細画面を再利用。
+  /// 登園メモ(職員内部)の入力シート。カードは狭いままにし、入力は下部シートでフル幅+キーボード。
+  Future<void> _openArrivalNote(DailyBoardRow row) async {
+    final controller = TextEditingController(text: _arrivalNoteByChild[row.childId] ?? '');
+    final saved = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+            left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('登園メモ: ${row.nameLabel}',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 4),
+            const Text('職員内部メモ(保護者非公開・連絡帳には出ません)',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: '受け入れ時の口頭連絡など',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                    child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル'))),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: FilledButton(
+                        onPressed: () => Navigator.pop(ctx, controller.text),
+                        child: const Text('保存'))),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == null) return;
+    try {
+      await widget.service.upsertChildArrivalNote(row.childId, _businessDate, saved);
+      if (!mounted) return;
+      setState(() {
+        final next = Map<String, String>.from(_arrivalNoteByChild);
+        if (saved.trim().isEmpty) {
+          next.remove(row.childId);
+        } else {
+          next[row.childId] = saved.trim();
+        }
+        _arrivalNoteByChild = next;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('登園メモの保存に失敗しました: $e')));
+      }
+    }
+  }
+
   Future<void> _openContact(DailyBoardRow row) async {
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => DailyContactDetailScreen(
@@ -1020,6 +1094,27 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       _AttendanceTimeBar(row: row),
+                                      // 登園メモ(職員内部・保護者非公開)。あれば一覧に1〜2行で表示。
+                                      if ((_arrivalNoteByChild[row.childId] ?? '').isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Icon(Icons.sticky_note_2_rounded,
+                                                size: 13, color: AppColors.warmOrange),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(
+                                                _arrivalNoteByChild[row.childId]!,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                    fontSize: 12, color: AppColors.warmOrange),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1038,6 +1133,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                         crossAxisAlignment: WrapCrossAlignment.center,
                                         children: [
                                           _StatusChip(status: effectiveBoardStatus(row)),
+                                          _actionIcon(
+                                              Icons.sticky_note_2_rounded,
+                                              '登園メモ',
+                                              (_arrivalNoteByChild[row.childId] ?? '').isNotEmpty
+                                                  ? AppColors.warmOrange
+                                                  : AppColors.textSecondary,
+                                              () => _openArrivalNote(row)),
                                           _actionIcon(Icons.menu_book_rounded, '日誌・連絡帳', AppColors.skyBlue, () => _openContact(row)),
                                           _actionIcon(Icons.edit_calendar_rounded, '出欠編集', AppColors.warmOrange, () => _openAttendanceEdit(row)),
                                           _actionIcon(

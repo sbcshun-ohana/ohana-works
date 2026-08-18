@@ -1359,6 +1359,38 @@ class ChildcareService {
     });
   }
 
+  // ------------------------------------------------------------------
+  // 登園メモ(244・職員内部・当日状況把握用。保護者非公開・連絡帳/AI非反映)。
+  // ------------------------------------------------------------------
+
+  Future<Map<String, String>> fetchArrivalNotesForOffice(
+    String officeId,
+    DateTime businessDate,
+  ) async {
+    final rows = await _client.rpc('fetch_arrival_notes_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    }) as List;
+    final map = <String, String>{};
+    for (final r in rows) {
+      final m = r as Map<String, dynamic>;
+      map[m['child_id'] as String] = m['body'] as String;
+    }
+    return map;
+  }
+
+  Future<void> upsertChildArrivalNote(
+    String childId,
+    DateTime businessDate,
+    String body,
+  ) async {
+    await _client.rpc('upsert_child_arrival_note', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+      'p_body': body,
+    });
+  }
+
   /// 表示制御のみに使う(編集・削除ボタンの出し分け)。実際の許可判定は必ずRPC側で行う。
   Future<bool> isChildInternalNotesChief(String officeId) async {
     final result = await _client.rpc(
