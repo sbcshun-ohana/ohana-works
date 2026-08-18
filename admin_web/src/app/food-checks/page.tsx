@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
+import { DailyEliminationPanel } from "@/components/DailyEliminationPanel";
 import { MealStatusSection } from "@/components/MealStatusSection";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
@@ -101,6 +102,8 @@ function FoodChecksPageContent() {
         </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
+
+        {!rowsError && selectedOffice && <DailyEliminationPanel officeId={selectedOffice} />}
 
         {!rowsError && selectedOffice && <MealStatusSection officeId={selectedOffice} />}
 
