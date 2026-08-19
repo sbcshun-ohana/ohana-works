@@ -37,6 +37,9 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
   String? _errorMessage;
   String _query = '';
   String? _filter; // null=全園児。クラス名 or _preEnrollLabel / _withdrawnLabel / _noClassLabel
+  // 分割ビュー(iPad幅)で右パネルに表示中の園児。
+  String? _selectedChildId;
+  String? _selectedChildName;
 
   @override
   void initState() {
@@ -94,6 +97,35 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: const OhanaBackHomeLeading(),
+        leadingWidth: 200,
+        title: const Text('園児台帳'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    // iPad横幅: 左=常時の名前一覧+右=選択児の4タブ本体。狭い画面は一覧→遷移。
+                    final split = constraints.maxWidth >= 800;
+                    if (!split) return _listPanel(split: false);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(width: 360, child: _listPanel(split: true)),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: _detailPanel()),
+                      ],
+                    );
+                  },
+                ),
+    );
+  }
+
+  Widget _listPanel({required bool split}) {
     final q = _query.trim();
     var filtered = q.isEmpty ? _children : _children.where((c) => _matchesQuery(c, q)).toList();
     if (_filter != null) {
@@ -128,97 +160,137 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
         return r != 0 ? r : a.compareTo(b);
       });
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OhanaBackHomeLeading(),
-        leadingWidth: 200,
-        title: const Text('園児台帳'),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
-              : Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              decoration: const InputDecoration(
-                                prefixIcon: Icon(Icons.search_rounded),
-                                hintText: '園児名で検索(漢字・ひらがな)',
-                                isDense: true,
-                              ),
-                              onChanged: (v) => setState(() => _query = v),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          DropdownButton<String?>(
-                            value: _filter,
-                            hint: const Text('全園児'),
-                            items: [
-                              const DropdownMenuItem<String?>(value: null, child: Text('全園児')),
-                              for (final cat in allCategories)
-                                DropdownMenuItem<String?>(value: cat, child: Text(cat)),
-                            ],
-                            onChanged: (v) => setState(() => _filter = v),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: RefreshIndicator(
-                        onRefresh: _load,
-                        child: ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            for (final category in categories) ...[
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8, bottom: 4),
-                                child: Text(category,
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                        color: category == _withdrawnLabel
-                                            ? Colors.grey
-                                            : category == _preEnrollLabel
-                                                ? AppColors.warmOrange
-                                                : AppColors.leafGreen)),
-                              ),
-                              for (final c in byCategory[category]!) _childTile(c, category),
-                            ],
-                            if (filtered.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(24),
-                                child: Text('該当する園児がいません', textAlign: TextAlign.center),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: '園児名で検索',
+                    isDense: true,
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
                 ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String?>(
+                value: _filter,
+                hint: const Text('全園児'),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('全園児')),
+                  for (final cat in allCategories)
+                    DropdownMenuItem<String?>(value: cat, child: Text(cat)),
+                ],
+                onChanged: (v) => setState(() => _filter = v),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                for (final category in categories) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Text(category,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            color: category == _withdrawnLabel
+                                ? Colors.grey
+                                : category == _preEnrollLabel
+                                    ? AppColors.warmOrange
+                                    : AppColors.leafGreen)),
+                  ),
+                  for (final c in byCategory[category]!) _childTile(c, category, split: split),
+                ],
+                if (filtered.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('該当する園児がいません', textAlign: TextAlign.center),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _childTile(Map<String, dynamic> c, String category) {
+  Widget _detailPanel() {
+    if (_selectedChildId == null) {
+      return const Center(
+        child: Text('左の一覧から園児を選択してください', style: TextStyle(color: AppColors.textSecondary)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(_selectedChildName ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.event_repeat_rounded),
+                tooltip: '週次保育時間(標準)',
+                onPressed: () => showChildWeeklyScheduleSheet(
+                  context,
+                  service: widget.service,
+                  childId: _selectedChildId!,
+                  childName: _selectedChildName ?? '',
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ChildDetailBody(
+            key: ValueKey(_selectedChildId),
+            service: widget.service,
+            childId: _selectedChildId!,
+            officeId: widget.officeId,
+            businessDate: widget.businessDate,
+            openRegisterTab: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _childTile(Map<String, dynamic> c, String category, {required bool split}) {
     final display = (c['display_name'] as String?) ?? '';
     final honorific = (c['honorific_suffix'] as String?) ?? '';
     final kana = (c['name_kana'] as String?) ?? '';
+    final childId = c['child_id'] as String;
     final isWithdrawn = category == _withdrawnLabel;
+    final selected = split && _selectedChildId == childId;
     // 入園前の園児は生年月日から入園予定クラスを併記(俊指示 2026-08-17)
     final planned = category == _preEnrollLabel ? _plannedClassLabel(c) : null;
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
+      color: selected ? AppColors.leafGreen.withValues(alpha: 0.10) : null,
       child: ListTile(
+        selected: selected,
         leading: Icon(Icons.badge_rounded,
             color: isWithdrawn ? Colors.grey : AppColors.leafGreen),
         title: Row(
           children: [
-            Text('$display$honorific',
-                style: TextStyle(color: isWithdrawn ? Colors.grey : null)),
+            Flexible(
+              child: Text('$display$honorific',
+                  style: TextStyle(color: isWithdrawn ? Colors.grey : null),
+                  overflow: TextOverflow.ellipsis),
+            ),
             if (planned != null) ...[
               const SizedBox(width: 10),
               Container(
@@ -235,19 +307,28 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
           ],
         ),
         subtitle: kana.isEmpty ? null : Text(kana, style: const TextStyle(fontSize: 12)),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => ChildDetailScreen(
-              service: widget.service,
-              childId: c['child_id'] as String,
-              childName: '$display$honorific',
-              officeId: widget.officeId,
-              businessDate: widget.businessDate,
-              openRegisterTab: true,
-            ),
-          ),
-        ),
+        trailing: split ? null : const Icon(Icons.chevron_right_rounded),
+        onTap: () {
+          if (split) {
+            setState(() {
+              _selectedChildId = childId;
+              _selectedChildName = '$display$honorific';
+            });
+          } else {
+            Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => ChildDetailScreen(
+                  service: widget.service,
+                  childId: childId,
+                  childName: '$display$honorific',
+                  officeId: widget.officeId,
+                  businessDate: widget.businessDate,
+                  openRegisterTab: true,
+                ),
+              ),
+            );
+          }
+        },
       ),
     );
   }

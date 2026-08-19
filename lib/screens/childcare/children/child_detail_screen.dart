@@ -37,6 +37,61 @@ class ChildDetailScreen extends StatefulWidget {
 }
 
 class _ChildDetailScreenState extends State<ChildDetailScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: const OhanaBackHomeLeading(),
+        leadingWidth: 200,
+        title: Text(widget.childName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.event_repeat_rounded),
+            tooltip: '週次保育時間(標準)',
+            onPressed: () => showChildWeeklyScheduleSheet(
+              context,
+              service: widget.service,
+              childId: widget.childId,
+              childName: widget.childName,
+            ),
+          ),
+        ],
+      ),
+      body: ChildDetailBody(
+        service: widget.service,
+        childId: widget.childId,
+        officeId: widget.officeId,
+        businessDate: widget.businessDate,
+        openRegisterTab: widget.openRegisterTab,
+      ),
+    );
+  }
+}
+
+/// 園児詳細のタブ本体(Scaffold/AppBarなし)。単独画面(ChildDetailScreen)と
+/// 園児台帳の分割ビュー(右パネル)の両方で再利用する。選択児が変わる場合は
+/// key: ValueKey(childId) を付けて State を作り直す(機能フラグ再取得・各タブ初期化)。
+class ChildDetailBody extends StatefulWidget {
+  const ChildDetailBody({
+    super.key,
+    required this.service,
+    required this.childId,
+    required this.officeId,
+    required this.businessDate,
+    this.openRegisterTab = false,
+  });
+
+  final ChildcareService service;
+  final String childId;
+  final String officeId;
+  final DateTime businessDate;
+  final bool openRegisterTab;
+
+  @override
+  State<ChildDetailBody> createState() => _ChildDetailBodyState();
+}
+
+class _ChildDetailBodyState extends State<ChildDetailBody> {
   // 園内記録・発達記録の機能フラグをまとめて取得する([internalNotes, development])。
   late Future<List<bool>> _flagsFuture;
 
@@ -49,32 +104,13 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     ]);
   }
 
-  Future<void> _openWeeklySchedule() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _WeeklyScheduleSheet(
-        service: widget.service,
-        childId: widget.childId,
-        childName: widget.childName,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<bool>>(
       future: _flagsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return Scaffold(
-            appBar: AppBar(
-              leading: const OhanaBackHomeLeading(),
-              leadingWidth: 200,
-              title: Text(widget.childName),
-            ),
-            body: const Center(child: CircularProgressIndicator()),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
         final internalNotesEnabled = snapshot.data?[0] ?? false;
         final developmentEnabled = snapshot.data?[1] ?? false;
@@ -87,46 +123,43 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         return DefaultTabController(
           length: tabs.length,
           initialIndex: widget.openRegisterTab ? tabs.length - 1 : 0,
-          child: Scaffold(
-            appBar: AppBar(
-              leading: const OhanaBackHomeLeading(),
-              leadingWidth: 200,
-              title: Text(widget.childName),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.event_repeat_rounded),
-                  tooltip: '週次保育時間(標準)',
-                  onPressed: _openWeeklySchedule,
+          child: Column(
+            children: [
+              DecoratedBox(
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
                 ),
-              ],
-              bottom: tabs.length > 1 ? TabBar(tabs: tabs) : null,
-            ),
-            body: TabBarView(
-              children: [
-                _FamilyDailyReportTab(
-                  service: widget.service,
-                  childId: widget.childId,
-                  businessDate: widget.businessDate,
+                child: TabBar(tabs: tabs),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _FamilyDailyReportTab(
+                      service: widget.service,
+                      childId: widget.childId,
+                      businessDate: widget.businessDate,
+                    ),
+                    if (internalNotesEnabled)
+                      ChildInternalNotesTab(
+                        service: widget.service,
+                        childId: widget.childId,
+                        officeId: widget.officeId,
+                      ),
+                    if (developmentEnabled)
+                      ChildDevelopmentTab(
+                        service: widget.service,
+                        childId: widget.childId,
+                      ),
+                    // 園児台帳(221)。全職員閲覧可・閲覧専用
+                    ChildRegisterTab(
+                      service: widget.service,
+                      childId: widget.childId,
+                      officeId: widget.officeId,
+                    ),
+                  ],
                 ),
-                if (internalNotesEnabled)
-                  ChildInternalNotesTab(
-                    service: widget.service,
-                    childId: widget.childId,
-                    officeId: widget.officeId,
-                  ),
-                if (developmentEnabled)
-                  ChildDevelopmentTab(
-                    service: widget.service,
-                    childId: widget.childId,
-                  ),
-                // 園児台帳(221)。全職員閲覧可・閲覧専用
-                ChildRegisterTab(
-                  service: widget.service,
-                  childId: widget.childId,
-                  officeId: widget.officeId,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
