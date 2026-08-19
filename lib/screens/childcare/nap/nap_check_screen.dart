@@ -77,7 +77,8 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
   List<({String childId, String nameLabel, String className})> _roster = const [];
 
   static const double _nameColWidth = 176;
-  static const double _cellWidth = 46;
+  // iPad幅に応じてマスを広げる(下限46)。build で画面幅から算出。
+  double _cellWidth = 46;
 
   @override
   void initState() {
@@ -375,6 +376,11 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     final rows = _displayRows();
     final slots = _hourSlots(_selectedHour);
     final nowUtc = DateTime.now().toUtc();
+    // マス幅を画面幅から算出して横幅バランスを取る(下限46・上限120)。
+    final screenW = MediaQuery.of(context).size.width;
+    _cellWidth = slots.isEmpty
+        ? 46
+        : ((screenW - _nameColWidth - 24) / slots.length).clamp(46.0, 120.0);
     return Scaffold(
       appBar: AppBar(
         leading: const OhanaLogoHomeButton(),
