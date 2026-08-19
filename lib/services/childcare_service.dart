@@ -1463,6 +1463,42 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 食数の手動再算出(職員以上・ON施設)。
+  Future<void> computeMealCounts(String officeId, DateTime businessDate) async {
+    await _client.rpc('compute_meal_counts', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+  }
+
+  /// クラス承認(担任=自クラス/職員行=主任以上)。行を確定。
+  Future<void> confirmMealRow(String officeId, DateTime businessDate, String rowKey) async {
+    await _client.rpc('confirm_meal_row', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+      'p_row_key': rowKey,
+    });
+  }
+
+  /// 期限内変更(当日・昼食10:00/午後14:00/朝9:30)。変更前後を履歴化。
+  Future<void> changeMealRow(
+    String officeId,
+    DateTime businessDate,
+    String rowKey,
+    String mealSlot,
+    String field,
+    int newCount,
+  ) async {
+    await _client.rpc('change_meal_row', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+      'p_row_key': rowKey,
+      'p_meal_slot': mealSlot,
+      'p_field': field,
+      'p_new_count': newCount,
+    });
+  }
+
   /// 当日の食数変更履歴(厨房の大型アラート・§5.2)。
   Future<List<Map<String, dynamic>>> fetchMealChanges(String officeId, DateTime businessDate) async {
     final rows = await _client.rpc('fetch_meal_changes', params: {
