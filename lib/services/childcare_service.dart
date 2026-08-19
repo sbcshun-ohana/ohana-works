@@ -1454,6 +1454,32 @@ class ChildcareService {
     );
   }
 
+  /// 食数ボード(行区分×食事区分・258/257)。厨房ページ・食数ボード表示用。
+  Future<List<Map<String, dynamic>>> fetchMealBoard(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_board', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 当日の食数変更履歴(厨房の大型アラート・§5.2)。
+  Future<List<Map<String, dynamic>>> fetchMealChanges(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_changes', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 厨房の変更確認(未確認の変更を確認済みに・259)。
+  Future<void> acknowledgeMealChanges(String officeId, DateTime businessDate) async {
+    await _client.rpc('acknowledge_meal_changes', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    });
+  }
+
   /// 当日の共通除去食/弁当持参/給食開始保留の対象児(厨房の誤配膳防止表示用)。
   Future<List<({String childId, String childName, String? className, String? handling, List<String> targets})>>
       fetchDailyEliminationForOffice(String officeId, DateTime businessDate) async {

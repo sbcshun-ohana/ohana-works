@@ -5,8 +5,8 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 
-/// 厨房ページ(M6 Phase 7・本案§4.4)。給食情報のみを表示し、他の保育業務情報へは遷移しない。
-/// 当日の区分別食数(給食提供数=通常食+共通除去食)・職員食数・共通除去食/弁当持参の対象児を表示。
+/// 厨房ページ(給食管理 Phase 2・設計指示書v1.0 §5)。給食情報のみを表示し、他の保育業務へは遷移しない。
+/// 行区分×食事区分の食数(暫定/確定)・共通除去食の対象児・弁当/保留・変更の大型アラート(§5.2)。
 class KitchenScreen extends StatefulWidget {
   const KitchenScreen({
     super.key,
@@ -23,11 +23,18 @@ class KitchenScreen extends StatefulWidget {
   State<KitchenScreen> createState() => _KitchenScreenState();
 }
 
+const _slots = [
+  (key: 'am_snack', label: '朝おやつ'),
+  (key: 'lunch', label: '昼食'),
+  (key: 'pm_snack', label: '午後おやつ'),
+];
+
 class _KitchenScreenState extends State<KitchenScreen> {
   late DateTime _date = widget.businessDate;
   bool _loading = true;
   String? _error;
-  ({int normal, int elimination, int bento, int hold, int pre, int provided, int staff})? _count;
+  List<Map<String, dynamic>> _board = const [];
+  List<Map<String, dynamic>> _changes = const [];
   List<({String childId, String childName, String? className, String? handling, List<String> targets})> _special =
       const [];
 
@@ -43,12 +50,14 @@ class _KitchenScreenState extends State<KitchenScreen> {
       _error = null;
     });
     try {
-      final count = await widget.service.fetchMealCountForOffice(widget.officeId, _date);
+      final board = await widget.service.fetchMealBoard(widget.officeId, _date);
       final special = await widget.service.fetchDailyEliminationForOffice(widget.officeId, _date);
+      final changes = await widget.service.fetchMealChanges(widget.officeId, _date);
       if (!mounted) return;
       setState(() {
-        _count = count;
+        _board = board;
         _special = special;
+        _changes = changes;
         _loading = false;
       });
     } catch (_) {
@@ -66,6 +75,50 @@ class _KitchenScreenState extends State<KitchenScreen> {
     _load();
   }
 
+  List<Map<String, dynamic>> get _unacked =>
+      _changes.where((c) => c['acknowledged_at'] == null).toList();
+
+  Future<void> _acknowledge() async {
+    // 変更前→後を確認するダイアログ → 確認で通常表示へ。
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('食数の変更を確認'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final c in _unacked)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${c['row_label'] ?? ''}  ${_slotLabel(c['meal_slot'] as String?)}  '
+                    '${c['field'] == 'staff' ? '職員' : '園児'} ${c['old_count']} → ${c['new_count']}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
+          FilledButton(
+            onPressed: () async {
+              await widget.service.acknowledgeMealChanges(widget.officeId, _date);
+              if (ctx.mounted) Navigator.pop(ctx);
+              await _load();
+            },
+            child: const Text('確認しました'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _slotLabel(String? key) => _slots.firstWhere((s) => s.key == key, orElse: () => _slots[1]).label;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,76 +132,119 @@ class _KitchenScreenState extends State<KitchenScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-              : RefreshIndicator(onRefresh: _load, child: _body()),
+              : Column(
+                  children: [
+                    if (_unacked.isNotEmpty) _alertBanner(),
+                    Expanded(child: RefreshIndicator(onRefresh: _load, child: _body())),
+                  ],
+                ),
+    );
+  }
+
+  /// §5.2 大型全面アラート(確定後に変更があったとき)。
+  Widget _alertBanner() {
+    return Material(
+      color: AppColors.punchClockOut,
+      child: InkWell(
+        onTap: _acknowledge,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Row(
+            children: [
+              const Icon(Icons.notification_important_rounded, color: Colors.white, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('食数の更新があります(${_unacked.length}件) — タップで変更点を確認',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _body() {
-    final c = _count!;
+    // ピボット: row_key → {label, type, sort, slots}
+    final map = <String, Map<String, dynamic>>{};
+    for (final b in _board) {
+      final key = b['row_key'] as String;
+      final row = map.putIfAbsent(key, () => {
+            'label': b['row_label'],
+            'type': b['row_type'],
+            'sort': (b['sort_order'] as num?)?.toInt() ?? 0,
+            'confirmed': false,
+            'cells': <String, ({int child, int staff})>{},
+          });
+      (row['cells'] as Map<String, ({int child, int staff})>)[b['meal_slot'] as String] =
+          (child: (b['child_count'] as num?)?.toInt() ?? 0, staff: (b['staff_count'] as num?)?.toInt() ?? 0);
+      if (b['is_confirmed'] == true) row['confirmed'] = true;
+    }
+    final rows = map.values.toList()..sort((a, b) => (a['sort'] as int).compareTo(b['sort'] as int));
+
+    // 合計
+    final total = {for (final s in _slots) s.key: (child: 0, staff: 0)};
+    for (final r in rows) {
+      final cells = r['cells'] as Map<String, ({int child, int staff})>;
+      for (final s in _slots) {
+        final c = cells[s.key];
+        if (c == null) continue;
+        final t = total[s.key]!;
+        total[s.key] = r['type'] == 'staff'
+            ? (child: t.child, staff: t.staff + c.staff)
+            : (child: t.child + c.child, staff: t.staff);
+      }
+    }
+
     final elimination = _special.where((s) => s.handling == 'elimination').toList();
     final bento = _special.where((s) => s.handling == 'bento').toList();
     final hold = _special.where((s) => s.handling == 'hold').toList();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // 給食提供数(大きく) + 職員食数
-        Row(
-          children: [
-            Expanded(child: _bigCount('給食提供数', c.provided, AppColors.leafGreen, sub: '通常${c.normal}・除去${c.elimination}')),
-            const SizedBox(width: 12),
-            Expanded(child: _bigCount('職員食数', c.staff, AppColors.skyBlue)),
-          ],
+        // 食数表
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                _boardHeader(),
+                const Divider(height: 12),
+                for (final r in rows) _boardRow(r),
+                const Divider(height: 12),
+                _totalRow(total),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 12),
-        // 区分別の内訳
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _miniCount('通常食', c.normal),
-            _miniCount('共通除去食', c.elimination),
-            _miniCount('弁当持参', c.bento),
-            _miniCount('給食開始保留', c.hold),
-            _miniCount('給食提供前', c.pre),
-          ],
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
-        // 共通除去食の対象児(誤配膳防止・除去アレルゲンを大きく)
-        _sectionTitle('共通除去食の対象児', AppColors.warmOrange, elimination.length),
+        // 共通除去食(誤配膳防止・大きく)
+        _sectionTitle('共通除去食の対象児', AppColors.punchClockOut, elimination.length),
         if (elimination.isEmpty)
           _emptyLine('対象児はいません')
         else
           ...elimination.map((s) => Card(
-                color: AppColors.warmOrange.withValues(alpha: 0.08),
+                color: AppColors.punchClockOut.withValues(alpha: 0.06),
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${s.childName}${s.className != null ? '  (${s.className})' : ''}',
-                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                            const SizedBox(height: 4),
-                            const Text('除去', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                          ],
-                        ),
+                        child: Text('${s.childName}${s.className != null ? '  (${s.className})' : ''}',
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                       ),
                       Wrap(
                         spacing: 8,
-                        runSpacing: 8,
                         alignment: WrapAlignment.end,
                         children: [
                           for (final t in s.targets)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: AppColors.punchClockOut,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+                                  color: AppColors.punchClockOut, borderRadius: BorderRadius.circular(10)),
                               child: Text(t,
                                   style: const TextStyle(
                                       color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
@@ -159,73 +255,81 @@ class _KitchenScreenState extends State<KitchenScreen> {
                   ),
                 ),
               )),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // 弁当持参
         _sectionTitle('弁当持参', AppColors.textSecondary, bento.length),
-        if (bento.isEmpty)
-          _emptyLine('対象児はいません')
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final s in bento)
-                Chip(label: Text('${s.childName}${s.className != null ? '(${s.className})' : ''}')),
-            ],
-          ),
-        const SizedBox(height: 16),
-
-        // 給食開始保留
-        _sectionTitle('給食開始保留', AppColors.punchClockOut, hold.length),
-        if (hold.isEmpty)
-          _emptyLine('対象児はいません')
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final s in hold)
-                Chip(label: Text('${s.childName}${s.className != null ? '(${s.className})' : ''}')),
-            ],
-          ),
+        if (bento.isEmpty) _emptyLine('対象児はいません') else _chips(bento),
+        const SizedBox(height: 12),
+        _sectionTitle('給食開始保留', AppColors.warmOrange, hold.length),
+        if (hold.isEmpty) _emptyLine('対象児はいません') else _chips(hold),
         const SizedBox(height: 24),
       ],
     );
   }
 
-  Widget _bigCount(String label, int n, Color color, {String? sub}) => Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-          child: Column(
-            children: [
-              Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-              const SizedBox(height: 6),
-              Text('$n', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: color)),
-              if (sub != null) ...[
-                const SizedBox(height: 2),
-                Text(sub, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-              ],
-            ],
-          ),
-        ),
+  Widget _boardHeader() => Row(
+        children: [
+          const SizedBox(width: 140, child: Text('区分', style: TextStyle(fontWeight: FontWeight.w800))),
+          for (final s in _slots)
+            Expanded(child: Center(child: Text(s.label, style: const TextStyle(fontWeight: FontWeight.w800)))),
+          const SizedBox(width: 64, child: Center(child: Text('確定', style: TextStyle(fontWeight: FontWeight.w800)))),
+        ],
       );
 
-  Widget _miniCount(String label, int n) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-            const SizedBox(width: 10),
-            Text('$n名', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          ],
-        ),
+  Widget _boardRow(Map<String, dynamic> r) {
+    final cells = r['cells'] as Map<String, ({int child, int staff})>;
+    final isStaff = r['type'] == 'staff';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          SizedBox(width: 140, child: Text('${r['label']}', style: const TextStyle(fontWeight: FontWeight.w600))),
+          for (final s in _slots)
+            Expanded(
+              child: Center(
+                child: cells[s.key] == null
+                    ? const Text('—', style: TextStyle(color: AppColors.textSecondary))
+                    : Text('${isStaff ? cells[s.key]!.staff : cells[s.key]!.child}',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          SizedBox(
+            width: 64,
+            child: Center(
+              child: r['confirmed'] == true
+                  ? const Icon(Icons.check_circle, color: AppColors.leafGreen, size: 20)
+                  : const Text('確認中', style: TextStyle(fontSize: 11, color: AppColors.warmOrange)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _totalRow(Map<String, ({int child, int staff})> total) => Row(
+        children: [
+          const SizedBox(width: 140, child: Text('合計(提供/職員)', style: TextStyle(fontWeight: FontWeight.w900))),
+          for (final s in _slots)
+            Expanded(
+              child: Center(
+                child: Text(
+                  '${total[s.key]!.child}${total[s.key]!.staff > 0 ? ' / 職員${total[s.key]!.staff}' : ''}',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.leafGreen),
+                ),
+              ),
+            ),
+          const SizedBox(width: 64),
+        ],
+      );
+
+  Widget _chips(List<({String childId, String childName, String? className, String? handling, List<String> targets})> list) =>
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final s in list)
+            Chip(label: Text('${s.childName}${s.className != null ? '(${s.className})' : ''}')),
+        ],
       );
 
   Widget _sectionTitle(String title, Color color, int count) => Padding(
