@@ -64,6 +64,15 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
     });
   }
 
+  /// クラス名から年齢('0歳'..'5歳')を引く(連絡帳の午前おやつ/ミルクの出し分け用)。
+  String? _ageGroupFor(String? className) {
+    if (className == null) return null;
+    for (final k in _classes) {
+      if (k.className == className) return k.ageGroup;
+    }
+    return null;
+  }
+
   List<DailyContact> _filter(List<DailyContact> all) {
     final selectedClassName = _selectedClassId == null
         ? null
@@ -243,12 +252,14 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
                   officeId: widget.officeId,
                   childId: c.childId,
                   businessDate: _businessDate,
+                  ageGroup: _ageGroupFor(c.className),
                 ),
                 ChildDayMealView(
                   service: widget.service,
                   officeId: widget.officeId,
                   childId: c.childId,
                   businessDate: _businessDate,
+                  ageGroup: _ageGroupFor(c.className),
                 ),
               ],
             ),

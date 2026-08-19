@@ -19,12 +19,14 @@ class ChildDayHealthView extends StatefulWidget {
     required this.officeId,
     required this.childId,
     required this.businessDate,
+    this.ageGroup,
   });
 
   final ChildcareService service;
   final String officeId;
   final String childId;
   final DateTime businessDate;
+  final String? ageGroup; // クラスの年齢('0歳'..)。ミルクの出し分けに使用
 
   @override
   State<ChildDayHealthView> createState() => _ChildDayHealthViewState();
@@ -44,12 +46,19 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
     _load();
   }
 
-  /// 年度年齢(4/1基準の満年齢)。ミルクは0歳児(はな組)のみ表示する(俊指示 2026-08-19)。
+  /// 年度年齢(4/1基準の満年齢)。ageGroup が無い場合のフォールバック。
   int _fiscalAge(DateTime birth, DateTime ref) {
     final fyStart = ref.month >= 4 ? ref.year : ref.year - 1;
     var age = fyStart - birth.year;
     if (birth.month > 4 || (birth.month == 4 && birth.day > 1)) age--;
     return age;
+  }
+
+  /// クラスの年齢('0歳'→0)。基準はクラス(はな=0歳のみミルク)。生年月日はフォールバック。
+  int? _age() {
+    final g = int.tryParse((widget.ageGroup ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    if (g != null) return g;
+    return _birthDate == null ? null : _fiscalAge(_birthDate!, widget.businessDate);
   }
 
   Future<void> _load() async {
@@ -125,7 +134,7 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
                   ),
           ),
           // ミルクは0歳児(はな組)のみ表示。1歳児クラス以上(そら〜にじ)では非表示。
-          if (_birthDate != null && _fiscalAge(_birthDate!, widget.businessDate) == 0)
+          if (_age() == 0)
             _section(
               'ミルク',
               _milk.isEmpty
@@ -149,12 +158,14 @@ class ChildDayMealView extends StatefulWidget {
     required this.officeId,
     required this.childId,
     required this.businessDate,
+    this.ageGroup,
   });
 
   final ChildcareService service;
   final String officeId;
   final String childId;
   final DateTime businessDate;
+  final String? ageGroup; // クラスの年齢('0歳'..'5歳')。午前おやつの出し分けに使用
 
   @override
   State<ChildDayMealView> createState() => _ChildDayMealViewState();
@@ -195,7 +206,7 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
     }
   }
 
-  /// 年度年齢(4/1基準の満年齢)。午前おやつは0・1・2歳児のみ、3歳児以上は昼食・午後おやつのみ(俊確定 2026-08-19)。
+  /// 年度年齢(4/1基準の満年齢)。ageGroup が無い場合のフォールバック。
   int _fiscalAge(DateTime birth, DateTime ref) {
     final fyStart = ref.month >= 4 ? ref.year : ref.year - 1;
     var age = fyStart - birth.year;
@@ -203,12 +214,20 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
     return age;
   }
 
+  /// クラスの年齢('2歳'→2)。基準はクラス(はな/そら/かぜ=午前おやつ)。生年月日はフォールバック。
+  int? _age() {
+    final g = int.tryParse((widget.ageGroup ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    if (g != null) return g;
+    return _birthDate == null ? null : _fiscalAge(_birthDate!, widget.businessDate);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
-    // 3歳児クラス以上は午前おやつが無いため非表示(0・1・2歳のみ表示。生年月日不明時は安全側で表示)。
-    final showAmSnack = _birthDate == null || _fiscalAge(_birthDate!, widget.businessDate) < 3;
+    // 3歳児クラス以上は午前おやつが無いため非表示(0・1・2歳=はな/そら/かぜのみ。年齢不明時は安全側で表示)。
+    final age = _age();
+    final showAmSnack = age == null || age < 3;
     final slots = _mealSlotLabels.entries.where((e) => e.key != 'am_snack' || showAmSnack);
     return RefreshIndicator(
       onRefresh: _load,
