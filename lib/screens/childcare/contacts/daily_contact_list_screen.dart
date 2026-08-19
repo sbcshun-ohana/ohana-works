@@ -5,6 +5,7 @@ import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
+import 'child_day_health_nap_views.dart';
 import 'daily_contact_detail_screen.dart';
 
 /// §10-13 連絡帳一覧(施設内の在籍園児の当日分)。
@@ -32,6 +33,8 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
   // クラス絞り込み(俊指示 2026-08-13)。null=全クラス。
   List<ChildcareClass> _classes = const [];
   String? _selectedClassId;
+  // 分割ビュー(iPad幅)で右パネルに表示中の園児。
+  DailyContact? _selectedContact;
 
   @override
   void initState() {
@@ -61,6 +64,16 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
     });
   }
 
+  List<DailyContact> _filter(List<DailyContact> all) {
+    final selectedClassName = _selectedClassId == null
+        ? null
+        : _classes
+            .firstWhere((c) => c.classId == _selectedClassId,
+                orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0))
+            .className;
+    return selectedClassName == null ? all : all.where((c) => c.className == selectedClassName).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,7 +86,6 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
       ),
       body: Column(
         children: [
-          // クラス絞り込み(表示のみのフィルタ。データ取得は施設単位のまま)。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
@@ -95,73 +107,144 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
             ),
           ),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _reload,
-              child: FutureBuilder<List<DailyContact>>(
-                future: _contactsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final all = snapshot.data ?? const [];
-                  // クラス名一致で絞り込み(DailyContact は classId を持たないため className で対応)。
-                  final selectedClassName = _selectedClassId == null
-                      ? null
-                      : _classes
-                          .firstWhere((c) => c.classId == _selectedClassId,
-                              orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0))
-                          .className;
-                  final contacts =
-                      selectedClassName == null ? all : all.where((c) => c.className == selectedClassName).toList();
-                  if (contacts.isEmpty) {
-                    return ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: const [SizedBox(height: 120), Center(child: Text('対象の園児がいません'))],
+            child: FutureBuilder<List<DailyContact>>(
+              future: _contactsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final contacts = _filter(snapshot.data ?? const []);
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    // iPad幅: 左=園児一覧+右=選択児のタブ(連絡帳/午睡/健康)。狭い画面は一覧→遷移。
+                    final split = constraints.maxWidth >= 800;
+                    if (!split) {
+                      return RefreshIndicator(onRefresh: _reload, child: _contactList(contacts, split: false));
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          width: 340,
+                          child: RefreshIndicator(onRefresh: _reload, child: _contactList(contacts, split: true)),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: _detailPanel()),
+                      ],
                     );
-                  }
-                  return ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    itemCount: contacts.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final contact = contacts[index];
-                return Card(
-                  child: Opacity(
-                    opacity: contact.isAbsent ? 0.5 : 1,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
-                      title: Text(
-                        '${contact.nameLabel}${contact.isAbsent ? "(欠席)" : ""}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        '${contact.className ?? ""} ・ 担当: ${contact.assigneeName ?? "未割当"}',
-                        style: const TextStyle(color: AppColors.textSecondary),
-                      ),
-                      trailing: _StatusChip(status: contact.status),
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => DailyContactDetailScreen(
-                              service: widget.service,
-                              officeId: widget.officeId,
-                              childId: contact.childId,
-                              childNameLabel: contact.nameLabel,
-                              businessDate: _businessDate,
-                              isManager: widget.isManager,
-                            ),
-                          ),
-                        );
-                        await _reload();
-                      },
-                    ),
-                  ),
+                  },
                 );
-                    },
-                  );
-                },
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _contactList(List<DailyContact> contacts, {required bool split}) {
+    if (contacts.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [SizedBox(height: 120), Center(child: Text('対象の園児がいません'))],
+      );
+    }
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.all(split ? 10 : 16),
+      itemCount: contacts.length,
+      separatorBuilder: (_, _) => SizedBox(height: split ? 6 : 12),
+      itemBuilder: (context, index) {
+        final contact = contacts[index];
+        final selected = split && _selectedContact?.childId == contact.childId;
+        return Card(
+          margin: EdgeInsets.zero,
+          color: selected ? AppColors.leafGreen.withValues(alpha: 0.10) : null,
+          child: Opacity(
+            opacity: contact.isAbsent ? 0.5 : 1,
+            child: ListTile(
+              selected: selected,
+              contentPadding: EdgeInsets.all(split ? 12 : 16),
+              title: Text(
+                '${contact.nameLabel}${contact.isAbsent ? "(欠席)" : ""}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
+              subtitle: Text(
+                '${contact.className ?? ""} ・ 担当: ${contact.assigneeName ?? "未割当"}',
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              trailing: _StatusChip(status: contact.status),
+              onTap: () async {
+                if (split) {
+                  setState(() => _selectedContact = contact);
+                } else {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DailyContactDetailScreen(
+                        service: widget.service,
+                        officeId: widget.officeId,
+                        childId: contact.childId,
+                        childNameLabel: contact.nameLabel,
+                        businessDate: _businessDate,
+                        isManager: widget.isManager,
+                      ),
+                    ),
+                  );
+                  await _reload();
+                }
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _detailPanel() {
+    final c = _selectedContact;
+    if (c == null) {
+      return const Center(
+        child: Text('左の一覧から園児を選択してください', style: TextStyle(color: AppColors.textSecondary)),
+      );
+    }
+    final childKey = ValueKey('${c.childId}_${_businessDate.toIso8601String()}');
+    return DefaultTabController(
+      key: childKey,
+      length: 3,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Text('${c.nameLabel}${c.isAbsent ? "(欠席)" : ""}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          ),
+          const TabBar(tabs: [Tab(text: '連絡帳'), Tab(text: '午睡'), Tab(text: '健康')]),
+          Expanded(
+            child: TabBarView(
+              children: [
+                DailyContactDetailScreen(
+                  service: widget.service,
+                  officeId: widget.officeId,
+                  childId: c.childId,
+                  childNameLabel: c.nameLabel,
+                  businessDate: _businessDate,
+                  isManager: widget.isManager,
+                  embedded: true,
+                ),
+                ChildDayNapView(
+                  service: widget.service,
+                  officeId: widget.officeId,
+                  childId: c.childId,
+                  businessDate: _businessDate,
+                ),
+                ChildDayHealthView(
+                  service: widget.service,
+                  officeId: widget.officeId,
+                  childId: c.childId,
+                  businessDate: _businessDate,
+                ),
+              ],
             ),
           ),
         ],

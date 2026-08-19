@@ -18,6 +18,7 @@ class DailyContactDetailScreen extends StatefulWidget {
     required this.childNameLabel,
     required this.businessDate,
     required this.isManager,
+    this.embedded = false,
   });
 
   final ChildcareService service;
@@ -26,6 +27,9 @@ class DailyContactDetailScreen extends StatefulWidget {
   final String childNameLabel;
   final DateTime businessDate;
   final bool isManager;
+
+  /// true のとき Scaffold/AppBar を付けず本体のみ返す(連絡帳の分割ビュー右パネルのタブ用)。
+  final bool embedded;
 
   @override
   State<DailyContactDetailScreen> createState() => _DailyContactDetailScreenState();
@@ -257,16 +261,9 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OhanaBackHomeLeading(),
-        leadingWidth: 200,
-        toolbarHeight: 48,
-        title: Text(widget.childNameLabel),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+    final body = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,7 +426,16 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                   ],
                 ],
               ),
-            ),
+            );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(
+        leading: const OhanaBackHomeLeading(),
+        leadingWidth: 200,
+        toolbarHeight: 48,
+        title: Text(widget.childNameLabel),
+      ),
+      body: body,
     );
   }
 
