@@ -29,6 +29,7 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
   bool _busy = false;
   String? _error;
   Map<String, dynamic> _d = const {};
+  Map<String, dynamic>? _closure;
   bool _changed = false;
 
   Map<String, dynamic> get _r => (_d['report'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -46,9 +47,11 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
     });
     try {
       final d = await widget.service.fetchIncidentReportDetail(widget.reportId);
+      final closure = await widget.service.fetchIncidentClosure(widget.reportId);
       if (!mounted) return;
       setState(() {
         _d = d;
+        _closure = closure;
         _loading = false;
       });
     } catch (e) {
@@ -181,11 +184,40 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
           _kv('', r['note_text'] as String?),
         ],
 
+        if (r['report_type'] != 'hiyari') ...[
+          _section('保護者対応(クロージング)'),
+          ..._closureRows(),
+        ],
+
         _section('承認情報'),
         _kv('主任承認', _d['chief_approved_by_name'] as String?),
         _kv('園長承認', _d['approved_by_name'] as String?),
       ],
     );
+  }
+
+  List<Widget> _closureRows() {
+    final cs = _closure?['closure_status'] as String?;
+    final missing = ((_closure?['missing'] as List?) ?? const []).map((e) => '$e').toList();
+    final out = <Widget>[];
+    if (cs == 'closed') {
+      out.add(_kv('状態', 'クローズ済'));
+      out.add(_kv('クローズ',
+          '${(_closure?['closed_by_name'] as String?) ?? '-'}  ${_fmtDateTime(_closure?['closed_at'])}'));
+      if (_closure?['reopened_at'] != null) {
+        out.add(_kv('再オープン',
+            '${(_closure?['reopened_by_name'] as String?) ?? '-'}  ${_fmtDateTime(_closure?['reopened_at'])}'));
+      }
+    } else if (cs == 'open') {
+      out.add(_kv('状態', '未クローズ'));
+      out.add(_kv('不足', missing.isEmpty ? 'なし(クローズ可能)' : missing.join('、')));
+    } else {
+      out.add(_kv('状態', '-'));
+    }
+    if ((_closure?['closure_note'] as String?)?.isNotEmpty == true) {
+      out.add(_kv('メモ', _closure?['closure_note'] as String?));
+    }
+    return out;
   }
 
   String _childNames() {
@@ -298,6 +330,26 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
       add('承認取消', Icons.cancel, _cancel, color: AppColors.punchClockOut);
     }
 
+    // 保護者対応クローズ/解除(事故報告書のみ・申請中以降・主任以上)
+    final rt = _r['report_type'] as String?;
+    final cs = _closure?['closure_status'] as String?;
+    if (rt != 'hiyari' && status != 'draft' && widget.isManager) {
+      if (cs == 'open') {
+        final ready = _closure?['is_ready'] == true;
+        buttons.add(Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.leafGreen),
+            onPressed: (_busy || !ready) ? null : _close,
+            icon: const Icon(Icons.task_alt, size: 18),
+            label: const Text('保護者対応クローズ'),
+          ),
+        ));
+      } else if (cs == 'closed') {
+        add('クローズ解除', Icons.lock_open, _reopen, color: AppColors.punchClockOut);
+      }
+    }
+
     if (buttons.isEmpty) return const SizedBox.shrink();
     return SafeArea(
       child: Padding(
@@ -327,6 +379,18 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
     final reason = await _askReason('承認取消の理由');
     if (reason == null || reason.isEmpty) return;
     await _run(() => widget.service.cancelIncidentApproval(widget.reportId, reason), '承認を取り消しました');
+  }
+
+  Future<void> _close() async {
+    final note = await _askReason('保護者対応クローズ(コメント任意・空でも可)');
+    if (note == null) return; // キャンセル
+    await _run(() => widget.service.closeIncidentReport(widget.reportId, note.isEmpty ? null : note), 'クローズしました');
+  }
+
+  Future<void> _reopen() async {
+    final reason = await _askReason('クローズ解除の理由(必須)');
+    if (reason == null || reason.isEmpty) return;
+    await _run(() => widget.service.reopenIncidentClosure(widget.reportId, reason), 'クローズを解除しました');
   }
 
   Future<void> _addProgress() async {

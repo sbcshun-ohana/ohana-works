@@ -98,10 +98,13 @@ function ChildcareIncidentsPageContent() {
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
+  const [closure, setClosure] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showLookups, setShowLookups] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formReportId, setFormReportId] = useState<string | null>(null);
+  const [openOnly, setOpenOnly] = useState(false);
+  const [openCount, setOpenCount] = useState(0);
 
   useEffect(() => {
     function begin() {
@@ -112,28 +115,36 @@ function ChildcareIncidentsPageContent() {
     }
     const supabase = begin();
     if (!supabase) return;
-    supabase
-      .rpc("fetch_incident_reports", {
-        p_office_id: selectedOffice,
-        p_status: statusFilter || null,
-        p_report_type: typeFilter || null,
-      })
-      .then(({ data, error }) => {
-        setIsLoading(false);
-        if (error) {
-          setRowsError(error.message);
-          return;
-        }
-        setRows((data ?? []) as IncidentRow[]);
-      });
-  }, [selectedOffice, statusFilter, typeFilter, reloadToken]);
+    void supabase.rpc("count_open_incident_reports", { p_office_id: selectedOffice }).then(({ data }) => {
+      setOpenCount(typeof data === "number" ? data : 0);
+    });
+    const query = openOnly
+      ? supabase.rpc("fetch_open_incident_reports", { p_office_id: selectedOffice })
+      : supabase.rpc("fetch_incident_reports", {
+          p_office_id: selectedOffice,
+          p_status: statusFilter || null,
+          p_report_type: typeFilter || null,
+        });
+    query.then(({ data, error }) => {
+      setIsLoading(false);
+      if (error) {
+        setRowsError(error.message);
+        return;
+      }
+      setRows((data ?? []) as IncidentRow[]);
+    });
+  }, [selectedOffice, statusFilter, typeFilter, reloadToken, openOnly]);
 
   const openDetail = useCallback(async (id: string) => {
     setDetailId(id);
     setDetail(null);
+    setClosure(null);
     const supabase = createClient();
     const { data, error } = await supabase.rpc("fetch_incident_report_detail", { p_id: id });
     if (!error) setDetail(data as IncidentDetail);
+    const { data: cData } = await supabase.rpc("fetch_incident_closure", { p_id: id });
+    const cRow = Array.isArray(cData) ? (cData[0] as Record<string, unknown>) : null;
+    setClosure(cRow ?? null);
   }, []);
 
   async function runAction(fn: (s: ReturnType<typeof createClient>) => Promise<{ error: { message: string } | null }>, ok: string) {
@@ -191,29 +202,39 @@ function ChildcareIncidentsPageContent() {
             </button>
           </div>
         </div>
-        <p className="text-xs text-slate-400">報告書の作成・申請・承認・差し戻しを行えます(作成は Ohana Kids(iPad)からも可能です)。</p>
+        <p className="text-xs text-slate-400">報告書の作成・申請・承認・差し戻し・保護者対応クローズを行えます(作成は Ohana Kids(iPad)からも可能です)。</p>
 
-        <div className="flex gap-3">
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setOpenOnly((v) => !v)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${openOnly ? "bg-red-600 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"}`}
           >
-            <option value="">すべての種別</option>
-            {Object.entries(REPORT_TYPES).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-          >
-            <option value="">すべての状態</option>
-            {Object.entries(STATUSES).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+            未クローズの事故報告のみ{openCount > 0 ? `(${openCount})` : ""}
+          </button>
+          {!openOnly && (
+            <>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+              >
+                <option value="">すべての種別</option>
+                {Object.entries(REPORT_TYPES).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+              >
+                <option value="">すべての状態</option>
+                {Object.entries(STATUSES).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
@@ -259,7 +280,22 @@ function ChildcareIncidentsPageContent() {
                   <td className="px-3 py-2">{r.child_names ?? ""}</td>
                   <td className="px-3 py-2">{r.created_by_name ?? ""}</td>
                   <td className="px-3 py-2">
-                    {r.closure_status === "open" ? (
+                    {openOnly ? (
+                      (() => {
+                        const days = (r as unknown as Record<string, unknown>)["days_elapsed"];
+                        const missing = ((r as unknown as Record<string, unknown>)["missing"] as string[]) ?? [];
+                        return (
+                          <div>
+                            <span className={`text-xs font-bold ${typeof days === "number" && days >= 3 ? "text-red-600" : "text-slate-500"}`}>
+                              経過{String(days ?? "")}日
+                            </span>
+                            {missing.length > 0 && (
+                              <div className="text-xs text-red-500">不足: {missing.join("、")}</div>
+                            )}
+                          </div>
+                        );
+                      })()
+                    ) : r.closure_status === "open" ? (
                       <span className="text-xs font-semibold text-red-600">未クローズ</span>
                     ) : r.closure_status === "closed" ? (
                       <span className="text-xs text-slate-400">クローズ済</span>
@@ -278,9 +314,25 @@ function ChildcareIncidentsPageContent() {
         <DetailDrawer
           detail={detail}
           report={report}
+          closure={closure}
           busy={busy}
-          onClose={() => { setDetailId(null); setDetail(null); }}
+          onClose={() => { setDetailId(null); setDetail(null); setClosure(null); }}
           onEdit={() => { setFormReportId(detailId); setFormOpen(true); }}
+          onCloseReport={() => {
+            const note = window.prompt("保護者対応クローズのコメント(任意・空でも可)") ?? "";
+            void runAction(async (s) => {
+              const { error } = await s.rpc("close_incident_report", { p_id: detailId, p_note: note || null });
+              return { error };
+            }, "クローズしました");
+          }}
+          onReopen={() => {
+            const reason = window.prompt("クローズ解除の理由(必須)");
+            if (!reason) return;
+            void runAction(async (s) => {
+              const { error } = await s.rpc("reopen_incident_closure", { p_id: detailId, p_reason: reason });
+              return { error };
+            }, "クローズを解除しました");
+          }}
           onSubmit={() => runAction(async (s) => {
             const { error } = await s.rpc("submit_incident_report", { p_id: detailId });
             return { error };
@@ -333,9 +385,12 @@ function ChildcareIncidentsPageContent() {
 function DetailDrawer({
   detail,
   report,
+  closure,
   busy,
   onClose,
   onEdit,
+  onCloseReport,
+  onReopen,
   onSubmit,
   onChiefApprove,
   onApprove,
@@ -344,9 +399,12 @@ function DetailDrawer({
 }: {
   detail: IncidentDetail | null;
   report: Record<string, unknown> | null;
+  closure: Record<string, unknown> | null;
   busy: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onCloseReport: () => void;
+  onReopen: () => void;
   onSubmit: () => void;
   onChiefApprove: () => void;
   onApprove: () => void;
@@ -473,6 +531,36 @@ function DetailDrawer({
               </Section>
             )}
 
+            {rt !== "hiyari" && (
+              <Section title="保護者対応(クロージング)">
+                {(() => {
+                  const cs = closure?.["closure_status"] as string | undefined;
+                  const missing = (closure?.["missing"] as string[]) ?? [];
+                  if (cs === "closed") {
+                    return (
+                      <>
+                        <KV k="状態" v="クローズ済" />
+                        <KV k="クローズ" v={`${(closure?.["closed_by_name"] as string) ?? "-"}  ${fmtDateTime(closure?.["closed_at"])}`} />
+                        {closure?.["reopened_at"] ? (
+                          <KV k="再オープン" v={`${(closure?.["reopened_by_name"] as string) ?? "-"}  ${fmtDateTime(closure?.["reopened_at"])}`} />
+                        ) : null}
+                      </>
+                    );
+                  }
+                  if (cs === "open") {
+                    return (
+                      <>
+                        <KV k="状態" v="未クローズ" />
+                        <KV k="不足" v={missing.length === 0 ? "なし(クローズ可能)" : missing.join("、")} />
+                      </>
+                    );
+                  }
+                  return <KV k="状態" v="-" />;
+                })()}
+                {closure?.["closure_note"] ? <KV k="メモ" v={String(closure["closure_note"])} /> : null}
+              </Section>
+            )}
+
             <Section title="承認情報">
               <KV k="主任承認" v={(detail["chief_approved_by_name"] as string) ?? "-"} />
               <KV k="園長承認" v={(detail["approved_by_name"] as string) ?? "-"} />
@@ -499,6 +587,19 @@ function DetailDrawer({
               )}
               {s === "approved" && (
                 <button disabled={busy} onClick={onCancel} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">承認取消</button>
+              )}
+              {rt !== "hiyari" && s !== "draft" && closure?.["closure_status"] === "open" && (
+                <button
+                  disabled={busy || closure?.["is_ready"] !== true}
+                  onClick={onCloseReport}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  title={closure?.["is_ready"] === true ? "" : "クローズ条件が未充足です"}
+                >
+                  保護者対応クローズ
+                </button>
+              )}
+              {rt !== "hiyari" && s !== "draft" && closure?.["closure_status"] === "closed" && (
+                <button disabled={busy} onClick={onReopen} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">クローズ解除</button>
               )}
             </div>
           </>

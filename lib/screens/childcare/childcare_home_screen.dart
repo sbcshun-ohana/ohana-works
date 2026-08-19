@@ -37,6 +37,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   final DateTime _businessDate = DateTime.now();
   bool _internalNotesEnabled = false;
   bool _incidentEnabled = false;
+  int _incidentOpenCount = 0;
   // 園内連絡(156): 自分宛て未確認件数(タイルバッジ+ログイン後バナー)。
   int _staffMessageUnack = 0;
 
@@ -110,10 +111,14 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
     if (office == null) return;
     final enabled = await widget.service.isChildInternalNotesEnabledForOffice(office.officeId);
     final incident = await widget.service.isIncidentReportsEnabledForOffice(office.officeId);
+    final openCount = incident && office.isManager
+        ? await widget.service.countOpenIncidentReports(office.officeId)
+        : 0;
     if (mounted) {
       setState(() {
         _internalNotesEnabled = enabled;
         _incidentEnabled = incident;
+        _incidentOpenCount = openCount;
       });
     }
   }
@@ -289,7 +294,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               _HomeTile(
                 icon: Icons.report_problem_rounded,
                 color: AppColors.punchClockOut,
-                label: 'ヒヤリハット・事故報告',
+                label: _incidentOpenCount > 0 ? 'ヒヤリハット・事故報告(未$_incidentOpenCount)' : 'ヒヤリハット・事故報告',
                 onTap: () => _push(IncidentListScreen(
                   service: widget.service,
                   officeId: office.officeId,

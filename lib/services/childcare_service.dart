@@ -1650,6 +1650,33 @@ class ChildcareService {
     return result as String;
   }
 
+  /// クローズ状態+充足判定(詳細のボタン制御用)。
+  Future<Map<String, dynamic>?> fetchIncidentClosure(String reportId) async {
+    final rows = await _client.rpc('fetch_incident_closure', params: {'p_id': reportId});
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
+  Future<void> closeIncidentReport(String reportId, String? note) async {
+    await _client.rpc('close_incident_report', params: {'p_id': reportId, 'p_note': note});
+  }
+
+  Future<void> reopenIncidentClosure(String reportId, String reason) async {
+    await _client.rpc('reopen_incident_closure', params: {'p_id': reportId, 'p_reason': reason});
+  }
+
+  /// 未クローズの事故報告書一覧(経過日数順・不足条件付き)。
+  Future<List<Map<String, dynamic>>> fetchOpenIncidentReports(String officeId) async {
+    final rows = await _client.rpc('fetch_open_incident_reports', params: {'p_office_id': officeId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 未クローズ件数(バッジ用)。
+  Future<int> countOpenIncidentReports(String officeId) async {
+    final result = await _client.rpc('count_open_incident_reports', params: {'p_office_id': officeId});
+    return (result as num?)?.toInt() ?? 0;
+  }
+
   /// 承認後の追記(保護者連絡)。返り値=contact id。
   Future<String> addIncidentGuardianContact({
     required String reportId,

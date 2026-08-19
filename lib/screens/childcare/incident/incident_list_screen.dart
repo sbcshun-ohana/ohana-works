@@ -30,6 +30,7 @@ class _IncidentListScreenState extends State<IncidentListScreen> {
   List<Map<String, dynamic>> _rows = const [];
   String? _statusFilter;
   String? _typeFilter;
+  bool _openOnly = false;
 
   @override
   void initState() {
@@ -43,11 +44,13 @@ class _IncidentListScreenState extends State<IncidentListScreen> {
       _error = null;
     });
     try {
-      final rows = await widget.service.fetchIncidentReports(
-        widget.officeId,
-        status: _statusFilter,
-        reportType: _typeFilter,
-      );
+      final rows = _openOnly
+          ? await widget.service.fetchOpenIncidentReports(widget.officeId)
+          : await widget.service.fetchIncidentReports(
+              widget.officeId,
+              status: _statusFilter,
+              reportType: _typeFilter,
+            );
       if (!mounted) return;
       setState(() {
         _rows = rows;
@@ -123,42 +126,60 @@ class _IncidentListScreenState extends State<IncidentListScreen> {
 
   Widget _filters() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: Column(
         children: [
-          Expanded(
-            child: DropdownButtonFormField<String?>(
-              initialValue: _typeFilter,
-              isDense: true,
-              decoration: const InputDecoration(labelText: '種別', border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('すべて')),
-                for (final e in IncidentLabels.reportTypesShort.entries)
-                  DropdownMenuItem(value: e.key, child: Text(e.value)),
-              ],
-              onChanged: (v) {
-                setState(() => _typeFilter = v);
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              label: const Text('未クローズの事故報告のみ'),
+              selected: _openOnly,
+              onSelected: (v) {
+                setState(() => _openOnly = v);
                 _load();
               },
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: DropdownButtonFormField<String?>(
-              initialValue: _statusFilter,
-              isDense: true,
-              decoration: const InputDecoration(labelText: '状態', border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('すべて')),
-                for (final e in IncidentLabels.statuses.entries)
-                  DropdownMenuItem(value: e.key, child: Text(e.value)),
+          if (!_openOnly) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _typeFilter,
+                    isDense: true,
+                    decoration: const InputDecoration(labelText: '種別', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('すべて')),
+                      for (final e in IncidentLabels.reportTypesShort.entries)
+                        DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _typeFilter = v);
+                      _load();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _statusFilter,
+                    isDense: true,
+                    decoration: const InputDecoration(labelText: '状態', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('すべて')),
+                      for (final e in IncidentLabels.statuses.entries)
+                        DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _statusFilter = v);
+                      _load();
+                    },
+                  ),
+                ),
               ],
-              onChanged: (v) {
-                setState(() => _statusFilter = v);
-                _load();
-              },
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -170,6 +191,8 @@ class _IncidentListScreenState extends State<IncidentListScreen> {
     final children = (r['child_names'] as String?) ?? '';
     final place = (r['place_label'] as String?) ?? '';
     final closure = r['closure_status'] as String?;
+    final days = (r['days_elapsed'] as num?)?.toInt();
+    final missing = ((r['missing'] as List?) ?? const []).map((e) => '$e').toList();
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
@@ -186,12 +209,15 @@ class _IncidentListScreenState extends State<IncidentListScreen> {
                   const SizedBox(width: 8),
                   IncidentStatusBadge(status: r['status'] as String?),
                   const Spacer(),
-                  if (closure == 'open')
-                    const Padding(
-                      padding: EdgeInsets.only(left: 6),
-                      child: Text('未クローズ',
-                          style: TextStyle(color: AppColors.punchClockOut, fontWeight: FontWeight.w700, fontSize: 11)),
-                    ),
+                  if (_openOnly && days != null)
+                    Text('経過$days日',
+                        style: TextStyle(
+                            color: days >= 3 ? AppColors.punchClockOut : AppColors.textSecondary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12))
+                  else if (closure == 'open')
+                    const Text('未クローズ',
+                        style: TextStyle(color: AppColors.punchClockOut, fontWeight: FontWeight.w700, fontSize: 11)),
                 ],
               ),
               const SizedBox(height: 8),
@@ -207,6 +233,11 @@ class _IncidentListScreenState extends State<IncidentListScreen> {
               const SizedBox(height: 2),
               Text('記入: ${(r['created_by_name'] as String?) ?? '-'}',
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              if (_openOnly && missing.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('クローズに不足: ${missing.join('、')}',
+                    style: const TextStyle(color: AppColors.punchClockOut, fontSize: 12, fontWeight: FontWeight.w600)),
+              ],
             ],
           ),
         ),
