@@ -58,6 +58,7 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
   final Map<String, List<Map<String, dynamic>>> _options = {};
   // 園児候補
   List<Map<String, dynamic>> _children = const [];
+  List<String> _classNames = const []; // 年齢順の全クラス(絞り込み用)
 
   // 本体
   String _reportType = 'hiyari';
@@ -112,6 +113,7 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
     try {
       final opts = await widget.service.fetchIncidentLookupOptions();
       final children = await widget.service.fetchChildrenForOfficeMaster(widget.officeId);
+      final classes = await widget.service.fetchChildcareClasses(widget.officeId);
       for (final o in opts) {
         (_options[o['kind'] as String] ??= []).add(o);
       }
@@ -121,6 +123,7 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
       if (!mounted) return;
       setState(() {
         _children = children.where((c) => c['enrollment_status'] != '退園済み').toList();
+        _classNames = classes.map((c) => c.className).toList(); // 年齢順(age_group)
         _loading = false;
       });
     } catch (e) {
@@ -476,16 +479,26 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
     );
   }
 
+  /// 発生時間は他項目と同じプルダウン(5分刻み)。現在値が刻みに無ければ先頭に追加。
   Widget _timeField() {
-    return InkWell(
-      onTap: () async {
-        final t = await showTimePicker(context: context, initialTime: _occurredAt ?? TimeOfDay.now());
-        if (t != null) setState(() => _occurredAt = t);
+    final current = _occurredAt == null
+        ? null
+        : '${_occurredAt!.hour.toString().padLeft(2, '0')}:${_occurredAt!.minute.toString().padLeft(2, '0')}';
+    final opts = <String>[
+      for (var h = 0; h < 24; h++)
+        for (var m = 0; m < 60; m += 5) '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+    ];
+    if (current != null && !opts.contains(current)) opts.insert(0, current);
+    return DropdownButtonFormField<String>(
+      initialValue: current,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: '発生時間', border: OutlineInputBorder(), isDense: true),
+      items: [for (final t in opts) DropdownMenuItem(value: t, child: Text(t))],
+      onChanged: (v) {
+        if (v == null) return;
+        final p = v.split(':');
+        setState(() => _occurredAt = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1])));
       },
-      child: InputDecorator(
-        decoration: const InputDecoration(labelText: '発生時間', border: OutlineInputBorder()),
-        child: Text(_occurredAt == null ? '未設定' : _occurredAt!.format(context)),
-      ),
     );
   }
 
@@ -548,12 +561,8 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
 
   Future<void> _pickChildren() async {
     final selectedIds = _selectedChildren.map((c) => c['child_id'] as String).toSet();
-    // クラスは _children の並び(RPCがクラス→氏名順)を保ちつつ重複排除。
-    final classes = <String>[];
-    for (final c in _children) {
-      final cn = c['class_name'] as String?;
-      if (cn != null && cn.isNotEmpty && !classes.contains(cn)) classes.add(cn);
-    }
+    // クラスは全クラスを年齢順(はな→そら→かぜ→つき→ほし→にじ)で表示(在籍児がいないクラスも含む)。
+    final classes = _classNames;
     await showDialog<void>(
       context: context,
       builder: (ctx) {

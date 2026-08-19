@@ -765,6 +765,7 @@ function IncidentFormDrawer({
   const [busy, setBusy] = useState(false);
   const [options, setOptions] = useState<Record<string, LookupOption[]>>({});
   const [children, setChildren] = useState<ChildRow[]>([]);
+  const [classNames, setClassNames] = useState<string[]>([]); // 年齢順の全クラス
   const [childQuery, setChildQuery] = useState("");
   const [childClassFilter, setChildClassFilter] = useState("");
 
@@ -866,9 +867,10 @@ function IncidentFormDrawer({
     let cancelled = false;
     async function load() {
       const supabase = createClient();
-      const [{ data: optData }, { data: childData }] = await Promise.all([
+      const [{ data: optData }, { data: childData }, { data: classData }] = await Promise.all([
         supabase.rpc("fetch_incident_lookup_options", { p_kind: null }),
         supabase.rpc("fetch_children_for_office_master", { p_office_id: officeId }),
+        supabase.rpc("fetch_childcare_classes", { p_office_id: officeId }),
       ]);
       const byKind: Record<string, LookupOption[]> = {};
       for (const o of (optData ?? []) as LookupOption[]) (byKind[o.kind] ??= []).push(o);
@@ -879,6 +881,8 @@ function IncidentFormDrawer({
           name: String(c["display_name"] ?? ""),
           class_name: (c["class_name"] as string) ?? null,
         }));
+      // fetch_childcare_classes は age_group 順(はな→そら→…→にじ)
+      const classes = ((classData ?? []) as Record<string, unknown>[]).map((c) => String(c["class_name"]));
       if (reportId) {
         const { data: d } = await supabase.rpc("fetch_incident_report_detail", { p_id: reportId });
         if (d && !cancelled) prefill(d as IncidentDetail);
@@ -886,6 +890,7 @@ function IncidentFormDrawer({
       if (!cancelled) {
         setOptions(byKind);
         setChildren(rows);
+        setClassNames(classes);
         setLoading(false);
       }
     }
@@ -975,10 +980,7 @@ function IncidentFormDrawer({
   }
 
   const selChildNames = children.filter((c) => selChildren.includes(c.id));
-  const childClasses: string[] = [];
-  for (const c of children) {
-    if (c.class_name && !childClasses.includes(c.class_name)) childClasses.push(c.class_name);
-  }
+  const childClasses = classNames; // 年齢順の全クラス(在籍児がいないクラスも含む)
   const filteredChildren = children.filter(
     (c) => (childQuery ? c.name.includes(childQuery) : true) && (childClassFilter ? c.class_name === childClassFilter : true),
   );
