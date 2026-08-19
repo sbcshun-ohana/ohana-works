@@ -548,26 +548,59 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
 
   Future<void> _pickChildren() async {
     final selectedIds = _selectedChildren.map((c) => c['child_id'] as String).toSet();
+    // クラスは _children の並び(RPCがクラス→氏名順)を保ちつつ重複排除。
+    final classes = <String>[];
+    for (final c in _children) {
+      final cn = c['class_name'] as String?;
+      if (cn != null && cn.isNotEmpty && !classes.contains(cn)) classes.add(cn);
+    }
     await showDialog<void>(
       context: context,
       builder: (ctx) {
         String query = '';
+        String classFilter = '';
         return StatefulBuilder(builder: (ctx, setLocal) {
           final filtered = _children.where((c) {
-            if (query.isEmpty) return true;
-            final name = '${c['display_name'] ?? ''}${c['full_name'] ?? ''}';
-            return name.contains(query);
+            final name = '${c['display_name'] ?? ''}';
+            final cn = (c['class_name'] as String?) ?? '';
+            if (query.isNotEmpty && !name.contains(query)) return false;
+            if (classFilter.isNotEmpty && cn != classFilter) return false;
+            return true;
           }).toList();
           return AlertDialog(
             title: const Text('園児を選択'),
             content: SizedBox(
-              width: 400,
-              height: 460,
+              width: 440,
+              height: 500,
               child: Column(
                 children: [
                   TextField(
                     decoration: const InputDecoration(hintText: '氏名で検索', prefixIcon: Icon(Icons.search)),
                     onChanged: (v) => setLocal(() => query = v),
+                  ),
+                  const SizedBox(height: 8),
+                  // クラス絞り込み(横スクロールのチップ)
+                  SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('全クラス'),
+                          selected: classFilter.isEmpty,
+                          onSelected: (_) => setLocal(() => classFilter = ''),
+                        ),
+                        for (final cn in classes)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: ChoiceChip(
+                              label: Text(cn),
+                              selected: classFilter == cn,
+                              onSelected: (_) => setLocal(() => classFilter = cn),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -576,14 +609,14 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
                         for (final c in filtered)
                           CheckboxListTile(
                             dense: true,
-                            value: selectedIds.contains(c['id']),
-                            title: Text('${c['display_name'] ?? c['full_name'] ?? ''}'),
+                            value: selectedIds.contains(c['child_id']),
+                            title: Text('${c['display_name'] ?? ''}'),
                             subtitle: c['class_name'] != null ? Text('${c['class_name']}') : null,
                             onChanged: (v) => setLocal(() {
                               if (v == true) {
-                                selectedIds.add(c['id'] as String);
+                                selectedIds.add(c['child_id'] as String);
                               } else {
-                                selectedIds.remove(c['id']);
+                                selectedIds.remove(c['child_id']);
                               }
                             }),
                           ),
@@ -602,8 +635,8 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
                       ..clear()
                       ..addAll([
                         for (final c in _children)
-                          if (selectedIds.contains(c['id']))
-                            {'child_id': c['id'], 'name': c['display_name'] ?? c['full_name'] ?? ''}
+                          if (selectedIds.contains(c['child_id']))
+                            {'child_id': c['child_id'], 'name': c['display_name'] ?? ''}
                       ]);
                   });
                   Navigator.pop(ctx);

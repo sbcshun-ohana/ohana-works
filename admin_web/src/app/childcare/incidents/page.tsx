@@ -665,6 +665,7 @@ function IncidentFormDrawer({
   const [options, setOptions] = useState<Record<string, LookupOption[]>>({});
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [childQuery, setChildQuery] = useState("");
+  const [childClassFilter, setChildClassFilter] = useState("");
 
   const [reportType, setReportType] = useState("hiyari");
   const [occurredOn, setOccurredOn] = useState(todayStr());
@@ -773,8 +774,8 @@ function IncidentFormDrawer({
       const rows: ChildRow[] = ((childData ?? []) as Record<string, unknown>[])
         .filter((c) => c["enrollment_status"] !== "退園済み")
         .map((c) => ({
-          id: String(c["id"]),
-          name: String(c["display_name"] ?? c["full_name"] ?? ""),
+          id: String(c["child_id"]),
+          name: String(c["display_name"] ?? ""),
           class_name: (c["class_name"] as string) ?? null,
         }));
       if (reportId) {
@@ -873,7 +874,13 @@ function IncidentFormDrawer({
   }
 
   const selChildNames = children.filter((c) => selChildren.includes(c.id));
-  const filteredChildren = children.filter((c) => (childQuery ? c.name.includes(childQuery) : true));
+  const childClasses: string[] = [];
+  for (const c of children) {
+    if (c.class_name && !childClasses.includes(c.class_name)) childClasses.push(c.class_name);
+  }
+  const filteredChildren = children.filter(
+    (c) => (childQuery ? c.name.includes(childQuery) : true) && (childClassFilter ? c.class_name === childClassFilter : true),
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
@@ -917,6 +924,27 @@ function IncidentFormDrawer({
                 ))}
               </div>
               <input value={childQuery} onChange={(e) => setChildQuery(e.target.value)} placeholder="氏名で検索" className="mb-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+              {childClasses.length > 0 && (
+                <div className="mb-1 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setChildClassFilter("")}
+                    className={`rounded-full px-2 py-0.5 text-xs ${childClassFilter === "" ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                  >
+                    全クラス
+                  </button>
+                  {childClasses.map((cn) => (
+                    <button
+                      key={cn}
+                      type="button"
+                      onClick={() => setChildClassFilter(cn)}
+                      className={`rounded-full px-2 py-0.5 text-xs ${childClassFilter === cn ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                    >
+                      {cn}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200">
                 {filteredChildren.map((c) => (
                   <label key={c.id} className="flex items-center gap-2 px-2 py-1 text-sm hover:bg-slate-50">
