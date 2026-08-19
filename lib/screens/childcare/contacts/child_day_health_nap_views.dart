@@ -195,7 +195,7 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
     }
   }
 
-  /// 年度年齢(4/1基準の満年齢)。午前おやつは0・1歳児のみ、2歳児以上は昼食・午後おやつのみ(俊指示 2026-08-19)。
+  /// 年度年齢(4/1基準の満年齢)。午前おやつは0・1・2歳児のみ、3歳児以上は昼食・午後おやつのみ(俊確定 2026-08-19)。
   int _fiscalAge(DateTime birth, DateTime ref) {
     final fyStart = ref.month >= 4 ? ref.year : ref.year - 1;
     var age = fyStart - birth.year;
@@ -207,8 +207,8 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
-    // 2歳児クラス以上は午前おやつが無いため非表示(生年月日不明時は安全側で表示)。
-    final showAmSnack = _birthDate == null || _fiscalAge(_birthDate!, widget.businessDate) < 2;
+    // 3歳児クラス以上は午前おやつが無いため非表示(0・1・2歳のみ表示。生年月日不明時は安全側で表示)。
+    final showAmSnack = _birthDate == null || _fiscalAge(_birthDate!, widget.businessDate) < 3;
     final slots = _mealSlotLabels.entries.where((e) => e.key != 'am_snack' || showAmSnack);
     return RefreshIndicator(
       onRefresh: _load,
