@@ -212,7 +212,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
               children: [
                 _boardHeader(),
                 const Divider(height: 12),
-                for (final r in rows) _boardRow(r),
+                for (var i = 0; i < rows.length; i++) _boardRow(rows[i], i),
                 const Divider(height: 12),
                 _totalRow(total),
               ],
@@ -276,11 +276,12 @@ class _KitchenScreenState extends State<KitchenScreen> {
         ],
       );
 
-  Widget _boardRow(Map<String, dynamic> r) {
+  Widget _boardRow(Map<String, dynamic> r, int index) {
     final cells = r['cells'] as Map<String, ({int child, int staff})>;
     final isStaff = r['type'] == 'staff';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+    return Container(
+      color: index.isOdd ? const Color(0xFFF3F6FA) : null,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
       child: Row(
         children: [
           SizedBox(width: 140, child: Text('${r['label']}', style: const TextStyle(fontWeight: FontWeight.w600))),

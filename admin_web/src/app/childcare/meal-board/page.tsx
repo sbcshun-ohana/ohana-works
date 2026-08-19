@@ -246,7 +246,7 @@ function ChildcareMealBoardContent() {
                 <tr><td colSpan={SLOTS.length + 3} className="px-3 py-6 text-center text-slate-400">食数がありません。「再算出」を押してください。</td></tr>
               )}
               {pivot.map((p) => (
-                <tr key={p.row_key} className="border-b border-slate-50">
+                <tr key={p.row_key} className="border-b border-slate-100 odd:bg-slate-50/70">
                   <td className="px-3 py-2 font-medium">{p.row_label}</td>
                   {SLOTS.map((s) => {
                     const c = p.cells[s.key];
