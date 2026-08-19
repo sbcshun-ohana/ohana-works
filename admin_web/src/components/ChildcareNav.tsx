@@ -9,6 +9,7 @@ import type { ChildcareOffice } from "@/lib/types";
 const THERAPY_HREF = "/childcare/therapy-records";
 const SUPPORT_HREF = "/childcare/support-childcare";
 const INCIDENT_HREF = "/childcare/incidents";
+const MEAL_HREF = "/childcare/meal-board";
 
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
@@ -26,6 +27,7 @@ const CHILDCARE_NAV_ITEMS = [
   { href: THERAPY_HREF, label: "療育記録" },
   { href: "/childcare/support-childcare", label: "支援保育" },
   { href: INCIDENT_HREF, label: "ヒヤリハット・事故報告" },
+  { href: MEAL_HREF, label: "食数ボード" },
   // 保護者管理・入園手続き・感染症マスターは管理業務としてトップレベルへ移設(俊指示 2026-08-17)。
 ];
 
@@ -38,6 +40,8 @@ export function ChildcareNav() {
   const [therapyVisible, setTherapyVisible] = useState(false);
   // ヒヤリハット・事故報告タブは incident_reports_enabled が「アクセス可能施設のいずれかでON」のときのみ表示。
   const [incidentVisible, setIncidentVisible] = useState(false);
+  // 食数ボードタブは meal_management_enabled が「アクセス可能施設のいずれかでON」のときのみ表示。
+  const [mealVisible, setMealVisible] = useState(false);
   // 全保育施設と支援保育の対象施設。支援保育タブは「選択中施設が対象施設に含まれるとき」だけ表示する。
   // 対象施設リスト(supportOffices)は null=未取得/取得失敗 を意味し、その場合は安全側でタブを表示する。
   const [childcareOffices, setChildcareOffices] = useState<ChildcareOffice[]>([]);
@@ -59,6 +63,10 @@ export function ChildcareNav() {
           offices.map((o) => supabase.rpc("is_incident_reports_enabled_for_office", { p_office_id: o.office_id })),
         );
         if (!cancelled) setIncidentVisible(incidentChecks.some((c) => c.data === true));
+        const mealChecks = await Promise.all(
+          offices.map((o) => supabase.rpc("is_meal_management_enabled_for_office", { p_office_id: o.office_id })),
+        );
+        if (!cancelled) setMealVisible(mealChecks.some((c) => c.data === true));
       }
       // 支援保育の対象施設。取得失敗時は null のまま(=タブ表示側に倒す)。
       const { data: supData, error: supErr } = await supabase.rpc("fetch_my_support_childcare_offices");
@@ -85,7 +93,8 @@ export function ChildcareNav() {
     (item) =>
       (item.href !== THERAPY_HREF || therapyVisible) &&
       (item.href !== SUPPORT_HREF || supportVisible) &&
-      (item.href !== INCIDENT_HREF || incidentVisible),
+      (item.href !== INCIDENT_HREF || incidentVisible) &&
+      (item.href !== MEAL_HREF || mealVisible),
   );
 
   const cls = searchParams.get("class");
