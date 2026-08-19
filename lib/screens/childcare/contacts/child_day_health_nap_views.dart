@@ -36,11 +36,20 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
   List<ChildTemperatureRecord> _temps = const [];
   List<({String time, String type})> _toileting = const [];
   List<({String time, int amountMl})> _milk = const [];
+  DateTime? _birthDate;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  /// 年度年齢(4/1基準の満年齢)。ミルクは0歳児(はな組)のみ表示する(俊指示 2026-08-19)。
+  int _fiscalAge(DateTime birth, DateTime ref) {
+    final fyStart = ref.month >= 4 ? ref.year : ref.year - 1;
+    var age = fyStart - birth.year;
+    if (birth.month > 4 || (birth.month == 4 && birth.day > 1)) age--;
+    return age;
   }
 
   Future<void> _load() async {
@@ -57,6 +66,7 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
         _temps = temps.where((t) => t.childId == widget.childId).toList();
         _toileting = entry?.toileting ?? const [];
         _milk = entry?.milk ?? const [];
+        _birthDate = entry?.birthDate;
         _loading = false;
       });
     } catch (e) {
@@ -114,15 +124,17 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
                     children: [for (final e in _toileting) Text('${e.time}  ${e.type}')],
                   ),
           ),
-          _section(
-            'ミルク',
-            _milk.isEmpty
-                ? _empty()
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [for (final e in _milk) Text('${e.time}  ${e.amountMl}ml')],
-                  ),
-          ),
+          // ミルクは0歳児(はな組)のみ表示。1歳児クラス以上(そら〜にじ)では非表示。
+          if (_birthDate != null && _fiscalAge(_birthDate!, widget.businessDate) == 0)
+            _section(
+              'ミルク',
+              _milk.isEmpty
+                  ? _empty()
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [for (final e in _milk) Text('${e.time}  ${e.amountMl}ml')],
+                    ),
+            ),
         ],
       ),
     );
