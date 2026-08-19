@@ -45,7 +45,6 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
   FamilyDailyReportSummary? _familyDailyReport;
   // 参照(引用元)パネル用: その子の当日の 午睡/健康/食事 の記録(読み取り)。
   List<NapInterval> _refNapIntervals = const [];
-  List<NapCheck> _refNapChecks = const [];
   List<ChildTemperatureRecord> _refTemps = const [];
   List<({String time, String type})> _refToileting = const [];
   List<({String time, int amountMl})> _refMilk = const [];
@@ -102,7 +101,6 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
         final health = await widget.service.fetchHealthCheckForOffice(widget.officeId, widget.businessDate);
         final nap = napBoard.where((s) => s.childId == widget.childId).toList();
         _refNapIntervals = [for (final s in nap) ...s.intervals];
-        _refNapChecks = [for (final s in nap) ...s.checks]..sort((a, b) => a.slotAt.compareTo(b.slotAt));
         _refTemps = temps.where((t) => t.childId == widget.childId).toList();
         final h = health[widget.childId];
         _refToileting = h?.toileting ?? const [];
@@ -519,8 +517,8 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
           subtitle: const Text('記録済みの内容です。ここでは編集せず、確認して申請・承認してください。',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
           children: [
+            // 午睡は時間のみ表示(午睡チェック回数は報告義務がないため非表示・俊指摘 2026-08-19)。
             _refLine('午睡', napText),
-            _refLine('午睡チェック', _refNapChecks.isEmpty ? '記録なし' : '${_refNapChecks.length}回'),
             _refLine('検温', tempText),
             _refLine('排便', toiletText),
             _refLine('ミルク', milkText),

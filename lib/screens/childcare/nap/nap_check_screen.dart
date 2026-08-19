@@ -101,22 +101,8 @@ class _NapCheckScreenState extends State<NapCheckScreen> {
     setState(() => _loading = true);
     try {
       final board = await widget.service.fetchNapBoard(widget.officeId, _businessDate, classId: _selectedClassId);
-      final List<({String childId, String nameLabel, String className})> roster;
-      if (_selectedClassId != null) {
-        final className = _classes.firstWhere(
-          (c) => c.classId == _selectedClassId,
-          orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0),
-        ).className;
-        final children = await widget.service.fetchClassChildren(_selectedClassId!, _businessDate);
-        roster = children
-            .map((c) => (childId: c.childId, nameLabel: '${c.displayName}${c.honorificSuffix ?? ''}', className: className))
-            .toList();
-      } else {
-        final children = await widget.service.fetchChildrenForOffice(widget.officeId);
-        roster = children
-            .map((c) => (childId: c.childId, nameLabel: '${c.displayName}${c.honorificSuffix ?? ''}', className: c.className ?? ''))
-            .toList();
-      }
+      // 名簿は登園済み(present/picked_up・非欠席)の児のみ(258)。欠席・未登園は表示しない。
+      final roster = await widget.service.fetchNapRoster(widget.officeId, _businessDate, classId: _selectedClassId);
       if (mounted) {
         setState(() {
           _board = board;

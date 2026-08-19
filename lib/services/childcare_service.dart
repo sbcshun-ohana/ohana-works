@@ -587,6 +587,27 @@ class ChildcareService {
     return (rows as List).map((r) => NapSessionRow.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  /// 午睡名簿(登園済み=present/picked_up かつ非欠席の在籍児のみ・258)。年齢順。
+  Future<List<({String childId, String nameLabel, String className})>> fetchNapRoster(
+    String officeId,
+    DateTime date, {
+    String? classId,
+  }) async {
+    final rows = await _client.rpc('fetch_nap_roster', params: {
+      'p_office_id': officeId,
+      'p_class_id': classId,
+      'p_business_date': dateOnly(date),
+    }) as List;
+    return [
+      for (final r in rows)
+        (
+          childId: (r as Map<String, dynamic>)['child_id'] as String,
+          nameLabel: '${r['display_name']}${r['honorific_suffix'] ?? ''}',
+          className: (r['class_name'] as String?) ?? '',
+        ),
+    ];
+  }
+
   Future<List<NapMissing>> fetchNapMissingSlots(String officeId, DateTime date) async {
     final rows = await _client.rpc('fetch_nap_missing_slots', params: {
       'p_office_id': officeId,

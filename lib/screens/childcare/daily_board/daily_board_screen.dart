@@ -10,7 +10,6 @@ import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
-import '../children/child_detail_screen.dart';
 import '../contacts/daily_contact_detail_screen.dart';
 import '../infection/handover_card_create_screen.dart';
 import '../family_report/family_report_list_screen.dart';
@@ -934,21 +933,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     ));
   }
 
-  void _openChildDetail(DailyBoardRow row) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChildDetailScreen(
-          service: widget.service,
-          childId: row.childId,
-          childName: row.nameLabel,
-          officeId: _officeId,
-          businessDate: _businessDate,
-          isManager: _isManager,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1068,7 +1052,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                       return Card(
                         margin: EdgeInsets.zero,
                         child: InkWell(
-                          onTap: () => _openChildDetail(row),
+                          // 行タップは園側連絡帳(日誌・連絡帳)を開く(俊指示 2026-08-19)。
+                          // 以前は台帳詳細(家庭連絡帳/園内記録/発達記録/台帳)へ遷移し不便だった。
+                          onTap: () => _openContact(row),
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
