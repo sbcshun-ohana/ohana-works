@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/guardian_app.dart';
 import '../../../services/childcare_service.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../../../widgets/time_dropdown_picker.dart';
 import 'child_development_tab.dart';
@@ -149,26 +150,160 @@ class _FamilyDailyReportTab extends StatefulWidget {
 }
 
 class _FamilyDailyReportTabState extends State<_FamilyDailyReportTab> {
+  late DateTime _selectedDate = widget.businessDate;
+  late DateTime _month = DateTime(widget.businessDate.year, widget.businessDate.month);
   late Future<FamilyDailyReportSummary?> _reportFuture;
+  Set<String> _reportDates = {};
 
   @override
   void initState() {
     super.initState();
     _reportFuture =
-        widget.service.fetchFamilyDailyReportForStaff(widget.childId, widget.businessDate);
+        widget.service.fetchFamilyDailyReportForStaff(widget.childId, _selectedDate);
+    _loadMonthDates();
+  }
+
+  Future<void> _loadMonthDates() async {
+    try {
+      final dates = await widget.service.fetchFamilyReportDatesInMonth(widget.childId, _month);
+      if (mounted) setState(() => _reportDates = dates);
+    } catch (_) {
+      // 取得失敗時は日付マーカーなし(本文表示には影響しない)。
+    }
+  }
+
+  void _selectDate(DateTime date) {
+    setState(() {
+      _selectedDate = date;
+      _reportFuture = widget.service.fetchFamilyDailyReportForStaff(widget.childId, date);
+    });
+  }
+
+  void _changeMonth(int delta) {
+    setState(() {
+      _month = DateTime(_month.year, _month.month + delta);
+      _reportDates = {};
+    });
+    _loadMonthDates();
+  }
+
+  String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget _reportView() => FutureBuilder<FamilyDailyReportSummary?>(
+        future: _reportFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_selectedDate.year}年${_selectedDate.month}月${_selectedDate.day}日 の家庭連絡帳',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                FamilyDailyReportSummaryView(report: snapshot.data),
+              ],
+            ),
+          );
+        },
+      );
+
+  /// 右パネル: 月ナビ + 当月の日付一覧(記載あり/未入力)。日付タップでその日へ切替。
+  Widget _monthPanel() {
+    final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded),
+                onPressed: () => _changeMonth(-1),
+                visualDensity: VisualDensity.compact,
+              ),
+              Text('${_month.year}年${_month.month}月',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded),
+                onPressed: () => _changeMonth(1),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemCount: daysInMonth,
+            itemBuilder: (context, i) {
+              final day = i + 1;
+              final date = DateTime(_month.year, _month.month, day);
+              final has = _reportDates.contains(_ymd(date));
+              final selected = _selectedDate.year == date.year &&
+                  _selectedDate.month == date.month &&
+                  _selectedDate.day == date.day;
+              return InkWell(
+                onTap: () => _selectDate(date),
+                child: Container(
+                  color: selected ? AppColors.skyBlue.withValues(alpha: 0.12) : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${_month.month}月$day日',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                          )),
+                      if (has)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.leafGreen.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('記載あり',
+                              style: TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.leafGreen)),
+                        )
+                      else
+                        const Text('未入力',
+                            style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<FamilyDailyReportSummary?>(
-      future: _reportFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // iPad横幅: 左=本文(約3/4)+右=月別日付一覧(約1/4)。狭い画面は本文のみ。
+        if (constraints.maxWidth < 700) {
+          return _reportView();
         }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: FamilyDailyReportSummaryView(report: snapshot.data),
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(flex: 3, child: _reportView()),
+            const VerticalDivider(width: 1),
+            SizedBox(width: 240, child: _monthPanel()),
+          ],
         );
       },
     );

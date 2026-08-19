@@ -1214,6 +1214,22 @@ class ChildcareService {
     return FamilyDailyReportSummary.fromJson(row);
   }
 
+  /// 指定月に家庭連絡帳(提出済み)がある日付の集合(yyyy-MM-dd)。家庭連絡帳タブの日付一覧用。
+  Future<Set<String>> fetchFamilyReportDatesInMonth(String childId, DateTime month) async {
+    final start = DateTime(month.year, month.month, 1);
+    final end = DateTime(month.year, month.month + 1, 0);
+    final rows = await _client
+        .from('family_daily_reports')
+        .select('business_date, status')
+        .eq('child_id', childId)
+        .eq('status', 'submitted')
+        .gte('business_date', dateOnly(start))
+        .lte('business_date', dateOnly(end)) as List;
+    return {
+      for (final r in rows) (r as Map<String, dynamic>)['business_date'] as String,
+    };
+  }
+
   /// 家庭での様子 一覧: 施設×日の提出済み家庭連絡帳を全園児分。
   /// 新規RPCは作らず、既存RLS(family_daily_reports_select = staff_has_guardian_data_access)で保護された
   /// 直接selectを用いる(children!inner で office 絞り込み)。DB変更なし。
