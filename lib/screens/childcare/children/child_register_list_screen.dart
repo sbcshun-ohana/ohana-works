@@ -16,11 +16,15 @@ class ChildRegisterListScreen extends StatefulWidget {
     required this.service,
     required this.officeId,
     required this.businessDate,
+    this.isManager = false,
   });
 
   final ChildcareService service;
   final String officeId;
   final DateTime businessDate;
+
+  /// 週次保育時間(標準)の設定導線は主任以上のみ表示(俊指示 2026-08-19)。
+  final bool isManager;
 
   @override
   State<ChildRegisterListScreen> createState() => _ChildRegisterListScreenState();
@@ -241,16 +245,18 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
                 child: Text(_selectedChildName ?? '',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
               ),
-              IconButton(
-                icon: const Icon(Icons.event_repeat_rounded),
-                tooltip: '週次保育時間(標準)',
-                onPressed: () => showChildWeeklyScheduleSheet(
-                  context,
-                  service: widget.service,
-                  childId: _selectedChildId!,
-                  childName: _selectedChildName ?? '',
+              // 週次保育時間(標準)の設定は主任以上のみ(一般職員には非表示)。
+              if (widget.isManager)
+                IconButton(
+                  icon: const Icon(Icons.event_repeat_rounded),
+                  tooltip: '週次保育時間(標準)',
+                  onPressed: () => showChildWeeklyScheduleSheet(
+                    context,
+                    service: widget.service,
+                    childId: _selectedChildId!,
+                    childName: _selectedChildName ?? '',
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -324,6 +330,7 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
                   officeId: widget.officeId,
                   businessDate: widget.businessDate,
                   openRegisterTab: true,
+                  isManager: widget.isManager,
                 ),
               ),
             );

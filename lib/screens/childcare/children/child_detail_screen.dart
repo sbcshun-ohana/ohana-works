@@ -21,6 +21,7 @@ class ChildDetailScreen extends StatefulWidget {
     required this.officeId,
     required this.businessDate,
     this.openRegisterTab = false,
+    this.isManager = false,
   });
 
   final ChildcareService service;
@@ -31,6 +32,9 @@ class ChildDetailScreen extends StatefulWidget {
 
   /// true のとき「台帳」タブを直接開く(園児台帳一覧からの導線・221)。
   final bool openRegisterTab;
+
+  /// 週次保育時間(標準)の設定導線は主任以上のみ表示(俊指示 2026-08-19)。
+  final bool isManager;
 
   @override
   State<ChildDetailScreen> createState() => _ChildDetailScreenState();
@@ -45,16 +49,18 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         leadingWidth: 200,
         title: Text(widget.childName),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.event_repeat_rounded),
-            tooltip: '週次保育時間(標準)',
-            onPressed: () => showChildWeeklyScheduleSheet(
-              context,
-              service: widget.service,
-              childId: widget.childId,
-              childName: widget.childName,
+          // 週次保育時間(標準)の設定は主任以上のみ(一般職員には非表示)。
+          if (widget.isManager)
+            IconButton(
+              icon: const Icon(Icons.event_repeat_rounded),
+              tooltip: '週次保育時間(標準)',
+              onPressed: () => showChildWeeklyScheduleSheet(
+                context,
+                service: widget.service,
+                childId: widget.childId,
+                childName: widget.childName,
+              ),
             ),
-          ),
         ],
       ),
       body: ChildDetailBody(

@@ -943,6 +943,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           childName: row.nameLabel,
           officeId: _officeId,
           businessDate: _businessDate,
+          isManager: _isManager,
         ),
       ),
     );

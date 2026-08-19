@@ -226,6 +226,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 service: widget.service,
                 officeId: office.officeId,
                 businessDate: _businessDate,
+                isManager: office.isManager,
               )),
             ),
             // 週次予定タイルは撤去(俊指示 2026-08-14: 週次予定は園児マスタ(admin)側で管理する方針)。
