@@ -1409,6 +1409,49 @@ class ChildcareService {
     });
   }
 
+  // ------------------------------------------------------------------
+  // 食数・厨房ボード(245・M6 Phase 7)。給食情報のみ。閲覧=所属施設の職員以上。
+  // ------------------------------------------------------------------
+
+  /// 当日の食数集計(5区分+提供数+職員食数)。
+  Future<({int normal, int elimination, int bento, int hold, int pre, int provided, int staff})>
+      fetchMealCountForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_count_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    }) as List;
+    final m = rows.first as Map<String, dynamic>;
+    int v(String k) => (m[k] as num?)?.toInt() ?? 0;
+    return (
+      normal: v('normal_count'),
+      elimination: v('elimination_count'),
+      bento: v('bento_count'),
+      hold: v('hold_count'),
+      pre: v('pre_count'),
+      provided: v('provided_count'),
+      staff: v('staff_count'),
+    );
+  }
+
+  /// 当日の共通除去食/弁当持参/給食開始保留の対象児(厨房の誤配膳防止表示用)。
+  Future<List<({String childId, String childName, String? className, String? handling, List<String> targets})>>
+      fetchDailyEliminationForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_daily_elimination_for_office', params: {
+      'p_office_id': officeId,
+      'p_business_date': dateOnly(businessDate),
+    }) as List;
+    return [
+      for (final r in rows)
+        (
+          childId: (r as Map<String, dynamic>)['child_id'] as String,
+          childName: r['child_name'] as String,
+          className: r['class_name'] as String?,
+          handling: r['handling'] as String?,
+          targets: ((r['elimination_targets'] as List?) ?? const []).map((e) => e as String).toList(),
+        ),
+    ];
+  }
+
   /// 表示制御のみに使う(編集・削除ボタンの出し分け)。実際の許可判定は必ずRPC側で行う。
   Future<bool> isChildInternalNotesChief(String officeId) async {
     final result = await _client.rpc(
