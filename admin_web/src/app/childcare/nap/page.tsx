@@ -246,28 +246,18 @@ function ChildcareNapPageContent() {
         return;
       }
       const supabase = createClient();
-      if (selectedClass !== "") {
-        const className = classes.find((c) => c.class_id === selectedClass)?.class_name ?? null;
-        supabase
-          .rpc("fetch_class_children", { p_class_id: selectedClass, p_business_date: businessDate })
-          .then(({ data }) =>
-            setRoster(
-              ((data ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null; is_absent: boolean }[]).map(
-                (c) => ({ ...c, class_id: selectedClass, class_name: className }),
-              ),
-            ),
-          );
-      } else {
-        supabase
-          .rpc("fetch_children_for_office", { p_office_id: selectedOffice })
-          .then(({ data }) =>
-            setRoster(
-              ((data ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null; class_name: string | null }[]).map(
-                (c) => ({ ...c, class_id: null }),
-              ),
-            ),
-          );
-      }
+      // 名簿は登園済み(present/picked_up・非欠席)のみ(258 fetch_nap_roster)。欠席・未登園は表示しない。
+      supabase
+        .rpc("fetch_nap_roster", {
+          p_office_id: selectedOffice,
+          p_class_id: selectedClass === "" ? null : selectedClass,
+          p_business_date: businessDate,
+        })
+        .then(({ data }) =>
+          setRoster(
+            (data ?? []) as { child_id: string; display_name: string; honorific_suffix: string | null; class_id: string; class_name: string | null }[],
+          ),
+        );
     }
     load();
   }, [selectedOffice, selectedClass, businessDate, reloadToken, classes]);
