@@ -998,6 +998,8 @@ function ChildcareDailyBoardPageContent() {
                     <td className="px-4 py-3">
                       <ContactPublishCell
                         row={row}
+                        officeId={selectedOffice}
+                        businessDate={businessDate}
                         onSchedule17={() => row.contact_id && scheduleContacts([row.contact_id], "17:00")}
                         onPickTime={() =>
                           row.contact_id &&
@@ -1206,24 +1208,44 @@ function ChildcareDailyBoardPageContent() {
 /** 連絡帳公開の状態バッジ+操作(承認済み・未公開のみ操作可)。 */
 function ContactPublishCell({
   row,
+  officeId,
+  businessDate,
   onSchedule17,
   onPickTime,
   onPublishNow,
   onCancel,
 }: {
   row: DailyBoardRow;
+  officeId: string;
+  businessDate: string;
   onSchedule17: () => void;
   onPickTime: () => void;
   onPublishNow: () => void;
   onCancel: () => void;
 }) {
   const badge = deriveContactBadge(row);
+  // 連絡帳エディタ(その子・その日)への導線。俊指示 2026-08-19: 下書き等から直接入力ページへ飛べるように。
+  const editorHref = `/childcare/contacts?office=${officeId}&child=${row.child_id}&date=${businessDate}`;
   if (badge === "none") return <span className="text-xs text-slate-300">—</span>;
   if (badge === "draft") {
-    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">下書き</span>;
+    return (
+      <Link
+        href={editorHref}
+        className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+      >
+        下書き
+      </Link>
+    );
   }
   if (badge === "published") {
-    return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">公開済</span>;
+    return (
+      <Link
+        href={editorHref}
+        className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+      >
+        公開済
+      </Link>
+    );
   }
   if (badge === "unscheduled") {
     // 承認済みだが予約なし(取消後)。再予約/即時公開を提供する。

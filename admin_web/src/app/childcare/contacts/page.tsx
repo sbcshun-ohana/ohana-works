@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
@@ -39,7 +40,11 @@ function ChildcareContactsPageContent() {
   const { classes, selectedClass, setSelectedClass, selectedClassName } = useChildcareClass(selectedOffice);
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
 
-  const [businessDate, setBusinessDate] = useState(currentDate());
+  // デイリーボード等からの深いリンク(?child=&date=)に対応。
+  const searchParams = useSearchParams();
+  const urlChild = searchParams.get("child");
+  const [businessDate, setBusinessDate] = useState(searchParams.get("date") || currentDate());
+  const [urlChildApplied, setUrlChildApplied] = useState(false);
   const [rows, setRows] = useState<DailyContactRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
@@ -121,6 +126,15 @@ function ChildcareContactsPageContent() {
     }
     resetSelectionOnOfficeChange();
   }, [selectedOffice]);
+
+  // 深いリンクの ?child= を一度だけ適用(行が読み込まれ、対象児が含まれていれば選択)。
+  useEffect(() => {
+    if (urlChildApplied || !urlChild) return;
+    if (rows.some((r) => r.child_id === urlChild)) {
+      setSelectedChildId(urlChild);
+      setUrlChildApplied(true);
+    }
+  }, [rows, urlChild, urlChildApplied]);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
   // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
