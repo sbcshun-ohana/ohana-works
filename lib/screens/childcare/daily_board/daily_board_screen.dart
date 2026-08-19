@@ -1141,13 +1141,9 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                                   : AppColors.textSecondary,
                                               () => _openArrivalNote(row)),
                                           _actionIcon(Icons.menu_book_rounded, '日誌・連絡帳', AppColors.skyBlue, () => _openContact(row)),
+                                          // 出欠編集(オレンジ)から欠席登録・出席復帰ができるため、
+                                          // 出席行の赤い欠席トグルは廃止(俊指示 2026-08-19)。欠席児の復帰は下部の欠席セクション。
                                           _actionIcon(Icons.edit_calendar_rounded, '出欠編集', AppColors.warmOrange, () => _openAttendanceEdit(row)),
-                                          _actionIcon(
-                                            row.status == 'absent' ? Icons.undo_rounded : Icons.event_busy_rounded,
-                                            row.status == 'absent' ? '出席に戻す' : '欠席にする',
-                                            row.status == 'absent' ? AppColors.leafGreen : AppColors.punchClockOut,
-                                            () => _toggleAbsence(row),
-                                          ),
                                           // 209: 引き継ぎカード作成(感染症管理ON施設のみ)
                                           if (_infectionControlEnabled)
                                             _actionIcon(Icons.medical_information_rounded, '引き継ぎカード',

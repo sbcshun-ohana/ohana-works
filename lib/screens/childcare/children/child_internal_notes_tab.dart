@@ -369,53 +369,47 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoadingInitial) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: AppColors.warmOrange.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.warmOrange),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'この記録は保護者には表示されません',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary),
-                ),
+  Widget _lockBanner() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.warmOrange.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.warmOrange),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'この記録は保護者には表示されません',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        _NewNoteForm(
-          date: _newDate,
-          category: _newCategory,
-          bodyController: _newBodyController,
-          aiExcluded: _newAiExcluded,
-          isSaving: _isSaving,
-          errorMessage: _saveError,
-          onPickDate: _pickNewDate,
-          onCategoryChanged: (v) {
-            setState(() => _newCategory = v);
-            _persistDraft();
-          },
-          onAiExcludedChanged: (v) {
-            setState(() => _newAiExcluded = v);
-            _persistDraft();
-          },
-          onSave: _save,
-        ),
-        const SizedBox(height: 24),
+      );
+
+  Widget _newNoteForm() => _NewNoteForm(
+        date: _newDate,
+        category: _newCategory,
+        bodyController: _newBodyController,
+        aiExcluded: _newAiExcluded,
+        isSaving: _isSaving,
+        errorMessage: _saveError,
+        onPickDate: _pickNewDate,
+        onCategoryChanged: (v) {
+          setState(() => _newCategory = v);
+          _persistDraft();
+        },
+        onAiExcludedChanged: (v) {
+          setState(() => _newAiExcluded = v);
+          _persistDraft();
+        },
+        onSave: _save,
+      );
+
+  /// 履歴(これまでの園内記録)の中身ウィジェット群。横並び(右カラム)・縦積み共用。
+  List<Widget> _historyChildren() => [
         if (_listError != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -444,18 +438,86 @@ class _ChildInternalNotesTabState extends State<ChildInternalNotesTab> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 child: _isLoadingMore
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Text('もっと見る'),
               ),
             ),
           ),
         ],
-        const SizedBox(height: 24),
-      ],
+      ];
+
+  Widget _historyHeader() => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.history_rounded, size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 6),
+            const Text('これまでの記録',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
+            const SizedBox(width: 6),
+            Text('(${_notes.length}件)', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoadingInitial) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _lockBanner(),
+          const SizedBox(height: 16),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // iPad横幅: 左=入力(約3/4)+右=履歴(約1/4)。狭い画面は従来の縦積み。
+                final wide = constraints.maxWidth >= 700;
+                if (!wide) {
+                  return ListView(
+                    children: [
+                      _newNoteForm(),
+                      const SizedBox(height: 24),
+                      _historyHeader(),
+                      ..._historyChildren(),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: SingleChildScrollView(child: _newNoteForm()),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _historyHeader(),
+                          Expanded(
+                            child: ListView(
+                              padding: EdgeInsets.zero,
+                              children: _historyChildren(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
