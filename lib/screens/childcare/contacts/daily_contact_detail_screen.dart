@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/childcare.dart';
 import '../../../models/guardian_app.dart';
+import '../../../models/nap.dart';
 import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
@@ -42,6 +43,13 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
   String? _myEmployeeId;
   DailyContact? _contact;
   FamilyDailyReportSummary? _familyDailyReport;
+  // 参照(引用元)パネル用: その子の当日の 午睡/健康/食事 の記録(読み取り)。
+  List<NapInterval> _refNapIntervals = const [];
+  List<NapCheck> _refNapChecks = const [];
+  List<ChildTemperatureRecord> _refTemps = const [];
+  List<({String time, String type})> _refToileting = const [];
+  List<({String time, int amountMl})> _refMilk = const [];
+  Map<String, String> _refMeals = const {};
   List<NoticeMaster> _noticeMasters = const [];
   Set<String> _checkedNoticeIds = {};
   List<({String itemName, int quantity})> _supplyItems = const [];
@@ -87,6 +95,22 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
       _todayNotesController.text = contact.childTodayNotes ?? '';
       _freeNotesController.text = contact.freeNotes ?? '';
       _currentTextController.text = contact.currentText ?? contact.aiGeneratedText ?? '';
+      // 参照(引用元): その子の当日の 午睡/健康/食事(取得失敗しても連絡帳編集は継続)。
+      try {
+        final napBoard = await widget.service.fetchNapBoard(widget.officeId, widget.businessDate);
+        final temps = await widget.service.fetchChildTemperaturesForOffice(widget.officeId, widget.businessDate);
+        final health = await widget.service.fetchHealthCheckForOffice(widget.officeId, widget.businessDate);
+        final nap = napBoard.where((s) => s.childId == widget.childId).toList();
+        _refNapIntervals = [for (final s in nap) ...s.intervals];
+        _refNapChecks = [for (final s in nap) ...s.checks]..sort((a, b) => a.slotAt.compareTo(b.slotAt));
+        _refTemps = temps.where((t) => t.childId == widget.childId).toList();
+        final h = health[widget.childId];
+        _refToileting = h?.toileting ?? const [];
+        _refMilk = h?.milk ?? const [];
+        _refMeals = h?.meals ?? const {};
+      } catch (_) {
+        // 参照は補助情報。取得失敗時は空表示。
+      }
       setState(() {
         _contact = contact;
         _noticeMasters = results[0] as List<NoticeMaster>;
@@ -321,6 +345,8 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  _referencePanel(),
+                  const SizedBox(height: 16),
                   _field('保護者からの連絡内容', _guardianController, enabled: _canEditInput, maxLines: 2),
                   _field('今日の園児の様子', _todayNotesController, enabled: _canEditInput, maxLines: 2),
                   _field('その他自由記載', _freeNotesController, enabled: _canEditInput, maxLines: 2),
@@ -436,6 +462,72 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
         title: Text(widget.childNameLabel),
       ),
       body: body,
+    );
+  }
+
+  String _hmRef(DateTime? dt) => dt == null
+      ? '--:--'
+      : '${dt.toLocal().hour.toString().padLeft(2, '0')}:${dt.toLocal().minute.toString().padLeft(2, '0')}';
+
+  Widget _refLine(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            ),
+            Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+          ],
+        ),
+      );
+
+  /// 連絡帳作成画面の「引用元(当日の記録)」参照パネル。編集はせず、記録済みの午睡/健康/食事を
+  /// 確認して申請・承認するための読み取り表示(俊指示 2026-08-19)。
+  Widget _referencePanel() {
+    const mealLabels = {'am_snack': '午前おやつ', 'lunch': '昼食', 'pm_snack': '午後おやつ'};
+    final napText = _refNapIntervals.isEmpty
+        ? '記録なし'
+        : _refNapIntervals
+            .map((iv) => '${_hmRef(iv.sleepStartAt)}〜${iv.wakeUpAt != null ? _hmRef(iv.wakeUpAt) : "就寝中"}')
+            .join(' / ');
+    final tempText = _refTemps.isEmpty
+        ? '記録なし'
+        : _refTemps
+            .map((t) =>
+                '${t.temperature.toStringAsFixed(1)}℃(${t.measuredAt.length >= 5 ? t.measuredAt.substring(0, 5) : t.measuredAt})')
+            .join(' / ');
+    final toiletText = _refToileting.isEmpty ? '記録なし' : _refToileting.map((e) => '${e.time} ${e.type}').join(' / ');
+    final milkText = _refMilk.isEmpty ? '記録なし' : _refMilk.map((e) => '${e.time} ${e.amountMl}ml').join(' / ');
+    final mealText = _refMeals.isEmpty
+        ? '記録なし'
+        : [
+            for (final e in mealLabels.entries)
+              if (_refMeals[e.key]?.isNotEmpty ?? false) '${e.value} ${_refMeals[e.key]}',
+          ].join(' / ');
+    return Card(
+      color: AppColors.leafGreen.withValues(alpha: 0.06),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: const Text('当日の記録を確認(引用元: 午睡・健康・食事)',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          subtitle: const Text('記録済みの内容です。ここでは編集せず、確認して申請・承認してください。',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          children: [
+            _refLine('午睡', napText),
+            _refLine('午睡チェック', _refNapChecks.isEmpty ? '記録なし' : '${_refNapChecks.length}回'),
+            _refLine('検温', tempText),
+            _refLine('排便', toiletText),
+            _refLine('ミルク', milkText),
+            _refLine('食事', mealText),
+          ],
+        ),
+      ),
     );
   }
 

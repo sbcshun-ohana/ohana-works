@@ -210,7 +210,7 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
     final childKey = ValueKey('${c.childId}_${_businessDate.toIso8601String()}');
     return DefaultTabController(
       key: childKey,
-      length: 3,
+      length: 4,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -219,7 +219,7 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
             child: Text('${c.nameLabel}${c.isAbsent ? "(欠席)" : ""}',
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
           ),
-          const TabBar(tabs: [Tab(text: '連絡帳'), Tab(text: '午睡'), Tab(text: '健康')]),
+          const TabBar(tabs: [Tab(text: '連絡帳'), Tab(text: '午睡'), Tab(text: '健康'), Tab(text: '食事')]),
           Expanded(
             child: TabBarView(
               children: [
@@ -239,6 +239,12 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
                   businessDate: _businessDate,
                 ),
                 ChildDayHealthView(
+                  service: widget.service,
+                  officeId: widget.officeId,
+                  childId: c.childId,
+                  businessDate: _businessDate,
+                ),
+                ChildDayMealView(
                   service: widget.service,
                   officeId: widget.officeId,
                   childId: c.childId,

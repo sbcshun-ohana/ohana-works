@@ -36,7 +36,6 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
   List<ChildTemperatureRecord> _temps = const [];
   List<({String time, String type})> _toileting = const [];
   List<({String time, int amountMl})> _milk = const [];
-  Map<String, String> _meals = const {};
 
   @override
   void initState() {
@@ -58,7 +57,6 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
         _temps = temps.where((t) => t.childId == widget.childId).toList();
         _toileting = entry?.toileting ?? const [];
         _milk = entry?.milk ?? const [];
-        _meals = entry?.meals ?? const {};
         _loading = false;
       });
     } catch (e) {
@@ -125,19 +123,97 @@ class _ChildDayHealthViewState extends State<ChildDayHealthView> {
                     children: [for (final e in _milk) Text('${e.time}  ${e.amountMl}ml')],
                   ),
           ),
-          _section(
-            '食事',
-            (_meals.isEmpty)
-                ? _empty()
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final slot in _mealSlotLabels.entries)
-                        if (_meals[slot.key] != null && _meals[slot.key]!.isNotEmpty)
-                          Text('${slot.value}: ${_meals[slot.key]}'),
-                    ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 連絡帳分割ビューの「食事」タブ: その子・その日の食事(午前おやつ/昼食/午後おやつ)分量を閲覧(読み取り)。
+class ChildDayMealView extends StatefulWidget {
+  const ChildDayMealView({
+    super.key,
+    required this.service,
+    required this.officeId,
+    required this.childId,
+    required this.businessDate,
+  });
+
+  final ChildcareService service;
+  final String officeId;
+  final String childId;
+  final DateTime businessDate;
+
+  @override
+  State<ChildDayMealView> createState() => _ChildDayMealViewState();
+}
+
+class _ChildDayMealViewState extends State<ChildDayMealView> {
+  bool _loading = true;
+  String? _error;
+  Map<String, String> _meals = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final health = await widget.service.fetchHealthCheckForOffice(widget.officeId, widget.businessDate);
+      if (!mounted) return;
+      setState(() {
+        _meals = health[widget.childId]?.meals ?? const {};
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = '食事情報の取得に失敗しました';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          for (final slot in _mealSlotLabels.entries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 110,
+                    child: Text(slot.value,
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.leafGreen)),
                   ),
-          ),
+                  Expanded(
+                    child: Text(
+                      (_meals[slot.key] != null && _meals[slot.key]!.isNotEmpty) ? _meals[slot.key]! : '記録なし',
+                      style: TextStyle(
+                        color: (_meals[slot.key] != null && _meals[slot.key]!.isNotEmpty)
+                            ? null
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
