@@ -44,7 +44,7 @@ class _ProgressLog {
 
 class _GuardianContact {
   DateTime contactedAt = DateTime.now();
-  bool contactBookWritten = false;
+  bool contactBookWritten = true; // true=連絡帳に記載 / false=口頭で直接
   String reactionKind = 'understood';
   String text = '';
 }
@@ -428,10 +428,21 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
         ]),
       );
 
+  void _onTypeChanged(String v) {
+    setState(() {
+      _reportType = v;
+      // 事故報告(園内対応/病院搬送)は経過・保護者連絡が必須のため、最初から1行表示する。
+      if (_isAccident) {
+        if (_progress.isEmpty) _progress.add(_ProgressLog());
+        if (_guardians.isEmpty) _guardians.add(_GuardianContact());
+      }
+    });
+  }
+
   Widget _typeSelector() {
     return RadioGroup<String>(
       groupValue: _reportType,
-      onChanged: (v) => setState(() => _reportType = v!),
+      onChanged: (v) => _onTypeChanged(v!),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -633,40 +644,31 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Expanded(child: _dateTimeButton(log.loggedAt, (d) => setState(() => log.loggedAt = d))),
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => setState(() => _progress.removeAt(i)),
+              _dateTimeButton(log.loggedAt, (d) => setState(() => log.loggedAt = d)),
+              const SizedBox(width: 8),
+              _segmented<String>(
+                options: IncidentLabels.progressKinds,
+                value: log.kind,
+                onChanged: (v) => setState(() => log.kind = v),
               ),
+              const Spacer(),
+              _deleteButton(() => setState(() => _progress.removeAt(i))),
             ]),
-            RadioGroup<String>(
-              groupValue: log.kind,
-              onChanged: (v) => setState(() => log.kind = v!),
-              child: Row(
-                children: [
-                  for (final e in IncidentLabels.progressKinds.entries)
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        value: e.key,
-                        title: Text(e.value, style: const TextStyle(fontSize: 13)),
-                      ),
-                    ),
-                ],
+            if (log.kind == 'other') ...[
+              const SizedBox(height: 6),
+              TextField(
+                controller: TextEditingController(text: log.text)
+                  ..selection = TextSelection.collapsed(offset: log.text.length),
+                maxLength: 200,
+                maxLines: 2,
+                minLines: 1,
+                decoration: const InputDecoration(labelText: '報告内容', border: OutlineInputBorder(), counterText: '', isDense: true),
+                onChanged: (v) => log.text = v,
               ),
-            ),
-            TextField(
-              controller: TextEditingController(text: log.text)
-                ..selection = TextSelection.collapsed(offset: log.text.length),
-              maxLength: 200,
-              maxLines: 2,
-              minLines: 1,
-              decoration: const InputDecoration(labelText: '報告内容(その他の場合)', border: OutlineInputBorder(), counterText: ''),
-              onChanged: (v) => log.text = v,
-            ),
+            ],
           ],
         ),
       ),
@@ -679,50 +681,77 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Expanded(child: _dateTimeButton(gc.contactedAt, (d) => setState(() => gc.contactedAt = d))),
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => setState(() => _guardians.removeAt(i)),
-              ),
+              _dateTimeButton(gc.contactedAt, (d) => setState(() => gc.contactedAt = d)),
+              const Spacer(),
+              _deleteButton(() => setState(() => _guardians.removeAt(i))),
             ]),
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
+            const SizedBox(height: 6),
+            _labeledRow('報告方法', _segmented<bool>(
+              options: const {true: '連絡帳に記載', false: '口頭で直接'},
               value: gc.contactBookWritten,
-              title: const Text('連絡帳に記入した'),
-              onChanged: (v) => setState(() => gc.contactBookWritten = v ?? false),
-            ),
-            RadioGroup<String>(
-              groupValue: gc.reactionKind,
-              onChanged: (v) => setState(() => gc.reactionKind = v!),
-              child: Row(
-                children: [
-                  for (final e in IncidentLabels.reactionKinds.entries)
-                    Expanded(
-                      child: RadioListTile<String>(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        value: e.key,
-                        title: Text(e.value, style: const TextStyle(fontSize: 12)),
-                      ),
-                    ),
-                ],
+              onChanged: (v) => setState(() => gc.contactBookWritten = v),
+            )),
+            const SizedBox(height: 6),
+            _labeledRow('相手の反応', _segmented<String>(
+              options: const {'understood': 'ご理解いただけた', 'other': 'その他'},
+              value: gc.reactionKind,
+              onChanged: (v) => setState(() => gc.reactionKind = v),
+            )),
+            if (gc.reactionKind == 'other') ...[
+              const SizedBox(height: 6),
+              TextField(
+                controller: TextEditingController(text: gc.text)
+                  ..selection = TextSelection.collapsed(offset: gc.text.length),
+                maxLength: 200,
+                maxLines: 2,
+                minLines: 1,
+                decoration: const InputDecoration(labelText: '相手の反応(詳細)', border: OutlineInputBorder(), counterText: '', isDense: true),
+                onChanged: (v) => gc.text = v,
               ),
-            ),
-            TextField(
-              controller: TextEditingController(text: gc.text)
-                ..selection = TextSelection.collapsed(offset: gc.text.length),
-              maxLength: 200,
-              maxLines: 2,
-              minLines: 1,
-              decoration: const InputDecoration(labelText: '相手の反応(その他の場合)', border: OutlineInputBorder(), counterText: ''),
-              onChanged: (v) => gc.text = v,
-            ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// ラベル + 右側にセグメント選択(1行にコンパクト表示)。
+  Widget _labeledRow(String label, Widget child) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(width: 68, child: Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+        Expanded(child: Align(alignment: Alignment.centerLeft, child: child)),
+      ],
+    );
+  }
+
+  /// 小さな2〜3択セグメント(ラジオより省スペース)。
+  Widget _segmented<T>({required Map<T, String> options, required T value, required ValueChanged<T> onChanged}) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final e in options.entries)
+          ChoiceChip(
+            label: Text(e.value, style: const TextStyle(fontSize: 12)),
+            selected: value == e.key,
+            onSelected: (_) => onChanged(e.key),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+      ],
+    );
+  }
+
+  Widget _deleteButton(VoidCallback onTap) {
+    return IconButton(
+      icon: const Icon(Icons.delete_outline, size: 20),
+      visualDensity: VisualDensity.compact,
+      onPressed: onTap,
     );
   }
 
@@ -845,8 +874,16 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
 
   Widget _dateTimeButton(DateTime dt, ValueChanged<DateTime> onChanged) {
     return OutlinedButton.icon(
-      icon: const Icon(Icons.schedule, size: 18),
-      label: Text('${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: const Icon(Icons.schedule, size: 16),
+      label: Text(
+        '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}',
+        style: const TextStyle(fontSize: 13),
+      ),
       onPressed: () async {
         final d = await showDatePicker(
           context: context, initialDate: dt, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 1)));

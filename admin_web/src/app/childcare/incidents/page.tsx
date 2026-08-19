@@ -100,6 +100,8 @@ function ChildcareIncidentsPageContent() {
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [showLookups, setShowLookups] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formReportId, setFormReportId] = useState<string | null>(null);
 
   useEffect(() => {
     function begin() {
@@ -174,14 +176,22 @@ function ChildcareIncidentsPageContent() {
       <main className="flex-1 space-y-5 p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-800">ヒヤリハット・事故報告</h2>
-          <button
-            onClick={() => setShowLookups(true)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            ルックアップ管理
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowLookups(true)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              ルックアップ管理
+            </button>
+            <button
+              onClick={() => { setFormReportId(null); setFormOpen(true); }}
+              className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700"
+            >
+              新規作成
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-slate-400">報告書の作成は Ohana Kids(iPad)で行います。ここでは一覧・詳細確認・承認・差し戻しを行います。</p>
+        <p className="text-xs text-slate-400">報告書の作成・申請・承認・差し戻しを行えます(作成は Ohana Kids(iPad)からも可能です)。</p>
 
         <div className="flex gap-3">
           <select
@@ -270,6 +280,7 @@ function ChildcareIncidentsPageContent() {
           report={report}
           busy={busy}
           onClose={() => { setDetailId(null); setDetail(null); }}
+          onEdit={() => { setFormReportId(detailId); setFormOpen(true); }}
           onSubmit={() => runAction(async (s) => {
             const { error } = await s.rpc("submit_incident_report", { p_id: detailId });
             return { error };
@@ -302,6 +313,19 @@ function ChildcareIncidentsPageContent() {
       )}
 
       {showLookups && <LookupManager onClose={() => setShowLookups(false)} />}
+
+      {formOpen && selectedOffice && (
+        <IncidentFormDrawer
+          officeId={selectedOffice}
+          reportId={formReportId}
+          onClose={() => setFormOpen(false)}
+          onSaved={() => {
+            setFormOpen(false);
+            setReloadToken((t) => t + 1);
+            if (detailId) void openDetail(detailId);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -311,6 +335,7 @@ function DetailDrawer({
   report,
   busy,
   onClose,
+  onEdit,
   onSubmit,
   onChiefApprove,
   onApprove,
@@ -321,6 +346,7 @@ function DetailDrawer({
   report: Record<string, unknown> | null;
   busy: boolean;
   onClose: () => void;
+  onEdit: () => void;
   onSubmit: () => void;
   onChiefApprove: () => void;
   onApprove: () => void;
@@ -412,8 +438,8 @@ function DetailDrawer({
                 arr("guardian_contacts").map((c, i) => (
                   <LogLine
                     key={i}
-                    head={fmtDateTime(c["contacted_at"])}
-                    body={`${REACTION_KINDS[String(c["reaction_kind"])] ?? ""}${c["contact_book_written"] ? "(連絡帳記入あり)" : ""}${c["reaction_text"] ? `  ${c["reaction_text"]}` : ""}`}
+                    head={`${fmtDateTime(c["contacted_at"])}  ・  ${c["contact_book_written"] ? "連絡帳に記載" : "口頭で直接"}`}
+                    body={`${REACTION_KINDS[String(c["reaction_kind"])] ?? ""}${c["reaction_text"] ? `  ${c["reaction_text"]}` : ""}`}
                   />
                 ))
               )}
@@ -454,7 +480,10 @@ function DetailDrawer({
 
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
               {s === "draft" && (
-                <button disabled={busy} onClick={onSubmit} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">申請する</button>
+                <>
+                  <button disabled={busy} onClick={onEdit} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">編集</button>
+                  <button disabled={busy} onClick={onSubmit} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">申請する</button>
+                </>
               )}
               {s === "submitted" && (
                 <>
@@ -579,6 +608,528 @@ function LookupManager({ onClose }: { onClose: () => void }) {
           ))}
           {options.length === 0 && <li className="py-4 text-center text-sm text-slate-400">選択肢がありません</li>}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+// ---- 新規作成/下書き編集フォーム ----
+type MedicalForm = {
+  institution: string;
+  doctor_name: string;
+  department_id: string;
+  exam_ids: string[];
+  treatment_ids: string[];
+  exam_detail: string;
+  doctor_instruction: string;
+  prescription_present: boolean;
+  prescription_ids: string[];
+  prescription_detail: string;
+  treatment_period: string;
+};
+function emptyMedical(): MedicalForm {
+  return {
+    institution: "", doctor_name: "", department_id: "", exam_ids: [], treatment_ids: [],
+    exam_detail: "", doctor_instruction: "", prescription_present: false,
+    prescription_ids: [], prescription_detail: "", treatment_period: "",
+  };
+}
+type ProgressForm = { logged_at: string; kind: string; text: string };
+type GuardianForm = { contacted_at: string; contact_book_written: boolean; reaction_kind: string; text: string };
+type ChildRow = { id: string; name: string; class_name: string | null };
+
+function nowLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function todayStr(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function IncidentFormDrawer({
+  officeId,
+  reportId,
+  onClose,
+  onSaved,
+}: {
+  officeId: string;
+  reportId: string | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [options, setOptions] = useState<Record<string, LookupOption[]>>({});
+  const [children, setChildren] = useState<ChildRow[]>([]);
+  const [childQuery, setChildQuery] = useState("");
+
+  const [reportType, setReportType] = useState("hiyari");
+  const [occurredOn, setOccurredOn] = useState(todayStr());
+  const [occurredAt, setOccurredAt] = useState("10:00");
+  const [placeId, setPlaceId] = useState("");
+  const [placeOther, setPlaceOther] = useState("");
+  const [sWhen, setSWhen] = useState("");
+  const [sWhere, setSWhere] = useState("");
+  const [sWhat, setSWhat] = useState("");
+  const [sResult, setSResult] = useState("");
+  const [hoiku, setHoiku] = useState("");
+  const [jido, setJido] = useState("");
+  const [witness, setWitness] = useState("");
+  const [cChild, setCChild] = useState("");
+  const [cEnv, setCEnv] = useState("");
+  const [cObj, setCObj] = useState("");
+  const [cRules, setCRules] = useState("");
+  const [injuryId, setInjuryId] = useState("");
+  const [injuryDetail, setInjuryDetail] = useState("");
+  const [firstAid, setFirstAid] = useState("");
+  const [prevention, setPrevention] = useState("");
+  const [note, setNote] = useState("");
+  const [selChildren, setSelChildren] = useState<string[]>([]);
+  const [progress, setProgress] = useState<ProgressForm[]>([]);
+  const [guardians, setGuardians] = useState<GuardianForm[]>([]);
+  const [medicals, setMedicals] = useState<MedicalForm[]>([]);
+
+  const isAccident = reportType === "minor" || reportType === "hospital";
+  const isHospital = reportType === "hospital";
+  const opt = (kind: string): LookupOption[] => options[kind] ?? [];
+
+  function changeType(k: string) {
+    setReportType(k);
+    // 事故報告は経過・保護者連絡が必須のため、最初から1行表示する。
+    if (k === "minor" || k === "hospital") {
+      setProgress((p) => (p.length === 0 ? [{ logged_at: nowLocal(), kind: "ok", text: "" }] : p));
+      setGuardians((g) =>
+        g.length === 0 ? [{ contacted_at: nowLocal(), contact_book_written: true, reaction_kind: "understood", text: "" }] : g,
+      );
+    }
+  }
+
+  function prefill(d: IncidentDetail) {
+    const r = (d["report"] as Record<string, unknown>) ?? {};
+    const str = (k: string) => (r[k] == null ? "" : String(r[k]));
+    setReportType(str("report_type") || "hiyari");
+    if (r["occurred_on"]) setOccurredOn(String(r["occurred_on"]).slice(0, 10));
+    if (r["occurred_at"]) setOccurredAt(String(r["occurred_at"]).slice(0, 5));
+    setPlaceId(str("place_option_id"));
+    setPlaceOther(str("place_other"));
+    setSWhen(str("situation_when"));
+    setSWhere(str("situation_where"));
+    setSWhat(str("situation_what"));
+    setSResult(str("situation_result"));
+    const counts = (r["staff_counts"] as Record<string, unknown>) ?? {};
+    setHoiku(counts["hoiku"] != null ? String(counts["hoiku"]) : "");
+    setJido(counts["jido"] != null ? String(counts["jido"]) : "");
+    setWitness(counts["witness"] != null ? String(counts["witness"]) : "");
+    const causes = (r["causes"] as Record<string, unknown>) ?? {};
+    setCChild((causes["child_behavior"] as string) ?? "");
+    setCEnv((causes["environment"] as string) ?? "");
+    setCObj((causes["objects"] as string) ?? "");
+    setCRules((causes["care_rules"] as string) ?? "");
+    setInjuryId(str("injury_site_option_id"));
+    setInjuryDetail(str("injury_detail"));
+    setFirstAid(str("first_aid"));
+    setPrevention(str("prevention_text"));
+    setNote(str("note_text"));
+    setSelChildren(((d["children"] as Record<string, unknown>[]) ?? []).map((c) => String(c["child_id"])));
+    setProgress(((d["progress_logs"] as Record<string, unknown>[]) ?? []).map((p) => ({
+      logged_at: p["logged_at"] ? new Date(String(p["logged_at"])).toISOString().slice(0, 16) : nowLocal(),
+      kind: String(p["report_kind"] ?? "ok"),
+      text: String(p["report_text"] ?? ""),
+    })));
+    setGuardians(((d["guardian_contacts"] as Record<string, unknown>[]) ?? []).map((g) => ({
+      contacted_at: g["contacted_at"] ? new Date(String(g["contacted_at"])).toISOString().slice(0, 16) : nowLocal(),
+      contact_book_written: g["contact_book_written"] === true,
+      reaction_kind: String(g["reaction_kind"] ?? "understood"),
+      text: String(g["reaction_text"] ?? ""),
+    })));
+    setMedicals(((d["medical_visits"] as Record<string, unknown>[]) ?? []).map((m) => ({
+      institution: String(m["medical_institution"] ?? ""),
+      doctor_name: String(m["doctor_name"] ?? ""),
+      department_id: String(m["department_option_id"] ?? ""),
+      exam_ids: ((m["exam_option_ids"] as unknown[]) ?? []).map(String),
+      treatment_ids: ((m["treatment_option_ids"] as unknown[]) ?? []).map(String),
+      exam_detail: String(m["exam_detail"] ?? ""),
+      doctor_instruction: String(m["doctor_instruction"] ?? ""),
+      prescription_present: m["prescription_present"] === true,
+      prescription_ids: ((m["prescription_option_ids"] as unknown[]) ?? []).map(String),
+      prescription_detail: String(m["prescription_detail"] ?? ""),
+      treatment_period: String(m["treatment_period"] ?? ""),
+    })));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const supabase = createClient();
+      const [{ data: optData }, { data: childData }] = await Promise.all([
+        supabase.rpc("fetch_incident_lookup_options", { p_kind: null }),
+        supabase.rpc("fetch_children_for_office_master", { p_office_id: officeId }),
+      ]);
+      const byKind: Record<string, LookupOption[]> = {};
+      for (const o of (optData ?? []) as LookupOption[]) (byKind[o.kind] ??= []).push(o);
+      const rows: ChildRow[] = ((childData ?? []) as Record<string, unknown>[])
+        .filter((c) => c["enrollment_status"] !== "退園済み")
+        .map((c) => ({
+          id: String(c["id"]),
+          name: String(c["display_name"] ?? c["full_name"] ?? ""),
+          class_name: (c["class_name"] as string) ?? null,
+        }));
+      if (reportId) {
+        const { data: d } = await supabase.rpc("fetch_incident_report_detail", { p_id: reportId });
+        if (d && !cancelled) prefill(d as IncidentDetail);
+      }
+      if (!cancelled) {
+        setOptions(byKind);
+        setChildren(rows);
+        setLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [officeId, reportId]);
+
+  function buildPayload(): Record<string, unknown> {
+    const nz = (s: string) => (s.trim() === "" ? null : s.trim());
+    const ni = (s: string) => (s.trim() === "" ? null : Number(s));
+    return {
+      office_id: officeId,
+      report_type: reportType,
+      occurred_on: occurredOn,
+      occurred_at: occurredAt || null,
+      place_option_id: placeId || null,
+      place_other: nz(placeOther),
+      situation_when: nz(sWhen),
+      situation_where: nz(sWhere),
+      situation_what: nz(sWhat),
+      situation_result: nz(sResult),
+      staff_counts: { hoiku: ni(hoiku), jido: ni(jido), witness: ni(witness) },
+      causes: { child_behavior: nz(cChild), environment: nz(cEnv), objects: nz(cObj), care_rules: nz(cRules) },
+      injury_site_option_id: isAccident ? injuryId || null : null,
+      injury_detail: isAccident ? nz(injuryDetail) : null,
+      first_aid: isAccident ? nz(firstAid) : null,
+      prevention_text: nz(prevention),
+      note_text: nz(note),
+      children: selChildren.map((id) => ({ child_id: id })),
+      progress_logs: progress.map((p) => ({
+        logged_at: new Date(p.logged_at).toISOString(),
+        report_kind: p.kind,
+        report_text: p.text,
+      })),
+      guardian_contacts: guardians.map((g) => ({
+        contacted_at: new Date(g.contacted_at).toISOString(),
+        contact_book_written: g.contact_book_written,
+        reaction_kind: g.reaction_kind,
+        reaction_text: g.text,
+      })),
+      medical_visits: isHospital
+        ? medicals.map((m) => ({
+            medical_institution: nz(m.institution),
+            doctor_name: nz(m.doctor_name),
+            department_option_id: m.department_id || null,
+            exam_option_ids: m.exam_ids,
+            treatment_option_ids: m.treatment_ids,
+            exam_detail: nz(m.exam_detail),
+            doctor_instruction: m.doctor_instruction || null,
+            prescription_present: m.prescription_present,
+            prescription_option_ids: m.prescription_ids,
+            prescription_detail: nz(m.prescription_detail),
+            treatment_period: nz(m.treatment_period),
+          }))
+        : [],
+    };
+  }
+
+  async function save(): Promise<string | null> {
+    setBusy(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("save_incident_report", { p_id: reportId, p_payload: buildPayload() });
+    setBusy(false);
+    if (error) {
+      alert(`保存に失敗しました: ${error.message}`);
+      return null;
+    }
+    return data as string;
+  }
+
+  async function saveDraft() {
+    const id = await save();
+    if (id) { alert("下書きを保存しました"); onSaved(); }
+  }
+  async function submit() {
+    const id = await save();
+    if (!id) return;
+    const supabase = createClient();
+    const { error } = await supabase.rpc("submit_incident_report", { p_id: id });
+    if (error) {
+      const m = error.message;
+      alert(m.includes("必須項目") ? m.slice(m.indexOf("必須項目")) : `申請できません: ${m}`);
+      return;
+    }
+    alert("申請しました");
+    onSaved();
+  }
+
+  const selChildNames = children.filter((c) => selChildren.includes(c.id));
+  const filteredChildren = children.filter((c) => (childQuery ? c.name.includes(childQuery) : true));
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
+      <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-800">{reportId ? "報告書の編集" : "報告書の作成"}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        {loading ? (
+          <p className="text-slate-400">読み込み中…</p>
+        ) : (
+          <>
+            <FSection title="1. 基本情報" />
+            <div className="mb-3 space-y-1">
+              {Object.entries(REPORT_TYPES).map(([k, v]) => (
+                <label key={k} className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="rt" checked={reportType === k} onChange={() => changeType(k)} />
+                  {v}
+                </label>
+              ))}
+            </div>
+            <div className="mb-3 flex gap-3">
+              <label className="flex-1 text-sm">発生日
+                <input type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+              </label>
+              <label className="flex-1 text-sm">発生時間
+                <input type="time" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+              </label>
+            </div>
+            <FSelect label="発生場所" value={placeId} onChange={setPlaceId} opts={opt("place")} />
+            <FText label="その他の場所(任意)" value={placeOther} onChange={setPlaceOther} />
+            <div className="mb-3">
+              <div className="mb-1 text-sm text-slate-600">対象園児</div>
+              <div className="mb-2 flex flex-wrap gap-1">
+                {selChildNames.length === 0 && <span className="text-xs text-slate-400">未選択(職員のみの事案は空でも可)</span>}
+                {selChildNames.map((c) => (
+                  <span key={c.id} className="flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">
+                    {c.name}
+                    <button onClick={() => setSelChildren((prev) => prev.filter((x) => x !== c.id))} className="text-sky-400">✕</button>
+                  </span>
+                ))}
+              </div>
+              <input value={childQuery} onChange={(e) => setChildQuery(e.target.value)} placeholder="氏名で検索" className="mb-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200">
+                {filteredChildren.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 px-2 py-1 text-sm hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={selChildren.includes(c.id)}
+                      onChange={(e) =>
+                        setSelChildren((prev) => (e.target.checked ? [...prev, c.id] : prev.filter((x) => x !== c.id)))
+                      }
+                    />
+                    {c.name}
+                    {c.class_name && <span className="text-xs text-slate-400">({c.class_name})</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <FSection title="2. 発生状況" />
+            <FArea label="いつ" value={sWhen} onChange={setSWhen} />
+            <FArea label="どこで" value={sWhere} onChange={setSWhere} />
+            <FArea label="何をしたとき" value={sWhat} onChange={setSWhat} />
+            <FArea label="どうなった" value={sResult} onChange={setSResult} />
+
+            <FSection title="3. 現場の人員" />
+            <div className="mb-3 flex gap-3">
+              <FNum label="保育士(名)" value={hoiku} onChange={setHoiku} />
+              <FNum label="園児(名)" value={jido} onChange={setJido} />
+              <FNum label="目撃者(名)" value={witness} onChange={setWitness} />
+            </div>
+
+            <FSection title="4. 原因・問題点(該当項目のみ)" />
+            <FArea label="子どもの状況・行動" value={cChild} onChange={setCChild} />
+            <FArea label="環境・設備" value={cEnv} onChange={setCEnv} />
+            <FArea label="物・遊具" value={cObj} onChange={setCObj} />
+            <FArea label="保育・対応・ルール" value={cRules} onChange={setCRules} />
+
+            {isAccident && (
+              <>
+                <FSection title="5. 発生後の対応" />
+                <FSelect label="受傷部位" value={injuryId} onChange={setInjuryId} opts={opt("injury_site")} />
+                <FArea label="受傷内容" value={injuryDetail} onChange={setInjuryDetail} />
+                <FArea label="応急処置" value={firstAid} onChange={setFirstAid} />
+              </>
+            )}
+
+            <FSectionAdd title="6. 経過と観察記録" onAdd={() => setProgress((p) => [...p, { logged_at: nowLocal(), kind: "ok", text: "" }])} />
+            {progress.map((p, i) => (
+              <div key={i} className="mb-2 rounded-lg border border-slate-200 p-2">
+                <div className="mb-1 flex items-center gap-2">
+                  <input type="datetime-local" value={p.logged_at} onChange={(e) => setProgress((prev) => prev.map((x, j) => (j === i ? { ...x, logged_at: e.target.value } : x)))} className="rounded border border-slate-300 px-2 py-1 text-sm" />
+                  <button onClick={() => setProgress((prev) => prev.filter((_, j) => j !== i))} className="ml-auto text-xs text-red-500">削除</button>
+                </div>
+                <div className="mb-1 flex gap-3">
+                  {Object.entries(PROGRESS_KINDS).map(([k, v]) => (
+                    <label key={k} className="flex items-center gap-1 text-sm">
+                      <input type="radio" checked={p.kind === k} onChange={() => setProgress((prev) => prev.map((x, j) => (j === i ? { ...x, kind: k } : x)))} />
+                      {v}
+                    </label>
+                  ))}
+                </div>
+                <input value={p.text} onChange={(e) => setProgress((prev) => prev.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="報告内容(その他の場合)" className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
+              </div>
+            ))}
+
+            <FSectionAdd title="7. 保護者連絡" onAdd={() => setGuardians((g) => [...g, { contacted_at: nowLocal(), contact_book_written: false, reaction_kind: "understood", text: "" }])} />
+            {guardians.map((g, i) => (
+              <div key={i} className="mb-2 rounded-lg border border-slate-200 p-2">
+                <div className="mb-1 flex items-center gap-2">
+                  <input type="datetime-local" value={g.contacted_at} onChange={(e) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, contacted_at: e.target.value } : x)))} className="rounded border border-slate-300 px-2 py-1 text-sm" />
+                  <button onClick={() => setGuardians((prev) => prev.filter((_, j) => j !== i))} className="ml-auto text-xs text-red-500">削除</button>
+                </div>
+                <div className="mb-1 flex items-center gap-4 text-sm">
+                  <span className="text-slate-500">報告方法</span>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={g.contact_book_written === true} onChange={() => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, contact_book_written: true } : x)))} />
+                    連絡帳に記載
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={g.contact_book_written === false} onChange={() => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, contact_book_written: false } : x)))} />
+                    口頭で直接
+                  </label>
+                </div>
+                <div className="mb-1 flex flex-col gap-1">
+                  {Object.entries(REACTION_KINDS).map(([k, v]) => (
+                    <label key={k} className="flex items-center gap-1 text-sm">
+                      <input type="radio" checked={g.reaction_kind === k} onChange={() => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, reaction_kind: k } : x)))} />
+                      {v}
+                    </label>
+                  ))}
+                </div>
+                <input value={g.text} onChange={(e) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="相手の反応(その他の場合)" className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
+              </div>
+            ))}
+
+            {isHospital && (
+              <>
+                <FSectionAdd title="受診記録" onAdd={() => setMedicals((m) => [...m, emptyMedical()])} />
+                {medicals.map((m, i) => (
+                  <div key={i} className="mb-2 rounded-lg border border-red-100 bg-red-50/40 p-2">
+                    <div className="mb-1 flex justify-end">
+                      <button onClick={() => setMedicals((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-red-500">削除</button>
+                    </div>
+                    <FText label="医療機関名" value={m.institution} onChange={(v) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, institution: v } : x)))} />
+                    <FText label="医師名" value={m.doctor_name} onChange={(v) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, doctor_name: v } : x)))} />
+                    <FSelect label="診察科" value={m.department_id} onChange={(v) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, department_id: v } : x)))} opts={opt("med_department")} />
+                    <FChips label="受診内容" opts={opt("med_exam")} selected={m.exam_ids} onToggle={(id) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, exam_ids: toggle(x.exam_ids, id) } : x)))} />
+                    <FChips label="処置内容" opts={opt("med_treatment")} selected={m.treatment_ids} onToggle={(id) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, treatment_ids: toggle(x.treatment_ids, id) } : x)))} />
+                    <FArea label="診察・処置の内容(補足)" value={m.exam_detail} onChange={(v) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, exam_detail: v } : x)))} />
+                    <div className="mb-1 flex gap-3">
+                      {Object.entries(DOCTOR_INSTRUCTIONS).map(([k, v]) => (
+                        <label key={k} className="flex items-center gap-1 text-sm">
+                          <input type="radio" checked={m.doctor_instruction === k} onChange={() => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, doctor_instruction: k } : x)))} />
+                          {v}
+                        </label>
+                      ))}
+                    </div>
+                    <label className="mb-1 flex items-center gap-1 text-sm">
+                      <input type="checkbox" checked={m.prescription_present} onChange={(e) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, prescription_present: e.target.checked } : x)))} />
+                      処方薬あり
+                    </label>
+                    {m.prescription_present && (
+                      <>
+                        <FChips label="処方薬" opts={opt("med_prescription")} selected={m.prescription_ids} onToggle={(id) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, prescription_ids: toggle(x.prescription_ids, id) } : x)))} />
+                        <FText label="処方薬の内容(補足)" value={m.prescription_detail} onChange={(v) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, prescription_detail: v } : x)))} />
+                      </>
+                    )}
+                    <FText label="治療期間" value={m.treatment_period} onChange={(v) => setMedicals((prev) => prev.map((x, j) => (j === i ? { ...x, treatment_period: v } : x)))} />
+                  </div>
+                ))}
+              </>
+            )}
+
+            <FSection title="8. 再発防止" />
+            <FArea label="再発防止に向けて" value={prevention} onChange={setPrevention} />
+            <FSection title="その他(任意)" />
+            <FArea label="その他" value={note} onChange={setNote} />
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <button disabled={busy} onClick={saveDraft} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50">下書き保存</button>
+              <button disabled={busy} onClick={submit} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">申請する</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function toggle(arr: string[], id: string): string[] {
+  return arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
+}
+function FSection({ title }: { title: string }) {
+  return <h4 className="mb-2 mt-4 text-sm font-bold text-emerald-700">{title}</h4>;
+}
+function FSectionAdd({ title, onAdd }: { title: string; onAdd: () => void }) {
+  return (
+    <div className="mb-2 mt-4 flex items-center justify-between">
+      <h4 className="text-sm font-bold text-emerald-700">{title}</h4>
+      <button onClick={onAdd} className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50">+ 追加</button>
+    </div>
+  );
+}
+function FText({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="mb-2 block text-sm">
+      <span className="text-slate-600">{label}</span>
+      <input value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+    </label>
+  );
+}
+function FArea({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="mb-2 block text-sm">
+      <span className="text-slate-600">{label}</span>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+    </label>
+  );
+}
+function FNum({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex-1 text-sm">
+      <span className="text-slate-600">{label}</span>
+      <input type="number" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+    </label>
+  );
+}
+function FSelect({ label, value, onChange, opts }: { label: string; value: string; onChange: (v: string) => void; opts: LookupOption[] }) {
+  return (
+    <label className="mb-2 block text-sm">
+      <span className="text-slate-600">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5">
+        <option value="">未選択</option>
+        {opts.map((o) => (
+          <option key={o.id} value={o.id}>{o.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+function FChips({ label, opts, selected, onToggle }: { label: string; opts: LookupOption[]; selected: string[]; onToggle: (id: string) => void }) {
+  return (
+    <div className="mb-2">
+      <div className="mb-1 text-xs text-slate-500">{label}</div>
+      <div className="flex flex-wrap gap-1">
+        {opts.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => onToggle(o.id)}
+            className={`rounded-full px-2 py-0.5 text-xs ${selected.includes(o.id) ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600"}`}
+          >
+            {o.label}
+          </button>
+        ))}
       </div>
     </div>
   );

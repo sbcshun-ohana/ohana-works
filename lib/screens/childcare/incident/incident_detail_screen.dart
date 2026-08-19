@@ -229,9 +229,8 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
     return [
       for (final g in list)
         _logTile(
-          _fmtDateTime((g as Map)['contacted_at']),
+          '${_fmtDateTime((g as Map)['contacted_at'])}  ・  ${g['contact_book_written'] == true ? '連絡帳に記載' : '口頭で直接'}',
           '${IncidentLabels.reactionKinds[g['reaction_kind']] ?? ''}'
-          '${g['contact_book_written'] == true ? '(連絡帳記入あり)' : ''}'
           '${(g['reaction_text'] as String?)?.isNotEmpty == true ? '  ${g['reaction_text']}' : ''}',
         ),
     ];
