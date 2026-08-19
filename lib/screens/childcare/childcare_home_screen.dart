@@ -14,6 +14,7 @@ import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
 import 'daily_board/daily_board_screen.dart';
 import 'health/temperature_screen.dart';
+import 'incident/incident_list_screen.dart';
 import 'staff_messages/staff_message_list_screen.dart';
 import 'nap/nap_check_screen.dart';
 
@@ -35,6 +36,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   ChildcareOffice? _selectedOffice;
   final DateTime _businessDate = DateTime.now();
   bool _internalNotesEnabled = false;
+  bool _incidentEnabled = false;
   // 園内連絡(156): 自分宛て未確認件数(タイルバッジ+ログイン後バナー)。
   int _staffMessageUnack = 0;
 
@@ -107,7 +109,13 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
     final office = _selectedOffice;
     if (office == null) return;
     final enabled = await widget.service.isChildInternalNotesEnabledForOffice(office.officeId);
-    if (mounted) setState(() => _internalNotesEnabled = enabled);
+    final incident = await widget.service.isIncidentReportsEnabledForOffice(office.officeId);
+    if (mounted) {
+      setState(() {
+        _internalNotesEnabled = enabled;
+        _incidentEnabled = incident;
+      });
+    }
   }
 
   Future<void> _signOut() async {
@@ -273,6 +281,18 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                   service: widget.service,
                   officeId: office.officeId,
                   businessDate: _businessDate,
+                  isManager: office.isManager,
+                )),
+              ),
+            // ヒヤリハット・事故報告(246-250・Phase A)。incident_reports_enabled がONの施設のみ。
+            if (_incidentEnabled)
+              _HomeTile(
+                icon: Icons.report_problem_rounded,
+                color: AppColors.punchClockOut,
+                label: 'ヒヤリハット・事故報告',
+                onTap: () => _push(IncidentListScreen(
+                  service: widget.service,
+                  officeId: office.officeId,
                   isManager: office.isManager,
                 )),
               ),

@@ -1569,4 +1569,104 @@ class ChildcareService {
     final row = (rows as List).first as Map<String, dynamic>;
     return (token: row['token'] as String, expiresAt: DateTime.parse(row['expires_at'] as String));
   }
+
+  // ------------------------------------------------------------------
+  // ヒヤリハット・事故報告(246-250・Phase A)。閲覧=全施設の保育職員。保護者非表示。
+  // ------------------------------------------------------------------
+
+  /// 施設で機能が有効か(タイル/入口の出し分け。許可判定は必ずRPC側)。
+  Future<bool> isIncidentReportsEnabledForOffice(String officeId) async {
+    final result = await _client.rpc('is_incident_reports_enabled_for_office', params: {'p_office_id': officeId});
+    return result == true;
+  }
+
+  /// 一覧(全施設閲覧)。status/reportType は null で全件。
+  Future<List<Map<String, dynamic>>> fetchIncidentReports(
+    String officeId, {
+    String? status,
+    String? reportType,
+  }) async {
+    final rows = await _client.rpc('fetch_incident_reports', params: {
+      'p_office_id': officeId,
+      'p_status': status,
+      'p_report_type': reportType,
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 詳細(本体+全子コレクションのjsonb)。
+  Future<Map<String, dynamic>> fetchIncidentReportDetail(String id) async {
+    final result = await _client.rpc('fetch_incident_report_detail', params: {'p_id': id});
+    return (result as Map).cast<String, dynamic>();
+  }
+
+  /// ルックアップ選択肢(kind=null で全種別・有効のみ)。
+  Future<List<Map<String, dynamic>>> fetchIncidentLookupOptions({String? kind}) async {
+    final rows = await _client.rpc('fetch_incident_lookup_options', params: {'p_kind': kind});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 下書きの作成/保存(全子コレクション置換)。新規は id=null。返り値=report id。
+  Future<String> saveIncidentReport(Map<String, dynamic> payload, {String? id}) async {
+    final result = await _client.rpc('save_incident_report', params: {'p_id': id, 'p_payload': payload});
+    return result as String;
+  }
+
+  Future<void> submitIncidentReport(String id) async {
+    await _client.rpc('submit_incident_report', params: {'p_id': id});
+  }
+
+  Future<void> chiefApproveIncidentReport(String id) async {
+    await _client.rpc('chief_approve_incident_report', params: {'p_id': id});
+  }
+
+  Future<void> approveIncidentReport(String id) async {
+    await _client.rpc('approve_incident_report', params: {'p_id': id});
+  }
+
+  Future<void> rejectIncidentReport(String id, String reason) async {
+    await _client.rpc('reject_incident_report', params: {'p_id': id, 'p_reason': reason});
+  }
+
+  Future<void> cancelIncidentApproval(String id, String reason) async {
+    await _client.rpc('cancel_incident_approval', params: {'p_id': id, 'p_reason': reason});
+  }
+
+  /// 承認後の追記(経過)。返り値=log id。
+  Future<String> addIncidentProgressLog({
+    required String reportId,
+    required DateTime loggedAt,
+    String? staffEmployeeId,
+    required String reportKind,
+    String? reportText,
+  }) async {
+    final result = await _client.rpc('add_incident_progress_log', params: {
+      'p_report_id': reportId,
+      'p_logged_at': loggedAt.toIso8601String(),
+      'p_staff_employee_id': staffEmployeeId,
+      'p_report_kind': reportKind,
+      'p_report_text': reportText,
+    });
+    return result as String;
+  }
+
+  /// 承認後の追記(保護者連絡)。返り値=contact id。
+  Future<String> addIncidentGuardianContact({
+    required String reportId,
+    required DateTime contactedAt,
+    String? staffEmployeeId,
+    bool? contactBookWritten,
+    required String reactionKind,
+    String? reactionText,
+  }) async {
+    final result = await _client.rpc('add_incident_guardian_contact', params: {
+      'p_report_id': reportId,
+      'p_contacted_at': contactedAt.toIso8601String(),
+      'p_staff_employee_id': staffEmployeeId,
+      'p_contact_book_written': contactBookWritten,
+      'p_reaction_kind': reactionKind,
+      'p_reaction_text': reactionText,
+    });
+    return result as String;
+  }
 }
