@@ -152,6 +152,7 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
   bool _loading = true;
   String? _error;
   Map<String, String> _meals = const {};
+  DateTime? _birthDate;
 
   @override
   void initState() {
@@ -169,6 +170,7 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
       if (!mounted) return;
       setState(() {
         _meals = health[widget.childId]?.meals ?? const {};
+        _birthDate = health[widget.childId]?.birthDate;
         _loading = false;
       });
     } catch (_) {
@@ -181,16 +183,27 @@ class _ChildDayMealViewState extends State<ChildDayMealView> {
     }
   }
 
+  /// 年度年齢(4/1基準の満年齢)。午前おやつは0・1歳児のみ、2歳児以上は昼食・午後おやつのみ(俊指示 2026-08-19)。
+  int _fiscalAge(DateTime birth, DateTime ref) {
+    final fyStart = ref.month >= 4 ? ref.year : ref.year - 1;
+    var age = fyStart - birth.year;
+    if (birth.month > 4 || (birth.month == 4 && birth.day > 1)) age--;
+    return age;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+    // 2歳児クラス以上は午前おやつが無いため非表示(生年月日不明時は安全側で表示)。
+    final showAmSnack = _birthDate == null || _fiscalAge(_birthDate!, widget.businessDate) < 2;
+    final slots = _mealSlotLabels.entries.where((e) => e.key != 'am_snack' || showAmSnack);
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          for (final slot in _mealSlotLabels.entries)
+          for (final slot in slots)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
