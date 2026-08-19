@@ -125,7 +125,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
       appBar: AppBar(
         leading: const OhanaBackHomeLeading(),
         leadingWidth: 200,
-        title: const Text('厨房(食数)'),
+        title: const Text('給食管理'),
         actions: [BusinessDateAction(date: _date, onChanged: _onDateChanged)],
       ),
       body: _loading

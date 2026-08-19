@@ -244,11 +244,11 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               )),
             ),
             // 週次予定タイルは撤去(俊指示 2026-08-14: 週次予定は園児マスタ(admin)側で管理する方針)。
-            // 厨房(食数)ページ(M6 Phase 7・§4.4)。給食情報のみ・所属施設の職員以上。
+            // 給食管理(食数厨房ボード。将来: 給食会議・献立・給食写真も集約)。給食情報のみ。
             _HomeTile(
               icon: Icons.restaurant_rounded,
               color: AppColors.warmOrange,
-              label: '厨房(食数)',
+              label: '給食管理',
               onTap: () => _push(KitchenScreen(
                 service: widget.service,
                 officeId: office.officeId,
