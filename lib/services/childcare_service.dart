@@ -749,6 +749,8 @@ class ChildcareService {
         })>{};
     for (final r in (rows as List)) {
       final m = r as Map<String, dynamic>;
+      // 仮登録(入園予定)児は birth_date が null。健康チェック対象外なのでスキップ(217でnullable化)。
+      if (m['birth_date'] == null) continue;
       final toileting = ((m['toileting_records'] as List?) ?? const [])
           .map((e) => (time: (e['time'] as String?) ?? '', type: (e['type'] as String?) ?? ''))
           .toList();
