@@ -51,6 +51,17 @@ type PivotRow = {
   confirmed_by_name: string | null;
   cells: Record<string, { child: number; staff: number } | undefined>;
 };
+type Adjustment = {
+  id: string;
+  row_key: string;
+  row_label: string | null;
+  meal_slot: string;
+  field: string;
+  delta: number;
+  note: string | null;
+  created_by_name: string | null;
+  updated_at: string;
+};
 
 function todayStr(): string {
   const d = new Date();
@@ -64,6 +75,11 @@ function ChildcareMealBoardContent() {
   const [board, setBoard] = useState<BoardRow[]>([]);
   const [special, setSpecial] = useState<SpecialChild[]>([]);
   const [changes, setChanges] = useState<MealChange[]>([]);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [adjRow, setAdjRow] = useState("");
+  const [adjSlot, setAdjSlot] = useState("lunch");
+  const [adjDelta, setAdjDelta] = useState("1");
+  const [adjNote, setAdjNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,6 +107,9 @@ function ChildcareMealBoardContent() {
     void supabase
       .rpc("fetch_meal_changes", { p_office_id: selectedOffice, p_business_date: businessDate })
       .then(({ data }) => setChanges((data ?? []) as MealChange[]));
+    void supabase
+      .rpc("fetch_meal_adjustments", { p_office_id: selectedOffice, p_business_date: businessDate })
+      .then(({ data }) => setAdjustments((data ?? []) as Adjustment[]));
   }, [selectedOffice, businessDate, reloadToken]);
 
   const run = useCallback(
@@ -142,6 +161,48 @@ function ChildcareMealBoardContent() {
       if (p.row_type === "staff") totals[s.key].staff += c.staff;
       else totals[s.key].child += c.child;
     }
+  }
+
+  function submitAdjustment() {
+    if (!adjRow) {
+      alert("行区分を選んでください");
+      return;
+    }
+    const row = pivot.find((p) => p.row_key === adjRow);
+    const field = row?.row_type === "staff" ? "staff" : "child";
+    const delta = Number(adjDelta);
+    if (!Number.isInteger(delta) || delta === 0) {
+      alert("増減は0以外の整数で入力してください（例: 1 / -1）");
+      return;
+    }
+    void run(async (s) => {
+      const { error } = await s.rpc("set_meal_adjustment", {
+        p_office_id: selectedOffice,
+        p_business_date: businessDate,
+        p_row_key: adjRow,
+        p_meal_slot: adjSlot,
+        p_field: field,
+        p_delta: delta,
+        p_note: adjNote || null,
+      });
+      return { error };
+    }, "事前調整を登録しました");
+    setAdjNote("");
+  }
+
+  function removeAdjustment(a: Adjustment) {
+    void run(async (s) => {
+      const { error } = await s.rpc("set_meal_adjustment", {
+        p_office_id: selectedOffice,
+        p_business_date: businessDate,
+        p_row_key: a.row_key,
+        p_meal_slot: a.meal_slot,
+        p_field: a.field,
+        p_delta: 0,
+        p_note: null,
+      });
+      return { error };
+    }, "");
   }
 
   function changeCell(p: PivotRow, slot: string) {
@@ -331,6 +392,96 @@ function ChildcareMealBoardContent() {
               {bento.length > 0 && <div>弁当持参: {bento.map((s) => s.child_name).join("、")}</div>}
               {hold.length > 0 && <div>給食開始保留: {hold.map((s) => s.child_name).join("、")}</div>}
             </div>
+          )}
+        </div>
+
+        {/* 事前調整(前日までの増減) */}
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="mb-1 text-sm font-bold text-slate-700">事前調整(前日までの増減)</h3>
+          <p className="mb-3 text-xs text-slate-400">
+            出欠に紐づかない食数の増減(行事・来客・特別対応など)を事前に登録します。自動算出に加算され、当日の再算出でも保持されます(確定済みの行は除く)。欠席予定はデイリーボードの欠席登録をご利用ください。
+          </p>
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <label className="text-xs text-slate-500">
+              区分
+              <select
+                value={adjRow}
+                onChange={(e) => {
+                  setAdjRow(e.target.value);
+                  const r = pivot.find((p) => p.row_key === e.target.value);
+                  if (r && r.cells[adjSlot] === undefined) {
+                    const first = SLOTS.find((s) => r.cells[s.key] !== undefined);
+                    if (first) setAdjSlot(first.key);
+                  }
+                }}
+                className="mt-0.5 block rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">選択</option>
+                {pivot.map((p) => (
+                  <option key={p.row_key} value={p.row_key}>{p.row_label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-500">
+              食事
+              <select
+                value={adjSlot}
+                onChange={(e) => setAdjSlot(e.target.value)}
+                className="mt-0.5 block rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              >
+                {SLOTS.filter((s) => {
+                  const r = pivot.find((p) => p.row_key === adjRow);
+                  return !r || r.cells[s.key] !== undefined;
+                }).map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-500">
+              増減
+              <input
+                type="number"
+                value={adjDelta}
+                onChange={(e) => setAdjDelta(e.target.value)}
+                className="mt-0.5 block w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex-1 text-xs text-slate-500">
+              メモ(任意)
+              <input
+                value={adjNote}
+                onChange={(e) => setAdjNote(e.target.value)}
+                placeholder="例: 行事で来客+1"
+                className="mt-0.5 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <button
+              disabled={busy}
+              onClick={submitAdjustment}
+              className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+            >
+              登録
+            </button>
+          </div>
+          {adjustments.length === 0 ? (
+            <p className="text-sm text-slate-400">事前調整はありません</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {adjustments.map((a) => (
+                <li key={a.id} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="font-medium">{a.row_label ?? a.row_key}</span>
+                  <span>{SLOTS.find((s) => s.key === a.meal_slot)?.label}</span>
+                  <span>{a.field === "staff" ? "職員" : "園児"}</span>
+                  <span className={`font-bold ${a.delta > 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {a.delta > 0 ? `+${a.delta}` : a.delta}
+                  </span>
+                  {a.note ? <span className="text-xs text-slate-400">{a.note}</span> : null}
+                  <button onClick={() => removeAdjustment(a)} className="ml-auto text-xs text-red-500 hover:underline">
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
