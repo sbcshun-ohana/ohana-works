@@ -227,15 +227,10 @@ class ChildcareService {
     return id as String;
   }
 
-  Future<DailyContact> fetchDailyContactDetail(String contactId) async {
-    final row = await _client
-        .from('child_daily_contacts')
-        // employees への FK が複数(assignee/approved_by/copied_by)あるため FK 名で明示(曖昧エラー防止)。
-        .select('*, children(display_name, honorific_suffix), employees!child_daily_contacts_assignee_employee_id_fkey(name)')
-        .eq('id', contactId)
-        .single();
+  DailyContact _dailyContactFromRow(Map<String, dynamic> row) {
     final child = row['children'] as Map<String, dynamic>?;
-    final assignee = row['employees'] as Map<String, dynamic>?;
+    final assignee = row['assignee'] as Map<String, dynamic>?;
+    final creator = row['creator'] as Map<String, dynamic>?;
     return DailyContact.fromJson({
       'contact_id': row['id'],
       'child_id': row['child_id'],
@@ -244,6 +239,8 @@ class ChildcareService {
       'class_name': null,
       'assignee_employee_id': row['assignee_employee_id'],
       'assignee_name': assignee?['name'],
+      'created_by': row['created_by'],
+      'created_by_name': creator?['name'],
       'status': row['status'],
       'guardian_message': row['guardian_message'],
       'child_today_notes': row['child_today_notes'],
@@ -257,6 +254,33 @@ class ChildcareService {
       'copied_at': row['copied_at'],
       'is_absent': false,
     });
+  }
+
+  // employees への FK が複数(assignee/created_by/approved_by/copied_by)あるため FK 名で明示(曖昧エラー防止)。
+  static const _dailyContactSelect =
+      '*, children(display_name, honorific_suffix), '
+      'assignee:employees!child_daily_contacts_assignee_employee_id_fkey(name), '
+      'creator:employees!child_daily_contacts_created_by_fkey(name)';
+
+  Future<DailyContact> fetchDailyContactDetail(String contactId) async {
+    final row = await _client
+        .from('child_daily_contacts')
+        .select(_dailyContactSelect)
+        .eq('id', contactId)
+        .single();
+    return _dailyContactFromRow(row);
+  }
+
+  /// 園児×営業日の連絡帳を取得(行が無ければ null)。作成ボタン方式のため、行を作らずに取得だけ行う。
+  Future<DailyContact?> fetchDailyContactByChildDate(String childId, DateTime businessDate) async {
+    final row = await _client
+        .from('child_daily_contacts')
+        .select(_dailyContactSelect)
+        .eq('child_id', childId)
+        .eq('business_date', dateOnly(businessDate))
+        .maybeSingle();
+    if (row == null) return null;
+    return _dailyContactFromRow(row);
   }
 
   Future<List<NoticeMaster>> fetchNoticeMasters(String officeId) async {
@@ -1339,6 +1363,19 @@ class ChildcareService {
       params: {'p_office_id': officeId},
     );
     return result as bool? ?? false;
+  }
+
+  /// 夏期のプール◯×連絡が施設で有効か(261)。有効時のみ一覧にプール列を出す。
+  Future<bool> isPoolReportEnabledForOffice(String officeId) async {
+    try {
+      final result = await _client.rpc(
+        'is_pool_report_enabled_for_office',
+        params: {'p_office_id': officeId},
+      );
+      return result == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ------------------------------------------------------------------

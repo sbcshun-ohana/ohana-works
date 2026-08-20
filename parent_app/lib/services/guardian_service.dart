@@ -238,6 +238,7 @@ class GuardianService {
     String? pickupPersonRelationship,
     String? pickupTimeFrom,
     String? pickupTimeTo,
+    bool? poolParticipation,
   }) async {
     try {
       await _client.rpc('upsert_family_daily_report', params: {
@@ -263,10 +264,17 @@ class GuardianService {
         'p_pickup_person_relationship': pickupPersonRelationship,
         'p_pickup_time_from': pickupTimeFrom,
         'p_pickup_time_to': pickupTimeTo,
+        'p_pool_participation': poolParticipation,
       });
     } on PostgrestException catch (e) {
       throw GuardianServiceException(_translateReportError(e.message));
     }
+  }
+
+  /// 施設でプール連絡(夏期)が有効か(家庭連絡帳のプール◯×欄の出し分け)。
+  Future<bool> isPoolReportEnabledForOffice(String officeId) async {
+    final result = await _client.rpc('is_pool_report_enabled_for_office', params: {'p_office_id': officeId});
+    return result == true;
   }
 
   Future<void> submitFamilyDailyReport(String reportId) async {

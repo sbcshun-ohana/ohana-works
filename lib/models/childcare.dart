@@ -147,6 +147,8 @@ class DailyContact {
     this.className,
     this.assigneeEmployeeId,
     this.assigneeName,
+    this.createdByEmployeeId,
+    this.createdByName,
     this.status,
     this.guardianMessage,
     this.childTodayNotes,
@@ -169,6 +171,8 @@ class DailyContact {
         className: json['class_name'] as String?,
         assigneeEmployeeId: json['assignee_employee_id'] as String?,
         assigneeName: json['assignee_name'] as String?,
+        createdByEmployeeId: json['created_by'] as String?,
+        createdByName: json['created_by_name'] as String?,
         status: json['status'] as String?,
         guardianMessage: json['guardian_message'] as String?,
         childTodayNotes: json['child_today_notes'] as String?,
@@ -191,6 +195,8 @@ class DailyContact {
   final String? className;
   final String? assigneeEmployeeId;
   final String? assigneeName;
+  final String? createdByEmployeeId;
+  final String? createdByName;
   final String? status;
   final String? guardianMessage;
   final String? childTodayNotes;

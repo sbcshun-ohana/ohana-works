@@ -47,6 +47,10 @@ function ChildcareFamilyReportsPageContent() {
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  // 夏期のプール◯×連絡。施設別トグル(pool_report_enabled)。管理者以上のみON/OFF可。
+  const [poolEnabled, setPoolEnabled] = useState(false);
+  const [poolCanToggle, setPoolCanToggle] = useState(false);
+  const [poolBusy, setPoolBusy] = useState(false);
 
   useEffect(() => {
     function load() {
@@ -82,6 +86,42 @@ function ChildcareFamilyReportsPageContent() {
 
   // K8方針変更(俊確定): 園側検温は family-reports には出さず、公開時に園→保護者の連絡帳へ
   // 自動反映する(195/196)。よって「園側検温(最新)」列は廃止。
+
+  // プール連絡の施設フラグと、当該ユーザーがトグル可能か(管理者以上)を取得。
+  // 同期 setState は避け、施設が無い場合も含めて .then コールバックで反映する
+  // (react-hooks/set-state-in-effect 回避)。施設未選択なら常に false。
+  useEffect(() => {
+    if (!selectedOffice) {
+      Promise.resolve().then(() => {
+        setPoolEnabled(false);
+        setPoolCanToggle(false);
+      });
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .rpc("is_pool_report_enabled_for_office", { p_office_id: selectedOffice })
+      .then(({ data }) => setPoolEnabled(data === true));
+    supabase
+      .rpc("is_childcare_admin", { target_office_id: selectedOffice })
+      .then(({ data }) => setPoolCanToggle(data === true));
+  }, [selectedOffice]);
+
+  async function togglePool(next: boolean) {
+    if (!selectedOffice) return;
+    setPoolBusy(true);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_pool_report_enabled", {
+      p_office_id: selectedOffice,
+      p_enabled: next,
+    });
+    setPoolBusy(false);
+    if (error) {
+      setRowsError(error.message);
+      return;
+    }
+    setPoolEnabled(next);
+  }
 
   const filtered = rows;
 
@@ -119,6 +159,21 @@ function ChildcareFamilyReportsPageContent() {
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             />
           </div>
+          {poolCanToggle && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">プール連絡(夏期のみ)</label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={poolEnabled}
+                  disabled={poolBusy}
+                  onChange={(e) => togglePool(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-slate-700">保護者アプリでプール◯×連絡を有効にする</span>
+              </label>
+            </div>
+          )}
         </div>
 
         {rowsError && <p className="text-sm font-medium text-red-500">{rowsError}</p>}
@@ -133,6 +188,7 @@ function ChildcareFamilyReportsPageContent() {
                 <th className="px-3 py-3">睡眠</th>
                 <th className="px-3 py-3">食事(夕/朝)</th>
                 <th className="px-3 py-3">検温(家庭朝)</th>
+                {poolEnabled && <th className="px-3 py-3">プール</th>}
                 <th className="px-3 py-3">迎え</th>
                 <th className="px-3 py-3">子どもの様子</th>
               </tr>
@@ -140,14 +196,14 @@ function ChildcareFamilyReportsPageContent() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={poolEnabled ? 9 : 8} className="px-3 py-6 text-center text-slate-400">
                     読み込み中…
                   </td>
                 </tr>
               )}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={poolEnabled ? 9 : 8} className="px-3 py-6 text-center text-slate-400">
                     提出済みの家庭連絡帳がありません
                   </td>
                 </tr>
@@ -180,6 +236,11 @@ function ChildcareFamilyReportsPageContent() {
                         {r.temperature != null ? `${r.temperature.toFixed(1)}℃` : "—"}
                         {r.temperature_measured_at ? `(${fmtTime(r.temperature_measured_at)})` : ""}
                       </td>
+                      {poolEnabled && (
+                        <td className="px-3 py-3 text-slate-600">
+                          {r.pool_participation == null ? "—" : r.pool_participation ? "◯" : "×"}
+                        </td>
+                      )}
                       <td className="px-3 py-3 text-slate-600">
                         {/* 氏名・続柄は連絡帳から廃止(申請・連絡に一本化)。氏名は旧データがある場合のみ併記 */}
                         {r.pickup_person_name || r.pickup_time_from || r.pickup_time_to

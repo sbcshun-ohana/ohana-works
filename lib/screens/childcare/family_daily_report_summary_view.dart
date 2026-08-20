@@ -31,6 +31,8 @@ class FamilyDailyReportSummaryView extends StatelessWidget {
             child: Text('37.5℃以上です', style: TextStyle(color: AppColors.punchClockOut, fontWeight: FontWeight.w600)),
           ),
         _row('症状', r.symptoms?.isNotEmpty == true ? r.symptoms! : '--'),
+        if (r.poolParticipation != null)
+          _row('プール', r.poolParticipation! ? '◯ 入る' : '× 入らない'),
         _row('自宅での様子', r.homeNotes?.isNotEmpty == true ? r.homeNotes! : '--'),
         _row(
           '機嫌(夜/朝)',

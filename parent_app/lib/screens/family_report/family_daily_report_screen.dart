@@ -46,6 +46,8 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
   String? _sleepEndAt;
   String? _dinnerAt;
   String? _breakfastAt;
+  bool _poolEnabled = false; // 夏期のプール連絡が有効な施設か
+  bool? _poolParticipation; // ◯=true / ×=false / null=未回答
 
   @override
   void initState() {
@@ -67,12 +69,15 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
     final results = await Future.wait([
       widget.guardianService.fetchFamilyDailyReport(widget.child.childId, _today),
       widget.guardianService.isFamilyDailyReportRequired(widget.child.childId, _today),
+      widget.guardianService.isPoolReportEnabledForOffice(widget.child.officeId),
     ]);
     if (!mounted) return;
     final report = results[0] as FamilyDailyReport?;
     setState(() {
       _report = report;
       _isRequired = results[1] as bool;
+      _poolEnabled = results[2] as bool;
+      _poolParticipation = report?.poolParticipation;
       _temperature = report?.temperature;
       _measuredAt = _parseTime(report?.temperatureMeasuredAt);
       _symptomsController.text = report?.symptoms ?? '';
@@ -215,6 +220,7 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
         pickupPersonRelationship: null,
         pickupTimeFrom: null,
         pickupTimeTo: null,
+        poolParticipation: _poolEnabled ? _poolParticipation : null,
       );
       final saved = await widget.guardianService.fetchFamilyDailyReport(widget.child.childId, _today);
       if (andSubmit && saved != null) {
@@ -377,6 +383,36 @@ class _FamilyDailyReportScreenState extends State<FamilyDailyReportScreen> {
                       style: const TextStyle(color: AppColors.danger, fontSize: 13),
                     ),
                   ),
+                if (_poolEnabled) ...[
+                  const SizedBox(height: 20),
+                  const Text('プール(夏期)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text('本日プールに入るかどうかをお知らせください(任意)',
+                      style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text('◯ 入る'),
+                        selected: _poolParticipation == true,
+                        onSelected: _isEditable ? (_) => setState(() => _poolParticipation = true) : null,
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('× 入らない'),
+                        selected: _poolParticipation == false,
+                        onSelected: _isEditable ? (_) => setState(() => _poolParticipation = false) : null,
+                      ),
+                      if (_poolParticipation != null && _isEditable) ...[
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () => setState(() => _poolParticipation = null),
+                          child: const Text('クリア'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 20),
                 const Text('検温時刻', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 const SizedBox(height: 8),

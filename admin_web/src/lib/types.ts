@@ -244,6 +244,7 @@ export type FamilyDailyReportSummary = {
   pickup_person_relationship: string | null;
   pickup_time_from: string | null;
   pickup_time_to: string | null;
+  pool_participation: boolean | null;
 };
 
 /** 在籍登園状況サマリー(fetch_daily_board_summary_for_office の1行)。 */

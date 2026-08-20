@@ -876,6 +876,10 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   Future<void> _openContact(DailyBoardRow row) async {
+    final ageGroup = _classes
+        .firstWhere((k) => k.className == row.className,
+            orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0))
+        .ageGroup;
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => DailyContactDetailScreen(
         service: widget.service,
@@ -884,6 +888,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
         childNameLabel: row.nameLabel,
         businessDate: _businessDate,
         isManager: _isManager,
+        ageGroup: ageGroup.isEmpty ? null : ageGroup,
       ),
     ));
     if (mounted) {

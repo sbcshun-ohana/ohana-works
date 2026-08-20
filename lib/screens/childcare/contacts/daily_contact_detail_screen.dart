@@ -20,6 +20,8 @@ class DailyContactDetailScreen extends StatefulWidget {
     required this.businessDate,
     required this.isManager,
     this.embedded = false,
+    this.ageGroup,
+    this.onChanged,
   });
 
   final ChildcareService service;
@@ -28,6 +30,12 @@ class DailyContactDetailScreen extends StatefulWidget {
   final String childNameLabel;
   final DateTime businessDate;
   final bool isManager;
+
+  /// クラスの年齢('0歳'..'5歳')。引用元パネルのミルク行の出し分けに使用(ミルクは0歳児のみ)。
+  final String? ageGroup;
+
+  /// 作成・保存・申請・承認などで連絡帳の状態が変わったとき呼ばれる。分割ビューの一覧チップ更新用。
+  final VoidCallback? onChanged;
 
   /// true のとき Scaffold/AppBar を付けず本体のみ返す(連絡帳の分割ビュー右パネルのタブ用)。
   final bool embedded;
@@ -81,19 +89,23 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
     setState(() => _isLoading = true);
     try {
       _myEmployeeId = await widget.service.fetchMyEmployeeId();
-      final contactId =
-          await widget.service.ensureChildDailyContact(widget.childId, widget.businessDate);
-      final contact = await widget.service.fetchDailyContactDetail(contactId);
+      // 作成ボタン方式(262): 選択・ロードでは行を作らず、取得のみ(未着手なら null)。
+      final contact = await widget.service.fetchDailyContactByChildDate(widget.childId, widget.businessDate);
+      final contactId = contact?.contactId;
       final results = await Future.wait([
         widget.service.fetchNoticeMasters(widget.officeId),
-        widget.service.fetchCheckedNoticeIds(contactId),
-        widget.service.fetchSupplyItems(contactId),
+        contactId == null
+            ? Future<Set<String>>.value(const <String>{})
+            : widget.service.fetchCheckedNoticeIds(contactId),
+        contactId == null
+            ? Future<List<({String itemName, int quantity})>>.value(const [])
+            : widget.service.fetchSupplyItems(contactId),
         widget.service.fetchFamilyDailyReportForStaff(widget.childId, widget.businessDate),
       ]);
-      _guardianController.text = contact.guardianMessage ?? '';
-      _todayNotesController.text = contact.childTodayNotes ?? '';
-      _freeNotesController.text = contact.freeNotes ?? '';
-      _currentTextController.text = contact.currentText ?? contact.aiGeneratedText ?? '';
+      _guardianController.text = contact?.guardianMessage ?? '';
+      _todayNotesController.text = contact?.childTodayNotes ?? '';
+      _freeNotesController.text = contact?.freeNotes ?? '';
+      _currentTextController.text = contact?.currentText ?? contact?.aiGeneratedText ?? '';
       // 参照(引用元): その子の当日の 午睡/健康/食事(取得失敗しても連絡帳編集は継続)。
       try {
         final napBoard = await widget.service.fetchNapBoard(widget.officeId, widget.businessDate);
@@ -120,6 +132,14 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  // 262: 作成ボタン。押した段階で初めて下書き行を作成し、created_by=ログインユーザーを記録。
+  Future<void> _createDraft() => _run(
+        () async {
+          await widget.service.ensureChildDailyContact(widget.childId, widget.businessDate);
+        },
+        successMessage: '連絡帳を作成しました',
+      );
 
   bool get _isAssignee =>
       _contact?.assigneeEmployeeId != null && _contact!.assigneeEmployeeId == _myEmployeeId;
@@ -182,6 +202,7 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
     try {
       await action();
       await _load();
+      widget.onChanged?.call(); // 分割ビューの一覧チップを最新状態へ。
       if (successMessage != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(successMessage)));
       }
@@ -290,32 +311,64 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text('担当: ${_contact?.assigneeName ?? "未割当"}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                      // 未割当のとき、自分を担当にできる(200 claim_child_daily_contact。draft/rejectedのみ)。
-                      if (_contact?.assigneeEmployeeId == null &&
-                          (_contact?.status == 'draft' || _contact?.status == 'rejected')) ...[
-                        const SizedBox(width: 12),
-                        OutlinedButton(
-                          onPressed: _isBusy
-                              ? null
-                              : () => _run(() => widget.service.claimDailyContact(_contact!.contactId!),
-                                  successMessage: '担当になりました'),
-                          child: const Text('自分を担当にする'),
+                  // 262: 未着手(行なし)は「作成」ボタンのみ。押すと下書き化+作成者を記録。
+                  // 分割ビュー埋め込み時のボタン内部レイアウト無限幅回避のため、Wrap+タップ可能Containerで構成。
+                  if (_contact == null)
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.textSecondary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('未着手', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                        ),
+                        GestureDetector(
+                          onTap: _isBusy ? null : _createDraft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppColors.leafGreen,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text('作成',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                          ),
                         ),
                       ],
-                      // 207+俊指示(2026-08-14): 担当を他の職員へ渡す(下書き/差し戻し中のみ)。
-                      if (_contact?.contactId != null &&
-                          (_contact?.status == 'draft' || _contact?.status == 'rejected')) ...[
-                        const SizedBox(width: 12),
-                        OutlinedButton(
-                          onPressed: _isBusy ? null : _changeAssignee,
-                          child: const Text('変更'),
-                        ),
+                    )
+                  else ...[
+                    Row(
+                      children: [
+                        Text('担当: ${_contact?.assigneeName ?? "未割当"}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        // 未割当のとき、自分を担当にできる(200 claim_child_daily_contact。draft/rejectedのみ)。
+                        if (_contact?.assigneeEmployeeId == null &&
+                            (_contact?.status == 'draft' || _contact?.status == 'rejected')) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton(
+                            onPressed: _isBusy
+                                ? null
+                                : () => _run(() => widget.service.claimDailyContact(_contact!.contactId!),
+                                    successMessage: '担当になりました'),
+                            child: const Text('自分を担当にする'),
+                          ),
+                        ],
+                        // 207+俊指示(2026-08-14): 担当を他の職員へ渡す(下書き/差し戻し中のみ)。
+                        if (_contact?.contactId != null &&
+                            (_contact?.status == 'draft' || _contact?.status == 'rejected')) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton(
+                            onPressed: _isBusy ? null : _changeAssignee,
+                            child: const Text('変更'),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
+                    ),
+                  ],
                   if (_contact?.rejectedReason != null) ...[
                     const SizedBox(height: 12),
                     _banner(AppColors.punchClockOut, '差し戻し理由: ${_contact!.rejectedReason}'),
@@ -345,6 +398,17 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                   const SizedBox(height: 16),
                   _referencePanel(),
                   const SizedBox(height: 16),
+                  // 未着手(行なし)のときは編集欄を出さない(上部の「作成」ボタンで作成後に表示)。
+                  if (_contact == null)
+                    Card(
+                      color: AppColors.leafGreen.withValues(alpha: 0.06),
+                      child: const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('この園児の連絡帳はまだ作成されていません。上の「作成」ボタンで作成してください。',
+                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                      ),
+                    )
+                  else ...[
                   _field('保護者からの連絡内容', _guardianController, enabled: _canEditInput, maxLines: 2),
                   _field('今日の園児の様子', _todayNotesController, enabled: _canEditInput, maxLines: 2),
                   _field('その他自由記載', _freeNotesController, enabled: _canEditInput, maxLines: 2),
@@ -448,6 +512,7 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                       ],
                     ),
                   ],
+                  ], // 262: _contact != null の編集欄ブロックを閉じる
                 ],
               ),
             );
@@ -480,6 +545,12 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
           ],
         ),
       );
+
+  /// ミルク対象(0歳=はな組)か。ageGroup から '0歳' を判定。
+  bool get _isMilkAge {
+    final g = int.tryParse((widget.ageGroup ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    return g == 0;
+  }
 
   /// 連絡帳作成画面の「引用元(当日の記録)」参照パネル。編集はせず、記録済みの午睡/健康/食事を
   /// 確認して申請・承認するための読み取り表示(俊指示 2026-08-19)。
@@ -521,7 +592,8 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
             _refLine('午睡', napText),
             _refLine('検温', tempText),
             _refLine('排便', toiletText),
-            _refLine('ミルク', milkText),
+            // ミルクは0歳児(はな組)のみ表示(俊指摘 2026-08-20)。
+            if (_isMilkAge) _refLine('ミルク', milkText),
             _refLine('食事', mealText),
           ],
         ),

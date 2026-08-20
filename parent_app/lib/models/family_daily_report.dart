@@ -29,6 +29,7 @@ class FamilyDailyReport {
     this.pickupPersonRelationship,
     this.pickupTimeFrom,
     this.pickupTimeTo,
+    this.poolParticipation,
   });
 
   factory FamilyDailyReport.fromJson(Map<String, dynamic> json) => FamilyDailyReport(
@@ -56,6 +57,7 @@ class FamilyDailyReport {
         pickupPersonRelationship: json['pickup_person_relationship'] as String?,
         pickupTimeFrom: json['pickup_time_from'] as String?,
         pickupTimeTo: json['pickup_time_to'] as String?,
+        poolParticipation: json['pool_participation'] as bool?,
       );
 
   final String id;
@@ -82,6 +84,7 @@ class FamilyDailyReport {
   final String? pickupPersonRelationship;
   final String? pickupTimeFrom;
   final String? pickupTimeTo;
+  final bool? poolParticipation; // 夏期のプール参加(◯=true / ×=false / null=未回答)
 
   bool get isDraft => status == 'draft';
   bool get isSubmitted => status == 'submitted';

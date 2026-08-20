@@ -29,11 +29,16 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
   late Future<List<FamilyReportListItem>> _future;
   // K8: 園側検温の最新値(childId→(temp,time))。188の fetch_child_latest_temperatures_for_office。
   Map<String, ({double temperature, String measuredAt})> _latestTemps = const {};
+  // 夏期のプール◯×連絡(261)。施設で有効なときだけプール列を表示。
+  bool _poolEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    widget.service.isPoolReportEnabledForOffice(widget.officeId).then((v) {
+      if (mounted) setState(() => _poolEnabled = v);
+    });
   }
 
   void _load() {
@@ -46,6 +51,9 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
       if (mounted) setState(() => _latestTemps = const {});
     });
   }
+
+  String _poolText(FamilyDailyReportSummary r) =>
+      r.poolParticipation == null ? '—' : (r.poolParticipation! ? '◯' : '×');
 
   String _officeTempText(String childId) {
     final t = _latestTemps[childId];
@@ -153,6 +161,7 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
     'sleep': 110.0,
     'meal': 220.0,
     'temp': 90.0,
+    'pool': 60.0,
     'otemp': 96.0,
     'pickup': 120.0,
     'notes': 300.0,
@@ -173,6 +182,7 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
         h('睡眠', _w['sleep']!),
         h('食事', _w['meal']!),
         h('検温(家庭)', _w['temp']!),
+        if (_poolEnabled) h('プール', _w['pool']!),
         h('検温(園・最新)', _w['otemp']!),
         h('迎え', _w['pickup']!),
         h('子どもの様子', _w['notes']!),
@@ -201,6 +211,7 @@ class _FamilyReportListScreenState extends State<FamilyReportListScreen> {
           c(_sleepText(r), _w['sleep']!),
           c(_mealText(r), _w['meal']!),
           c(_tempText(r), _w['temp']!),
+          if (_poolEnabled) c(_poolText(r), _w['pool']!, strong: true),
           c(_officeTempText(it.childId), _w['otemp']!),
           c(_pickupText(r), _w['pickup']!),
           c(r.homeNotes ?? '—', _w['notes']!),

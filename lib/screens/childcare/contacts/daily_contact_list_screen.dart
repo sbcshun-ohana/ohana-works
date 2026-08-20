@@ -196,6 +196,7 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
                         childNameLabel: contact.nameLabel,
                         businessDate: _businessDate,
                         isManager: widget.isManager,
+                        ageGroup: _ageGroupFor(contact.className),
                       ),
                     ),
                   );
@@ -240,6 +241,11 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
                   businessDate: _businessDate,
                   isManager: widget.isManager,
                   embedded: true,
+                  ageGroup: _ageGroupFor(c.className),
+                  // 作成・保存・申請・承認で一覧チップ(未着手/下書き等)を最新化。
+                  onChanged: () {
+                    if (mounted) setState(_load);
+                  },
                 ),
                 ChildDayNapView(
                   service: widget.service,

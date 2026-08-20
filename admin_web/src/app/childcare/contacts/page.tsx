@@ -243,14 +243,17 @@ function ChildcareContactsPageContent() {
     });
   }, [selectedRow?.child_id, businessDate]);
 
-  async function ensureAndSelect(childId: string) {
+  // 262: 園児を選択するだけでは連絡帳を作らない(未着手のまま)。作成は「作成」ボタンで。
+  function selectChild(childId: string) {
     setSelectedChildId(childId);
-    const row = rows.find((r) => r.child_id === childId);
-    if (row?.contact_id) return;
+  }
 
+  // 262: 「作成」ボタン。押した段階で初めて下書き行を作成し、created_by=ログインユーザーを記録。
+  async function createDraft() {
+    if (!selectedChildId) return;
     const supabase = createClient();
     const { error } = await supabase.rpc("ensure_child_daily_contact", {
-      p_child_id: childId,
+      p_child_id: selectedChildId,
       p_business_date: businessDate,
     });
     if (error) {
@@ -494,7 +497,9 @@ function ChildcareContactsPageContent() {
     setReloadToken((t) => t + 1);
   }
 
-  const canEditInput = selectedRow?.status === "draft" || selectedRow?.status === "rejected" || isManager;
+  // 262: 未着手(contact_id なし)は編集不可。「作成」ボタンで行を作ってから編集する。
+  const canEditInput =
+    !!selectedRow?.contact_id && (selectedRow?.status === "draft" || selectedRow?.status === "rejected" || isManager);
   const canSubmit = selectedRow?.status === "draft" || selectedRow?.status === "rejected";
 
   if (officesError) {
@@ -578,7 +583,7 @@ function ChildcareContactsPageContent() {
                   filteredRows.map((row) => (
                     <tr
                       key={row.child_id}
-                      onClick={() => ensureAndSelect(row.child_id)}
+                      onClick={() => selectChild(row.child_id)}
                       className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
                         selectedChildId === row.child_id ? "bg-sky-50" : ""
                       } ${row.is_absent ? "opacity-50" : ""}`}
@@ -627,17 +632,33 @@ function ChildcareContactsPageContent() {
                         🔒 園内記録(保護者非公開)
                       </button>
                     )}
-                    <span className="text-xs text-slate-500">担当: {selectedRow.assignee_name ?? "未割当"}</span>
-                    {/* 207+俊指示(2026-08-14): 担当を他の職員へ渡す(下書き/差し戻し中のみ) */}
-                    {selectedRow.contact_id &&
-                      (selectedRow.status === "draft" || selectedRow.status === "rejected") && (
+                    {/* 262: 未着手(行なし)は「作成」ボタンのみ。押すと下書き化+作成者を記録。 */}
+                    {!selectedRow.contact_id ? (
+                      <>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                          未着手
+                        </span>
                         <button
-                          onClick={() => changeAssignee(selectedRow)}
-                          className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                          onClick={createDraft}
+                          className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
                         >
-                          変更
+                          作成
                         </button>
-                      )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs text-slate-500">担当: {selectedRow.assignee_name ?? "未割当"}</span>
+                        {/* 207+俊指示(2026-08-14): 担当を他の職員へ渡す(下書き/差し戻し中のみ) */}
+                        {(selectedRow.status === "draft" || selectedRow.status === "rejected") && (
+                          <button
+                            onClick={() => changeAssignee(selectedRow)}
+                            className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                          >
+                            変更
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -668,6 +689,9 @@ function ChildcareContactsPageContent() {
                         )}
                       </p>
                       <p>症状: {familyDailyReport.symptoms || "—"}</p>
+                      {familyDailyReport.pool_participation != null && (
+                        <p>プール: {familyDailyReport.pool_participation ? "◯ 入る" : "× 入らない"}</p>
+                      )}
                       <p>自宅での様子: {familyDailyReport.home_notes || "—"}</p>
                       <p>
                         機嫌(夜/朝): {FAMILY_MOOD_LABELS[familyDailyReport.night_mood ?? ""] ?? "—"} /{" "}
@@ -713,6 +737,13 @@ function ChildcareContactsPageContent() {
                     </div>
                   )}
                 </div>
+
+                {/* 262: 未着手のときは編集欄を無効化し、作成を促す。 */}
+                {!selectedRow.contact_id && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    この園児の連絡帳はまだ作成されていません。上の「作成」ボタンで作成してください。
+                  </div>
+                )}
 
                 {/* 「保護者からの連絡内容」欄は廃止(俊指示 2026-08-19)。保護者の内容は上部の
                     家庭連絡帳(保護者記入)、受け入れ時の口頭連絡はデイリーボードの登園メモへ集約。 */}
