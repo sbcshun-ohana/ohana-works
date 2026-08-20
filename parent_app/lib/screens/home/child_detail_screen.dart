@@ -9,6 +9,7 @@ import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
 import '../enrollment/enrollment_form_screen.dart';
 import '../food_check/food_check_screen.dart';
+import '../meal/meal_section_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
 import '../infection/return_notice_screen.dart';
@@ -44,6 +45,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   String? _enrollmentFormStatus; // null=非表示 / 'none'=未入力 / draft / submitted / sent_back
   // 食材チェック(224)。施設フラグONのときグリッドにメニューを出す。
   bool _foodCheckEnabled = false;
+  // 給食セクション(264)。施設フラグONのときグリッドに「給食」を出す。
+  bool _mealSectionEnabled = false;
 
   @override
   void initState() {
@@ -53,12 +56,22 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     _loadInfectionCases();
     _loadEnrollmentFormStatus();
     _loadFoodCheckEnabled();
+    _loadMealSectionEnabled();
   }
 
   Future<void> _loadFoodCheckEnabled() async {
     try {
       final enabled = await widget.guardianService.isFoodCheckEnabled(widget.child.childId);
       if (mounted) setState(() => _foodCheckEnabled = enabled);
+    } catch (_) {
+      // 取得失敗時は非表示(安全側)。
+    }
+  }
+
+  Future<void> _loadMealSectionEnabled() async {
+    try {
+      final enabled = await widget.guardianService.isMealParentSectionEnabled(widget.child.officeId);
+      if (mounted) setState(() => _mealSectionEnabled = enabled);
     } catch (_) {
       // 取得失敗時は非表示(安全側)。
     }
@@ -380,6 +393,21 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           onTap: () => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => FoodCheckScreen(
+                guardianService: widget.guardianService,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      // 給食(264): 今月の献立・食育レター
+      if (_mealSectionEnabled)
+        _GridMenuItem(
+          icon: Icons.restaurant_menu_rounded,
+          color: AppColors.warmOrange,
+          label: '給食',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => MealSectionScreen(
                 guardianService: widget.guardianService,
                 child: widget.child,
               ),

@@ -736,6 +736,60 @@ class GuardianService {
     }
   }
 
+  /// 給食セクション(264)の機能フラグ。OFF/取得失敗は false=給食タイルを出さない(安全側)。
+  Future<bool> isMealParentSectionEnabled(String officeId) async {
+    try {
+      final data = await _client.rpc('is_meal_parent_section_enabled_for_office', params: {'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 公開済みの献立・食育レター(264)。kind='menu'|'letter'。対象月は月初日(YYYY-MM-01)。
+  Future<List<({String kind, String sourcePath, String? sourceFilename, String format, String? publishedAt})>>
+      fetchPublishedMealMenu(String officeId, DateTime targetMonth) async {
+    final monthStart = DateTime(targetMonth.year, targetMonth.month, 1);
+    final rows = await _client.rpc('fetch_published_meal_menu', params: {
+      'p_office_id': officeId,
+      'p_target_month': '${monthStart.year.toString().padLeft(4, '0')}-${monthStart.month.toString().padLeft(2, '0')}-01',
+    });
+    return (rows as List).cast<Map<String, dynamic>>().map((m) => (
+          kind: m['kind'] as String,
+          sourcePath: m['source_path'] as String,
+          sourceFilename: m['source_filename'] as String?,
+          format: m['format'] as String,
+          publishedAt: m['published_at'] as String?,
+        )).toList();
+  }
+
+  /// 献立・食育レターファイルの署名URL(5分間有効)。
+  Future<String> mealMenuSignedUrl(String path) {
+    return _client.storage.from('meal-menus').createSignedUrl(path, 300);
+  }
+
+  /// 公開済みの構造化献立(267)。food_type=以上児/未満児等。除去食は縮退で返らない。
+  Future<List<({DateTime menuDate, String mealSlot, String menuText})>>
+      fetchPublishedMenuDays(String officeId, DateTime targetMonth, String foodType) async {
+    final monthStart = DateTime(targetMonth.year, targetMonth.month, 1);
+    final rows = await _client.rpc('fetch_published_menu_days_for_guardian', params: {
+      'p_office_id': officeId,
+      'p_target_month': '${monthStart.year.toString().padLeft(4, '0')}-${monthStart.month.toString().padLeft(2, '0')}-01',
+      'p_food_type': foodType,
+    });
+    return (rows as List).cast<Map<String, dynamic>>().map((m) => (
+          menuDate: DateTime.parse(m['menu_date'] as String),
+          mealSlot: m['meal_slot'] as String,
+          menuText: (m['menu_text'] as String?) ?? '',
+        )).toList();
+  }
+
+  /// 年齢区分(0歳..5歳)から保護者の献立food_typeを判定(縮退: 給食段階未実装のため年齢代替)。
+  static String foodTypeForAgeGroup(String? ageGroup) {
+    final g = int.tryParse((ageGroup ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    return (g != null && g < 3) ? 'regular_under3' : 'regular_over3';
+  }
+
   Future<List<ParentRequestMessage>> fetchParentRequestMessages(String requestId) async {
     final rows = await _client
         .from('parent_request_messages')

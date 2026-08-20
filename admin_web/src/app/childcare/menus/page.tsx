@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
@@ -37,11 +38,24 @@ type LetterRow = {
   created_at: string;
 };
 
-const STATUS_LABEL: Record<string, string> = { draft: "下書き", published: "公開中", superseded: "旧版" };
+const STATUS_LABEL: Record<string, string> = {
+  draft: "下書き",
+  reviewing: "確認中",
+  analyzing: "解析中",
+  published: "公開中",
+  fallback: "退避公開",
+  superseded: "旧版",
+};
 
 function currentMonth(): string {
   // Asia/Tokyo の当月(YYYY-MM)。currentDate() は YYYY-MM-DD(東京)を返す。
   return currentDate().slice(0, 7);
+}
+
+// Storageキーに使える安全な拡張子(ascii英数字のみ)。無ければ "bin"。
+function fileExt(name: string): string {
+  const ext = (name.split(".").pop() ?? "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return ext || "bin";
 }
 
 function detectFormat(file: File): "excel" | "pdf" | "image" | null {
@@ -98,7 +112,8 @@ function ChildcareMenusPageContent() {
     setError(null);
     try {
       const supabase = createClient();
-      const path = `${selectedOffice}/${month}/${crypto.randomUUID()}-${file.name}`;
+      // Storageキーは日本語/全角不可。パスは UUID+拡張子のみにし、元ファイル名は DB に保存する。
+      const path = `${selectedOffice}/${month}/${crypto.randomUUID()}.${fileExt(file.name)}`;
       const { error: upErr } = await supabase.storage.from("meal-menus").upload(path, file, {
         contentType: file.type || undefined,
       });
@@ -127,7 +142,7 @@ function ChildcareMenusPageContent() {
     setError(null);
     try {
       const supabase = createClient();
-      const path = `${selectedOffice}/${month}/letter-${crypto.randomUUID()}-${file.name}`;
+      const path = `${selectedOffice}/${month}/letter-${crypto.randomUUID()}.${fileExt(file.name)}`;
       const { error: upErr } = await supabase.storage.from("meal-menus").upload(path, file, {
         contentType: file.type || undefined,
       });
@@ -227,6 +242,7 @@ function ChildcareMenusPageContent() {
             onView={viewFile}
             onPublish={(id) => runRpc("publish_menu_import", id)}
             onDelete={(id) => runRpc("delete_menu_import", id)}
+            office={selectedOffice}
           />
         </section>
 
@@ -277,12 +293,14 @@ function MenuTable({
   onView,
   onPublish,
   onDelete,
+  office,
 }: {
   rows: MenuRow[];
   isManager: boolean;
   onView: (path: string) => void;
   onPublish: (id: string) => void;
   onDelete: (id: string) => void;
+  office: string | null;
 }) {
   if (rows.length === 0) return <p className="text-sm text-slate-400">この月の献立はまだありません。</p>;
   return (
@@ -313,6 +331,14 @@ function MenuTable({
                   <button onClick={() => onView(r.source_path)} className="text-sky-600 hover:underline">
                     表示
                   </button>
+                  {isManager && office && (
+                    <Link
+                      href={`/childcare/menus/edit?office=${office}&import=${r.id}&month=${r.target_month.slice(0, 7)}`}
+                      className="text-indigo-600 hover:underline"
+                    >
+                      献立を編集
+                    </Link>
+                  )}
                   {isManager && r.status !== "published" && (
                     <button onClick={() => onPublish(r.id)} className="text-emerald-600 hover:underline">
                       公開
