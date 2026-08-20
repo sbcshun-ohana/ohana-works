@@ -48,6 +48,14 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   List<ChildcareClass> _classes = const [];
   // null = 全クラス。クラスの並び順は fetch_childcare_classes の返却順(年齢区分順)を正とする。
   String? _selectedClassId;
+  // 登園中のみ表示のトグル(俊指示 2026-08-20)。
+  bool _showPresentOnly = false;
+
+  // クラスの年齢区分順の index(0歳→5歳)。並び替えに使用。未知クラスは末尾。
+  int _classOrder(String classId) {
+    final i = _classes.indexWhere((c) => c.classId == classId);
+    return i < 0 ? 999 : i;
+  }
   DailyBoardSummary? _summary;
   WeatherRecord? _weather;
   bool _weatherLoaded = false;
@@ -679,6 +687,17 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      // 出欠メモ(園が出欠編集で登録したメモ)。保護者からの連絡の右に表示(俊指示 2026-08-20)。
+                      SizedBox(
+                        width: 160,
+                        child: Text(
+                          (row.attendanceNote?.isNotEmpty ?? false) ? '出欠メモ: ${row.attendanceNote}' : '',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       _actionIcon(Icons.edit_calendar_rounded, '出欠編集', AppColors.warmOrange,
                           () => _openAttendanceEdit(row)),
                       _actionIcon(Icons.undo_rounded, '出席に戻す', AppColors.leafGreen,
@@ -964,6 +983,24 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
+                // 登園中のみ表示トグル(俊指示 2026-08-20)。
+                InkWell(
+                  onTap: () => setState(() => _showPresentOnly = !_showPresentOnly),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_showPresentOnly ? Icons.check_box : Icons.check_box_outline_blank,
+                            size: 20, color: _showPresentOnly ? AppColors.leafGreen : AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        const Text('登園中のみ', style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Align(
                     alignment: Alignment.centerLeft,
@@ -1043,7 +1080,20 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                   }
                   // 俊指示(2026-08-14): 欠席園児は本一覧から外し、下部の「欠席児童一覧」に
                   // クラス別でまとめる(admin_webと同構成)。
-                  final present = rows.where((r) => effectiveBoardStatus(r) != 'absent').toList();
+                  // 俊指示(2026-08-20): 並び順=①登園中(present)を上に(クラス=0歳→5歳)→②それ以外(未登園・降園済)。
+                  final nonAbsent = rows.where((r) => effectiveBoardStatus(r) != 'absent').toList()
+                    ..sort((a, b) {
+                      final ra = effectiveBoardStatus(a) == 'present' ? 0 : 1;
+                      final rb = effectiveBoardStatus(b) == 'present' ? 0 : 1;
+                      if (ra != rb) return ra - rb;
+                      final ca = _classOrder(a.classId), cb = _classOrder(b.classId);
+                      if (ca != cb) return ca - cb;
+                      return a.nameLabel.compareTo(b.nameLabel);
+                    });
+                  // 登園中のみ表示トグル: ONのとき present(登園中)のみ。
+                  final present = _showPresentOnly
+                      ? nonAbsent.where((r) => effectiveBoardStatus(r) == 'present').toList()
+                      : nonAbsent;
                   final absent = rows.where((r) => effectiveBoardStatus(r) == 'absent').toList();
                   return ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),

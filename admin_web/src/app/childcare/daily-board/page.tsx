@@ -78,6 +78,8 @@ function ChildcareDailyBoardPageContent() {
   const { classes, selectedClass, setSelectedClass } = useChildcareClass(selectedOffice);
 
   const [businessDate, setBusinessDate] = useState(currentDate());
+  // 登園中のみ表示のトグル(俊指示 2026-08-20)。
+  const [showPresentOnly, setShowPresentOnly] = useState(false);
   const [rows, setRows] = useState<DailyBoardRow[]>([]);
   const [summary, setSummary] = useState<DailyBoardSummary | null>(null);
   const [weather, setWeather] = useState<WeatherRecord | null>(null);
@@ -592,7 +594,17 @@ function ChildcareDailyBoardPageContent() {
     .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
 
   // 欠席児童は本表(出席・出席予定)から外し、下部の「欠席児童一覧」にクラス別でまとめる。
-  const presentRows = filteredRows.filter((r) => effectiveBoardStatus(r) !== "absent");
+  // 並び順(俊指示 2026-08-20): ①登園中(present)を上に(クラス=0歳→5歳)→②それ以外(未登園・降園済)。
+  const presentRows = filteredRows
+    .filter((r) => effectiveBoardStatus(r) !== "absent")
+    .sort((a, b) => {
+      const ra = effectiveBoardStatus(a) === "present" ? 0 : 1;
+      const rb = effectiveBoardStatus(b) === "present" ? 0 : 1;
+      if (ra !== rb) return ra - rb;
+      return compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name);
+    });
+  // 登園中のみ表示トグル: ONのときは present(登園中)のみに絞る。
+  const displayRows = showPresentOnly ? presentRows.filter((r) => effectiveBoardStatus(r) === "present") : presentRows;
   const absentRows = filteredRows.filter((r) => effectiveBoardStatus(r) === "absent");
   // absentRows は既にクラス順→氏名順に整列済み。連続する同一クラスをまとめてグループ化する。
   const absentByClass: { class_id: string; class_name: string; rows: DailyBoardRow[] }[] = [];
@@ -644,6 +656,15 @@ function ChildcareDailyBoardPageContent() {
                 </option>
               ))}
             </select>
+            <label className="mt-6 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={showPresentOnly}
+                onChange={(e) => setShowPresentOnly(e.target.checked)}
+                className="h-4 w-4"
+              />
+              登園中のみ表示
+            </label>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
@@ -813,15 +834,15 @@ function ChildcareDailyBoardPageContent() {
                   </td>
                 </tr>
               )}
-              {!isLoading && presentRows.length === 0 && (
+              {!isLoading && displayRows.length === 0 && (
                 <tr>
                   <td colSpan={internalNotesEnabled ? 9 : 8} className="px-4 py-6 text-center text-slate-400">
-                    出席・登園予定の園児はいません
+                    {showPresentOnly ? "登園中の園児はいません" : "出席・登園予定の園児はいません"}
                   </td>
                 </tr>
               )}
               {!isLoading &&
-                presentRows.map((row) => (
+                displayRows.map((row) => (
                   <tr key={row.child_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {row.display_name}
@@ -1069,6 +1090,7 @@ function ChildcareDailyBoardPageContent() {
                           <th className="px-3 py-2">欠席期間</th>
                           <th className="px-3 py-2">種別</th>
                           <th className="px-3 py-2">保護者からの連絡</th>
+                          <th className="px-3 py-2">出欠メモ</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1139,6 +1161,10 @@ function ChildcareDailyBoardPageContent() {
                               </td>
                               <td className="px-3 py-2 whitespace-pre-wrap text-slate-600">
                                 {comment ? comment : <span className="text-slate-300">—</span>}
+                              </td>
+                              {/* 出欠メモ: 園が出欠編集で登録したメモ(set_child_attendance_status の attendance_note)。 */}
+                              <td className="px-3 py-2 whitespace-pre-wrap text-slate-600">
+                                {row.attendance_note ? row.attendance_note : <span className="text-slate-300">—</span>}
                               </td>
                             </tr>
                           );

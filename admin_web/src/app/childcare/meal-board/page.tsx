@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
+import { MealSubNav } from "@/components/MealSubNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 const SLOTS: { key: string; label: string }[] = [
@@ -254,6 +255,7 @@ function ChildcareMealBoardContent() {
     <div className="flex flex-1 flex-col">
       <AppHeader />
       <ChildcareNav />
+      <MealSubNav />
       <main className="flex-1 space-y-5 p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-800">食数ボード</h2>

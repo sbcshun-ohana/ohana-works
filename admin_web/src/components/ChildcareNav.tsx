@@ -10,6 +10,7 @@ const THERAPY_HREF = "/childcare/therapy-records";
 const SUPPORT_HREF = "/childcare/support-childcare";
 const INCIDENT_HREF = "/childcare/incidents";
 const MEAL_HREF = "/childcare/meal-board";
+const MENU_HREF = "/childcare/menus";
 
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
@@ -27,7 +28,7 @@ const CHILDCARE_NAV_ITEMS = [
   { href: THERAPY_HREF, label: "療育記録" },
   { href: "/childcare/support-childcare", label: "支援保育" },
   { href: INCIDENT_HREF, label: "ヒヤリハット・事故報告" },
-  { href: MEAL_HREF, label: "食数ボード" },
+  { href: MEAL_HREF, label: "給食管理" },
   // 保護者管理・入園手続き・感染症マスターは管理業務としてトップレベルへ移設(俊指示 2026-08-17)。
 ];
 
@@ -107,19 +108,22 @@ export function ChildcareNav() {
   return (
     <div className="border-b border-slate-200 bg-slate-50 px-6 py-2">
       <nav className="flex gap-1">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={`${item.href}${suffix}`}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              pathname === item.href
-                ? "bg-white text-sky-700 shadow-sm"
-                : "text-slate-500 hover:bg-white/60"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
+        {items.map((item) => {
+          // 給食管理タブは食数ボード/献立(サブナビ)いずれの配下でもアクティブ表示。
+          const active =
+            pathname === item.href || (item.href === MEAL_HREF && pathname === MENU_HREF);
+          return (
+            <Link
+              key={item.href}
+              href={`${item.href}${suffix}`}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                active ? "bg-white text-sky-700 shadow-sm" : "text-slate-500 hover:bg-white/60"
+              }`}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );
