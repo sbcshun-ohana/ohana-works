@@ -726,11 +726,11 @@ export type SupportChildcareAiDraftResult = {
 
 // ---- 園内記録 ----
 
-export type ChildInternalNoteCategory = "handover" | "observation" | "guardian_contact" | "external_agency" | "other";
+// 申し送り(handover)は156で園内記録から廃止し園内連絡へ移管(DBのCHECKも4区分)。
+export type ChildInternalNoteCategory = "observation" | "guardian_contact" | "external_agency" | "other";
 
 // 区分の日本語表示名(定数ファイル1箇所に集約。Ohana Kidsを実装する際もここを参照する)
 export const CHILD_INTERNAL_NOTE_CATEGORY_LABELS: Record<ChildInternalNoteCategory, string> = {
-  handover: "申し送り",
   observation: "個人日誌",
   guardian_contact: "保護者との面談記録",
   external_agency: "療育等との連携記録",

@@ -300,8 +300,8 @@ class ChildInternalNote {
 
 /// 園内記録の区分キー(表示順)。日本語表示名はここ1箇所に集約する
 /// (admin_web側の CHILD_INTERNAL_NOTE_CATEGORY_LABELS と同一の対応)。
+/// 申し送り(handover)は156で園内記録から廃止し園内連絡へ移管(DBのCHECKも4区分)。
 const List<String> kChildInternalNoteCategories = [
-  'handover',
   'observation',
   'guardian_contact',
   'external_agency',

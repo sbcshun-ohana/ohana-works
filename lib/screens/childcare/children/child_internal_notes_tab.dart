@@ -656,7 +656,11 @@ class _NoteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            // 分割ビューの狭い右パネルでも横はみ出ししないよう Wrap で折り返す。
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -669,21 +673,19 @@ class _NoteCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.skyBlue),
                   ),
                 ),
-                const SizedBox(width: 8),
                 Text(note.noteDate, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '記載者: $authorName',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('記載者: $authorName',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    if (note.aiExcluded)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: Icon(Icons.smart_toy_outlined, size: 16, color: AppColors.textSecondary),
+                      ),
+                  ],
                 ),
-                if (note.aiExcluded)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4),
-                    child: Icon(Icons.smart_toy_outlined, size: 16, color: AppColors.textSecondary),
-                  ),
               ],
             ),
             const SizedBox(height: 8),

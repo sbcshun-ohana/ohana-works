@@ -28,14 +28,14 @@ export function ChildInternalNotesModal({ childId, childName, officeId, onClose 
   const [isChief, setIsChief] = useState(false);
 
   const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [newCategory, setNewCategory] = useState<ChildInternalNoteCategory>("handover");
+  const [newCategory, setNewCategory] = useState<ChildInternalNoteCategory>("observation");
   const [newBody, setNewBody] = useState("");
   const [newAiExcluded, setNewAiExcluded] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
-  const [editCategory, setEditCategory] = useState<ChildInternalNoteCategory>("handover");
+  const [editCategory, setEditCategory] = useState<ChildInternalNoteCategory>("observation");
   const [editAiExcluded, setEditAiExcluded] = useState(false);
   const [editDate, setEditDate] = useState("");
 
