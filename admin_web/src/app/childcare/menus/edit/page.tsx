@@ -128,6 +128,31 @@ function MenuEditContent() {
     }
   }
 
+  async function runAiAnalyze() {
+    if (!importId) return;
+    setSaving(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const supabase = createClient();
+      const { data, error: e } = await supabase.functions.invoke("analyze-menu-import", {
+        body: { import_id: importId },
+      });
+      if (e) throw e;
+      const r = data as { mock?: boolean; saved?: number; total?: number } | null;
+      setMsg(
+        r?.mock
+          ? `AIサンプル下書きを${r?.saved ?? 0}件生成しました(APIキー未設定のためサンプルです。確認・修正して公開してください)`
+          : `AI解析で${r?.saved ?? 0}/${r?.total ?? 0}件の下書きを生成しました。確認・修正して公開してください`,
+      );
+      setReloadToken((t) => t + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "AI解析に失敗しました(Edge Functionの配備が必要です)");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function runImportRpc(fn: string, extra?: Record<string, unknown>) {
     if (!importId) return;
     const supabase = createClient();
@@ -157,6 +182,13 @@ function MenuEditContent() {
             <p className="text-xs text-slate-400">日ごとに食種×区分のメニューを入力し、確認→公開します。AI解析の下書きもここに入ります。</p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={runAiAnalyze}
+              disabled={saving}
+              className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+            >
+              AI解析(下書き生成)
+            </button>
             <button
               onClick={() => runImportRpc("confirm_menu_import")}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
