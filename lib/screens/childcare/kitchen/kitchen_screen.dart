@@ -37,8 +37,6 @@ class _KitchenScreenState extends State<KitchenScreen> {
   List<Map<String, dynamic>> _changes = const [];
   List<({String childId, String childName, String? className, String? handling, List<String> targets})> _special =
       const [];
-  // 本日の公開済み献立(267)。食種×区分。
-  List<Map<String, dynamic>> _menuDay = const [];
 
   @override
   void initState() {
@@ -55,17 +53,11 @@ class _KitchenScreenState extends State<KitchenScreen> {
       final board = await widget.service.fetchMealBoard(widget.officeId, _date);
       final special = await widget.service.fetchDailyEliminationForOffice(widget.officeId, _date);
       final changes = await widget.service.fetchMealChanges(widget.officeId, _date);
-      // 献立は付加情報。取得失敗しても厨房表示は継続。
-      List<Map<String, dynamic>> menuDay = const [];
-      try {
-        menuDay = await widget.service.fetchPublishedMenuDay(widget.officeId, _date);
-      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
         _special = special;
         _changes = changes;
-        _menuDay = menuDay;
         _loading = false;
       });
     } catch (_) {
@@ -173,80 +165,6 @@ class _KitchenScreenState extends State<KitchenScreen> {
     );
   }
 
-  static const _foodTypeLabels = {
-    'regular_over3': '以上児',
-    'regular_under3': '未満児',
-    'weaning_late': '後期',
-    'weaning_final': '完了期',
-  };
-  static const _menuSlots = [
-    ('am_snack', '午前おやつ'),
-    ('lunch', '昼食'),
-    ('pm_snack', '午後おやつ'),
-  ];
-
-  /// 本日の献立(公開済み)。食種×区分。除去食は注記のみ(詳細は献立の日別ビュー)。
-  Widget _menuSection() {
-    final normal = _menuDay.where((m) => m['removal_kind'] == null).toList();
-    final removals = _menuDay
-        .where((m) => m['removal_kind'] != null)
-        .map((m) => m['removal_kind'] as String)
-        .toSet()
-        .toList();
-    String cell(String ft, String slot) {
-      for (final m in normal) {
-        if (m['food_type'] == ft && m['meal_slot'] == slot) return (m['menu_text'] as String?) ?? '';
-      }
-      return '';
-    }
-    final activeTypes =
-        _foodTypeLabels.keys.where((ft) => normal.any((m) => m['food_type'] == ft && ((m['menu_text'] as String?) ?? '').isNotEmpty)).toList();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('本日の献立', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-            const SizedBox(height: 8),
-            if (activeTypes.isEmpty)
-              const Text('この日の公開済み献立はありません', style: TextStyle(color: AppColors.textSecondary, fontSize: 13))
-            else
-              Table(
-                columnWidths: const {0: FixedColumnWidth(72)},
-                defaultVerticalAlignment: TableCellVerticalAlignment.top,
-                children: [
-                  TableRow(children: [
-                    const Text('食種', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                    for (final s in _menuSlots)
-                      Text(s.$2, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                  ]),
-                  for (final ft in activeTypes)
-                    TableRow(children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(_foodTypeLabels[ft]!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                      ),
-                      for (final s in _menuSlots)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                          child: Text(cell(ft, s.$1).isEmpty ? '—' : cell(ft, s.$1), style: const TextStyle(fontSize: 13)),
-                        ),
-                    ]),
-                ],
-              ),
-            if (removals.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('除去食: ${removals.join('・')}(詳細は献立の日別ビュー)',
-                    style: const TextStyle(fontSize: 12, color: AppColors.warmOrange, fontWeight: FontWeight.w700)),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _body() {
     // ピボット: row_key → {label, type, sort, slots}
     final map = <String, Map<String, dynamic>>{};
@@ -301,10 +219,6 @@ class _KitchenScreenState extends State<KitchenScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
-
-        // 本日の献立(公開済み・267)
-        _menuSection(),
         const SizedBox(height: 16),
 
         // 共通除去食(誤配膳防止・大きく)

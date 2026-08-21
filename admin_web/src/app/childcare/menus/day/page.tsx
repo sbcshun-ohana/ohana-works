@@ -29,6 +29,7 @@ type Row = {
   removal_kind: string | null;
   meal_slot: string;
   menu_text: string | null;
+  ingredients: { text?: string } | null;
   removal_note: string | null;
 };
 
@@ -68,6 +69,11 @@ function MenuDayViewContent() {
   function cell(foodType: string, slot: string): string {
     const r = rows.find((x) => x.food_type === foodType && x.meal_slot === slot && !x.removal_kind);
     return r?.menu_text ?? "";
+  }
+  // 材料(昼食行の ingredients.text)。
+  function lunchIngredients(foodType: string): string {
+    const r = rows.find((x) => x.food_type === foodType && x.meal_slot === "lunch" && !x.removal_kind);
+    return r?.ingredients?.text ?? "";
   }
   const removals = rows.filter((r) => r.food_type === "allergy_removed" && r.removal_kind);
 
@@ -123,6 +129,10 @@ function MenuDayViewContent() {
                     {SLOTS.map((s) => (
                       <td key={s.key} className="whitespace-pre-wrap px-3 py-2 align-top text-slate-600">
                         {cell(ft.key, s.key) || <span className="text-slate-300">—</span>}
+                        {/* 材料は昼食セルの下に表示。 */}
+                        {s.key === "lunch" && lunchIngredients(ft.key) && (
+                          <div className="mt-1 text-xs text-amber-700">材料: {lunchIngredients(ft.key)}</div>
+                        )}
                       </td>
                     ))}
                   </tr>

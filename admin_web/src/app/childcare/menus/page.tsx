@@ -276,7 +276,6 @@ function ChildcareMenusPageContent() {
             onView={viewFile}
             onPublish={(id) => runRpc("publish_menu_import", id)}
             onDelete={(id) => runRpc("delete_menu_import", id)}
-            office={selectedOffice}
           />
         </section>
 
@@ -327,14 +326,12 @@ function MenuTable({
   onView,
   onPublish,
   onDelete,
-  office,
 }: {
   rows: MenuRow[];
   isManager: boolean;
   onView: (path: string) => void;
   onPublish: (id: string) => void;
   onDelete: (id: string) => void;
-  office: string | null;
 }) {
   if (rows.length === 0) return <p className="text-sm text-slate-400">この月の献立はまだありません。</p>;
   return (
@@ -365,14 +362,6 @@ function MenuTable({
                   <button onClick={() => onView(r.source_path)} className="text-sky-600 hover:underline">
                     表示
                   </button>
-                  {isManager && office && (
-                    <Link
-                      href={`/childcare/menus/edit?office=${office}&import=${r.id}&month=${r.target_month.slice(0, 7)}`}
-                      className="text-indigo-600 hover:underline"
-                    >
-                      献立を編集
-                    </Link>
-                  )}
                   {isManager && r.status !== "published" && (
                     <button onClick={() => onPublish(r.id)} className="text-emerald-600 hover:underline">
                       公開
