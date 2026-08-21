@@ -77,6 +77,10 @@ function ChildcareMealBoardContent() {
   const [special, setSpecial] = useState<SpecialChild[]>([]);
   const [changes, setChanges] = useState<MealChange[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  // 本日の献立(267 fetch_published_menu_day・公開済み)。厨房・発注の参考に併記。
+  const [menuDay, setMenuDay] = useState<
+    { food_type: string; removal_kind: string | null; meal_slot: string; menu_text: string | null; removal_note: string | null }[]
+  >([]);
   const [adjRow, setAdjRow] = useState("");
   const [adjSlot, setAdjSlot] = useState("lunch");
   const [adjDelta, setAdjDelta] = useState("1");
@@ -111,6 +115,9 @@ function ChildcareMealBoardContent() {
     void supabase
       .rpc("fetch_meal_adjustments", { p_office_id: selectedOffice, p_business_date: businessDate })
       .then(({ data }) => setAdjustments((data ?? []) as Adjustment[]));
+    void supabase
+      .rpc("fetch_published_menu_day", { p_office_id: selectedOffice, p_menu_date: businessDate })
+      .then(({ data }) => setMenuDay((data ?? []) as typeof menuDay));
   }, [selectedOffice, businessDate, reloadToken]);
 
   const run = useCallback(
@@ -371,6 +378,53 @@ function ChildcareMealBoardContent() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* 本日の献立(公開済み・267)。厨房・発注の参考に併記。 */}
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="mb-2 text-sm font-bold text-slate-700">本日の献立</h3>
+          {menuDay.filter((m) => !m.removal_kind).length === 0 ? (
+            <p className="text-sm text-slate-400">この日の公開済み献立はありません(献立→編集→公開で表示)。</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-slate-500">
+                    <th className="px-2 py-1">食種＼区分</th>
+                    <th className="px-2 py-1">午前おやつ</th>
+                    <th className="px-2 py-1">昼食</th>
+                    <th className="px-2 py-1">午後おやつ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(
+                    [
+                      ["regular_over3", "以上児"],
+                      ["regular_under3", "未満児"],
+                      ["weaning_late", "後期"],
+                      ["weaning_final", "完了期"],
+                    ] as const
+                  )
+                    .filter(([ft]) => menuDay.some((m) => m.food_type === ft && !m.removal_kind && m.menu_text))
+                    .map(([ft, label]) => (
+                      <tr key={ft} className="border-t border-slate-100">
+                        <td className="px-2 py-1 font-medium text-slate-700">{label}</td>
+                        {(["am_snack", "lunch", "pm_snack"] as const).map((slot) => (
+                          <td key={slot} className="whitespace-pre-wrap px-2 py-1 text-slate-600">
+                            {menuDay.find((m) => m.food_type === ft && m.meal_slot === slot && !m.removal_kind)?.menu_text || "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              {menuDay.filter((m) => m.removal_kind).length > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  除去食: {Array.from(new Set(menuDay.filter((m) => m.removal_kind).map((m) => m.removal_kind))).join("・")}(詳細は献立の日別ビュー)
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 除去食児(誤配膳防止) */}

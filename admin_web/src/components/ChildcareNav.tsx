@@ -10,7 +10,6 @@ const THERAPY_HREF = "/childcare/therapy-records";
 const SUPPORT_HREF = "/childcare/support-childcare";
 const INCIDENT_HREF = "/childcare/incidents";
 const MEAL_HREF = "/childcare/meal-board";
-const MENU_HREF = "/childcare/menus";
 
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
@@ -111,7 +110,7 @@ export function ChildcareNav() {
         {items.map((item) => {
           // 給食管理タブは食数ボード/献立(サブナビ)いずれの配下でもアクティブ表示。
           const active =
-            pathname === item.href || (item.href === MEAL_HREF && pathname === MENU_HREF);
+            pathname === item.href || (item.href === MEAL_HREF && pathname.startsWith("/childcare/menus"));
           return (
             <Link
               key={item.href}

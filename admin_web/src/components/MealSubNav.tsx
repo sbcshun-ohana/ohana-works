@@ -7,6 +7,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 const SUB_ITEMS = [
   { href: "/childcare/meal-board", label: "食数ボード" },
   { href: "/childcare/menus", label: "献立" },
+  { href: "/childcare/menus/day", label: "日別ビュー" },
 ];
 
 export function MealSubNav() {
