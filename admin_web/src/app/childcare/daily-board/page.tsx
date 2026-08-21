@@ -605,7 +605,8 @@ function ChildcareDailyBoardPageContent() {
     });
   // 登園中のみ表示トグル: ONのときは present(登園中)のみに絞る。
   const displayRows = showPresentOnly ? presentRows.filter((r) => effectiveBoardStatus(r) === "present") : presentRows;
-  const absentRows = filteredRows.filter((r) => effectiveBoardStatus(r) === "absent");
+  // 登園中のみ表示ONのときは欠席児童一覧も出さない(俊指示 2026-08-21)。
+  const absentRows = showPresentOnly ? [] : filteredRows.filter((r) => effectiveBoardStatus(r) === "absent");
   // absentRows は既にクラス順→氏名順に整列済み。連続する同一クラスをまとめてグループ化する。
   const absentByClass: { class_id: string; class_name: string; rows: DailyBoardRow[] }[] = [];
   for (const r of absentRows) {
@@ -656,15 +657,6 @@ function ChildcareDailyBoardPageContent() {
                 </option>
               ))}
             </select>
-            <label className="mt-6 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={showPresentOnly}
-                onChange={(e) => setShowPresentOnly(e.target.checked)}
-                className="h-4 w-4"
-              />
-              登園中のみ表示
-            </label>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">対象日</label>
@@ -686,6 +678,16 @@ function ChildcareDailyBoardPageContent() {
           {/* 天気入力(天気/気温/湿度/保存)は同じ上段に並べる。区切りに細い縦線を挟む。 */}
           <div className="mx-1 h-9 w-px self-end bg-slate-200" />
           <WeatherBar weather={weather} onSave={saveWeather} error={weatherError} />
+          {/* 登園中のみ表示トグルは行の一番右(保存の右)に配置(俊指示 2026-08-21)。 */}
+          <label className="flex cursor-pointer items-center gap-2 self-end pb-1 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={showPresentOnly}
+              onChange={(e) => setShowPresentOnly(e.target.checked)}
+              className="h-4 w-4"
+            />
+            登園中のみ表示
+          </label>
         </div>
 
         {napMissing.length > 0 && (
