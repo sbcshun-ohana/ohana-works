@@ -1127,15 +1127,12 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                       final colors = _statusColors(effectiveBoardStatus(row));
                       // 60/40レイアウト: 左=氏名/クラス+登降園タイムバー(約60%)、右=状態/操作/バッジ(約40%)。
                       // 状態別に背景の淡い色 + 左端の色アクセントで見分けやすくする(俊指示 2026-08-21)。
+                      // カード全体はタップ無効。連絡帳へは右側の「日誌・連絡帳」アイコンからのみ遷移する
+                      // (俊指示 2026-08-21: 名前横の帯タップで連絡帳へ飛ぶのを廃止)。
                       return Card(
                         margin: EdgeInsets.zero,
                         color: colors.bg,
-                        child: InkWell(
-                          // 行タップは園側連絡帳(日誌・連絡帳)を開く(俊指示 2026-08-19)。
-                          // 以前は台帳詳細(家庭連絡帳/園内記録/発達記録/台帳)へ遷移し不便だった。
-                          onTap: () => _openContact(row),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
+                        child: Container(
                             decoration: BoxDecoration(
                               border: Border(left: BorderSide(color: colors.accent, width: 5)),
                               borderRadius: BorderRadius.circular(12),
@@ -1278,7 +1275,6 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                               ],
                             ),
                           ),
-                        ),
                       );
                     },
                   );

@@ -360,8 +360,9 @@ class _TemperatureScreenState extends State<TemperatureScreen> {
     final rows = _visibleRoster();
     return Scaffold(
       appBar: AppBar(
-        leading: const OhanaLogoHomeButton(),
-        leadingWidth: 148,
+        // 戻る(1つ前=デイリーボード等へ)+ ホーム(ロゴ)。デイリーボードから来ても戻れるように(俊指示 2026-08-21)。
+        leading: const OhanaBackHomeLeading(),
+        leadingWidth: 200,
         toolbarHeight: 48,
         titleSpacing: 0,
         title: const Text('健康チェック', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
