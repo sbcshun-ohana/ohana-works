@@ -31,6 +31,7 @@ type MenuDay = {
   removal_kind: string | null;
   meal_slot: string;
   menu_text: string | null;
+  ingredients: { text?: string } | null;
 };
 
 function daysInMonth(month: string): string[] {
@@ -49,6 +50,8 @@ function MenuEditContent() {
   const [date, setDate] = useState<string>("");
   // 編集中の本文。キー = `${food_type}:${meal_slot}`
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // 材料(食種ごと・昼食行の ingredients に保存)。キー = food_type
+  const [ingr, setIngr] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -82,10 +85,16 @@ function MenuEditContent() {
   // 選択日の既存値を編集フォームへ反映。
   useEffect(() => {
     const map: Record<string, string> = {};
+    const ingrMap: Record<string, string> = {};
     for (const d of days.filter((x) => x.menu_date === date && !x.removal_kind)) {
       map[`${d.food_type}:${d.meal_slot}`] = d.menu_text ?? "";
+      // 材料は昼食行の ingredients.text を代表値として食種ごとに反映。
+      if (d.meal_slot === "lunch") ingrMap[d.food_type] = d.ingredients?.text ?? "";
     }
-    Promise.resolve().then(() => setEdits(map));
+    Promise.resolve().then(() => {
+      setEdits(map);
+      setIngr(ingrMap);
+    });
   }, [days, date]);
 
   async function saveDay() {
@@ -96,15 +105,21 @@ function MenuEditContent() {
     const supabase = createClient();
     try {
       for (const ft of FOOD_TYPES) {
+        const ingrText = (ingr[ft.key] ?? "").trim();
         for (const s of SLOTS) {
           const key = `${ft.key}:${s.key}`;
           const text = (edits[key] ?? "").trim();
           const existing = days.find(
             (x) => x.menu_date === date && x.food_type === ft.key && x.meal_slot === s.key && !x.removal_kind,
           );
-          // 変更が無い空セルはスキップ(無駄な行を作らない)。
-          if (!text && !existing) continue;
-          if (existing && (existing.menu_text ?? "") === text) continue;
+          const isLunch = s.key === "lunch";
+          const newIngr = isLunch && ingrText ? { text: ingrText } : null;
+          const existingIngrText = (existing?.ingredients?.text ?? "").trim();
+          const menuChanged = existing ? (existing.menu_text ?? "") !== text : !!text;
+          const ingrChanged = isLunch && existingIngrText !== ingrText;
+          // 変更が無い/空で既存も無いセルはスキップ(無駄な行を作らない)。
+          if (!menuChanged && !ingrChanged) continue;
+          if (!text && !newIngr && !existing) continue;
           const { error: e } = await supabase.rpc("upsert_menu_day", {
             p_import_id: importId,
             p_menu_date: date,
@@ -112,7 +127,7 @@ function MenuEditContent() {
             p_removal_kind: null,
             p_meal_slot: s.key,
             p_menu_text: text || null,
-            p_ingredients: null,
+            p_ingredients: newIngr,
             p_nutrition: null,
             p_removal_note: null,
           });
@@ -250,6 +265,7 @@ function MenuEditContent() {
                             {s.label}
                           </th>
                         ))}
+                        <th className="px-2 py-2">材料(昼食・保護者に表示)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -270,6 +286,15 @@ function MenuEditContent() {
                               </td>
                             );
                           })}
+                          <td className="px-2 py-2 align-top">
+                            <textarea
+                              value={ingr[ft.key] ?? ""}
+                              onChange={(e) => setIngr((p) => ({ ...p, [ft.key]: e.target.value }))}
+                              rows={3}
+                              className="w-full min-w-[180px] rounded-lg border border-amber-300 bg-amber-50/40 px-2 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
+                              placeholder="例: 米・鶏肉・人参・玉ねぎ…"
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>

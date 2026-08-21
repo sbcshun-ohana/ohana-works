@@ -19,6 +19,7 @@ type MenuDayDraft = {
   removal_kind?: string | null;
   meal_slot: string;
   menu_text: string;
+  ingredients?: { text: string } | null;
 };
 
 // --- サンプル下書き(キー未設定時) ---
@@ -35,7 +36,7 @@ function sampleDrafts(targetMonth: string): MenuDayDraft[] {
     const ds = `${targetMonth.slice(0, 7)}-${String(d).padStart(2, "0")}`;
     for (const ft of ["regular_over3", "regular_under3"]) {
       drafts.push({ date: ds, food_type: ft, meal_slot: "am_snack", menu_text: "【AIサンプル】牛乳・ビスケット" });
-      drafts.push({ date: ds, food_type: ft, meal_slot: "lunch", menu_text: "【AIサンプル】ごはん・味噌汁・鶏の照り焼き・お浸し" });
+      drafts.push({ date: ds, food_type: ft, meal_slot: "lunch", menu_text: "【AIサンプル】ごはん・味噌汁・鶏の照り焼き・お浸し", ingredients: { text: "米・鶏肉・ほうれん草・人参・玉ねぎ・味噌・醤油" } });
       drafts.push({ date: ds, food_type: ft, meal_slot: "pm_snack", menu_text: "【AIサンプル】麦茶・おにぎり" });
     }
   }
@@ -56,7 +57,8 @@ async function analyzeWithAnthropic(apiKey: string, sheetsCsv: Record<string, st
     `区分(meal_slot)は: am_snack(午前おやつ), lunch(昼食), pm_snack(午後おやつ)。\n` +
     `除去食シートがある場合は food_type=allergy_removed とし removal_kind に卵/そば/ピーナッツ等を入れる。\n` +
     `シート名から食種を推定してください(以上児→regular_over3, 未満児→regular_under3, 離乳食後期→weaning_late, 完了期→weaning_final, ohana/通常→regular_over3+regular_under3)。\n` +
-    `出力はJSONオブジェクト {"days": [{"date":"YYYY-MM-DD","food_type":"...","removal_kind":null,"meal_slot":"...","menu_text":"..."}, ...]} のみ。\n\n` +
+    `材料(ingredients)は主に昼食の食材を {"text":"米・鶏肉・人参…"} の形で入れる(無い区分はnull可)。保護者にも表示する。\n` +
+    `出力はJSONオブジェクト {"days": [{"date":"YYYY-MM-DD","food_type":"...","removal_kind":null,"meal_slot":"...","menu_text":"...","ingredients":{"text":"..."}}, ...]} のみ。\n\n` +
     `--- 元データ ---\n${sheetsText}`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -134,7 +136,7 @@ Deno.serve(async (req) => {
         p_removal_kind: d.removal_kind ?? null,
         p_meal_slot: d.meal_slot,
         p_menu_text: d.menu_text,
-        p_ingredients: null,
+        p_ingredients: d.ingredients ?? null,
         p_nutrition: null,
         p_removal_note: null,
       });

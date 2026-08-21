@@ -189,6 +189,9 @@ function ChildcareMenusPageContent() {
     );
   }
 
+  // 今月の献立編集の対象版: 公開中があればそれ、無ければ最新版(version降順の先頭)。
+  const currentImport = menuRows.find((r) => r.status === "published") ?? menuRows[0];
+
   return (
     <div className="flex flex-1 flex-col">
       <AppHeader />
@@ -215,10 +218,44 @@ function ChildcareMenusPageContent() {
           </p>
         )}
 
-        {/* 献立 */}
+        {/* 主役: 今月の献立を編集(食種×区分) */}
+        <section className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-sky-50 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🍚</span>
+                <h3 className="text-lg font-bold text-slate-800">今月の献立を作成・編集</h3>
+                {currentImport && <StatusChip status={currentImport.status} />}
+              </div>
+              <p className="text-sm text-slate-600">
+                日々の献立(食種×区分)を入力して公開すると、保護者アプリ・厨房ページ・日別ビューに反映されます。
+              </p>
+            </div>
+            {isManager &&
+              (currentImport ? (
+                <Link
+                  href={`/childcare/menus/edit?office=${selectedOffice ?? ""}&import=${currentImport.id}&month=${month}`}
+                  className="rounded-xl bg-emerald-600 px-6 py-4 text-base font-bold text-white shadow-sm hover:bg-emerald-700"
+                >
+                  📝 今月の献立を編集する
+                </Link>
+              ) : (
+                <div className="rounded-xl border border-dashed border-emerald-300 bg-white/70 px-5 py-4 text-sm text-slate-500">
+                  下の「献立をアップロード」で元ファイルを取り込むと、この画面から献立を編集できます。
+                </div>
+              ))}
+          </div>
+        </section>
+
+        {/* 元ファイル(AI取込・保護者への元データ) */}
         <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-bold text-slate-800">献立表</h3>
+            <div>
+              <h3 className="text-base font-bold text-slate-800">元ファイル(委託先/業者の献立)</h3>
+              <p className="text-xs text-slate-400">
+                Excel・PDF・画像を月次でアップロード。AI解析の元データになり、公開すると保護者アプリにも元ファイルが表示されます。
+              </p>
+            </div>
             {isManager && (
               <label className="cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
                 {uploading ? "アップロード中…" : "献立をアップロード"}
@@ -233,9 +270,6 @@ function ChildcareMenusPageContent() {
               </label>
             )}
           </div>
-          <p className="text-xs text-slate-400">
-            委託先/業者の献立ファイル(Excel・PDF・画像)を月次でアップロードし、公開すると保護者アプリの給食セクションに表示されます。
-          </p>
           <MenuTable
             rows={menuRows}
             isManager={isManager}

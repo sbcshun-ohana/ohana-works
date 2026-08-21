@@ -24,8 +24,8 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
   String? _error;
   List<_MenuItem> _items = const [];
   final Map<String, String> _signedUrls = {};
-  // 構造化献立(267): 日→区分→本文。子の食種(年齢代替)で取得。
-  List<({DateTime menuDate, String mealSlot, String menuText})> _menuDays = const [];
+  // 構造化献立(267/270): 日→区分→本文+材料。子の食種(年齢代替)で取得。
+  List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})> _menuDays = const [];
 
   @override
   void initState() {
@@ -45,7 +45,7 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
         widget.guardianService.fetchPublishedMenuDays(widget.child.officeId, _month, foodType),
       ]);
       final items = results[0] as List<_MenuItem>;
-      final menuDays = results[1] as List<({DateTime menuDate, String mealSlot, String menuText})>;
+      final menuDays = results[1] as List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})>;
       // 画像は署名URLを先に取得してインライン表示する。
       for (final it in items.where((e) => e.format == 'image')) {
         try {
@@ -136,7 +136,7 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
   /// 今月の献立(Ohana Works独自の構造化表示)。日ごとに区分をまとめて表示。
   Widget _structuredSection() {
     // 日付ごとにグルーピング
-    final byDate = <DateTime, List<({DateTime menuDate, String mealSlot, String menuText})>>{};
+    final byDate = <DateTime, List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})>>{};
     for (final d in _menuDays.where((e) => e.menuText.trim().isNotEmpty)) {
       (byDate[d.menuDate] ??= []).add(d);
     }
@@ -181,7 +181,21 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
                             child: Text(_slotLabels[s.mealSlot] ?? s.mealSlot,
                                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                           ),
-                          Expanded(child: Text(s.menuText, style: const TextStyle(fontSize: 13, height: 1.3))),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.menuText, style: const TextStyle(fontSize: 13, height: 1.3)),
+                                // 材料(昼食)。保護者にも掲載(俊指示2026-08-21)。
+                                if (s.ingredients.trim().isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text('材料: ${s.ingredients}',
+                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3)),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),

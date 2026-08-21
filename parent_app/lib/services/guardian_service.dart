@@ -768,8 +768,9 @@ class GuardianService {
     return _client.storage.from('meal-menus').createSignedUrl(path, 300);
   }
 
-  /// 公開済みの構造化献立(267)。food_type=以上児/未満児等。除去食は縮退で返らない。
-  Future<List<({DateTime menuDate, String mealSlot, String menuText})>>
+  /// 公開済みの構造化献立(267/270)。food_type=以上児/未満児等。除去食は縮退で返らない。
+  /// ingredients=材料(例 {"text":"..."})。保護者にも材料を表示する。
+  Future<List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})>>
       fetchPublishedMenuDays(String officeId, DateTime targetMonth, String foodType) async {
     final monthStart = DateTime(targetMonth.year, targetMonth.month, 1);
     final rows = await _client.rpc('fetch_published_menu_days_for_guardian', params: {
@@ -777,11 +778,16 @@ class GuardianService {
       'p_target_month': '${monthStart.year.toString().padLeft(4, '0')}-${monthStart.month.toString().padLeft(2, '0')}-01',
       'p_food_type': foodType,
     });
-    return (rows as List).cast<Map<String, dynamic>>().map((m) => (
-          menuDate: DateTime.parse(m['menu_date'] as String),
-          mealSlot: m['meal_slot'] as String,
-          menuText: (m['menu_text'] as String?) ?? '',
-        )).toList();
+    return (rows as List).cast<Map<String, dynamic>>().map((m) {
+      final ing = m['ingredients'];
+      final ingText = (ing is Map && ing['text'] is String) ? ing['text'] as String : '';
+      return (
+        menuDate: DateTime.parse(m['menu_date'] as String),
+        mealSlot: m['meal_slot'] as String,
+        menuText: (m['menu_text'] as String?) ?? '',
+        ingredients: ingText,
+      );
+    }).toList();
   }
 
   /// 年齢区分(0歳..5歳)から保護者の献立food_typeを判定(縮退: 給食段階未実装のため年齢代替)。
