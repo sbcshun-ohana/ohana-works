@@ -32,6 +32,7 @@ type MenuDay = {
   meal_slot: string;
   menu_text: string | null;
   ingredients: { text?: string } | null;
+  removal_note: string | null;
 };
 
 function daysInMonth(month: string): string[] {
@@ -52,6 +53,8 @@ function MenuEditContent() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   // 材料(食種ごと・昼食行の ingredients に保存)。キー = `${date}:${food_type}`
   const [ingr, setIngr] = useState<Record<string, string>>({});
+  // 除去食(アレルゲン別・昼食行)。キー = `${date}:${allergen}` → { menu, note }
+  const [removals, setRemovals] = useState<Record<string, { menu: string; note: string }>>({});
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -92,14 +95,22 @@ function MenuEditContent() {
   useEffect(() => {
     const map: Record<string, string> = {};
     const ingrMap: Record<string, string> = {};
-    for (const d of days.filter((x) => !x.removal_kind)) {
+    const remMap: Record<string, { menu: string; note: string }> = {};
+    for (const d of days) {
+      if (d.food_type === "allergy_removed" && d.removal_kind) {
+        // 除去食は昼食行を代表として編集(v1)。
+        if (d.meal_slot === "lunch") {
+          remMap[`${d.menu_date}:${d.removal_kind}`] = { menu: d.menu_text ?? "", note: d.removal_note ?? "" };
+        }
+        continue;
+      }
       map[`${d.menu_date}:${d.food_type}:${d.meal_slot}`] = d.menu_text ?? "";
-      // 材料は昼食行の ingredients.text を代表値として日×食種ごとに反映。
       if (d.meal_slot === "lunch") ingrMap[`${d.menu_date}:${d.food_type}`] = d.ingredients?.text ?? "";
     }
     Promise.resolve().then(() => {
       setEdits(map);
       setIngr(ingrMap);
+      setRemovals(remMap);
     });
   }, [days]);
 
@@ -145,6 +156,31 @@ function MenuEditContent() {
           }
         }
       }
+      // 除去食(アレルゲン別・昼食行)を保存。
+      for (const [k, v] of Object.entries(removals)) {
+        const [d0, allergen] = k.split(":");
+        if (!targetDates.includes(d0)) continue;
+        const menu = v.menu.trim();
+        const note = v.note.trim();
+        const existing = days.find(
+          (x) => x.menu_date === d0 && x.food_type === "allergy_removed" && x.removal_kind === allergen && x.meal_slot === "lunch",
+        );
+        const changed = existing ? (existing.menu_text ?? "") !== menu || (existing.removal_note ?? "") !== note : !!(menu || note);
+        if (!changed) continue;
+        const { error: e } = await supabase.rpc("upsert_menu_day", {
+          p_import_id: importId,
+          p_menu_date: d0,
+          p_food_type: "allergy_removed",
+          p_removal_kind: allergen,
+          p_meal_slot: "lunch",
+          p_menu_text: menu || null,
+          p_ingredients: null,
+          p_nutrition: null,
+          p_removal_note: note || null,
+        });
+        if (e) throw e;
+        count++;
+      }
       if (opts?.publishAfter && !published) {
         const { error: pe } = await supabase.rpc("publish_menu_import", { p_id: importId, p_fallback: false });
         if (pe) throw pe;
@@ -186,6 +222,36 @@ function MenuEditContent() {
       setError(e instanceof Error ? e.message : "AI解析に失敗しました(Edge Functionの配備が必要です)");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function addAllergen() {
+    if (!date) return;
+    const a = window.prompt("除去するアレルゲンを入力してください(例: 卵 / そば / ピーナッツ)");
+    const allergen = (a ?? "").trim();
+    if (!allergen) return;
+    setRemovals((p) => ({ ...p, [`${date}:${allergen}`]: p[`${date}:${allergen}`] ?? { menu: "", note: "" } }));
+  }
+
+  async function removeAllergen(key: string) {
+    const [d0, allergen] = key.split(":");
+    const existing = days.find(
+      (x) => x.menu_date === d0 && x.food_type === "allergy_removed" && x.removal_kind === allergen && x.meal_slot === "lunch",
+    );
+    if (existing) {
+      const supabase = createClient();
+      const { error: e } = await supabase.rpc("delete_menu_day", { p_id: existing.id });
+      if (e) {
+        setError(e.message);
+        return;
+      }
+      setReloadToken((t) => t + 1);
+    } else {
+      setRemovals((p) => {
+        const n = { ...p };
+        delete n[key];
+        return n;
+      });
     }
   }
 
@@ -334,9 +400,58 @@ function MenuEditContent() {
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-slate-400">
-                  ※除去食(卵除去等)の編集は今後追加します。栄養価・材料の詳細入力も順次対応します。
-                </p>
+                {/* 除去食(アレルゲン別) */}
+                <div className="mt-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-amber-800">除去食(アレルゲン別・昼食)</h4>
+                    <button
+                      onClick={addAllergen}
+                      className="rounded-lg border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                    >
+                      ＋ 除去食を追加
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    卵・そば・ピーナッツ等の除去食の昼食メニューと除去・代替内容。園側の日別ビュー・食数ボードに表示されます(保護者公開はアレルギー管理実装後)。
+                  </p>
+                  {Object.keys(removals).filter((k) => k.startsWith(`${date}:`)).length === 0 ? (
+                    <p className="text-xs text-slate-400">この日の除去食はありません。</p>
+                  ) : (
+                    Object.keys(removals)
+                      .filter((k) => k.startsWith(`${date}:`))
+                      .map((k) => {
+                        const allergen = k.slice(date.length + 1);
+                        return (
+                          <div key={k} className="rounded-lg border border-amber-200 bg-white p-2">
+                            <div className="mb-1 flex items-center justify-between">
+                              <span className="text-sm font-semibold text-amber-800">{allergen} 除去</span>
+                              <button onClick={() => removeAllergen(k)} className="text-xs text-red-500 hover:underline">
+                                削除
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                              <textarea
+                                value={removals[k]?.menu ?? ""}
+                                onChange={(e) => setRemovals((p) => ({ ...p, [k]: { ...p[k], menu: e.target.value } }))}
+                                rows={2}
+                                placeholder="昼食(除去対応メニュー)"
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-sky-400 focus:outline-none"
+                              />
+                              <textarea
+                                value={removals[k]?.note ?? ""}
+                                onChange={(e) => setRemovals((p) => ({ ...p, [k]: { ...p[k], note: e.target.value } }))}
+                                rows={2}
+                                placeholder="除去・代替内容(例: 卵を除き豆腐で代替)"
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-sky-400 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-400">※栄養価・材料の詳細入力(3群)は順次対応します。</p>
               </>
             )}
           </div>
