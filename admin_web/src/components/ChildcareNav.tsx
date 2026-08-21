@@ -46,8 +46,10 @@ export function ChildcareNav() {
   // 対象施設リスト(supportOffices)は null=未取得/取得失敗 を意味し、その場合は安全側でタブを表示する。
   const [childcareOffices, setChildcareOffices] = useState<ChildcareOffice[]>([]);
   const [supportOffices, setSupportOffices] = useState<ChildcareOffice[] | null>(null);
-  // 重要事項アラート(274)。どのページでも未対応の重要事項に気づけるよう、ナビ下に赤バーで表示。
-  const [alerts, setAlerts] = useState<{ alert_type: string; label: string; cnt: number; href: string }[]>([]);
+  // 重要事項アラート(274/277)。level=action→赤バー(要対応)/info→青バー(お知らせ)。
+  const [alerts, setAlerts] = useState<
+    { alert_type: string; label: string; cnt: number; href: string; level: string }[]
+  >([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +100,8 @@ export function ChildcareNav() {
     const supabase = createClient();
     async function fetchAlerts() {
       const { data } = await supabase.rpc("fetch_childcare_alerts_for_office", { p_office_id: effectiveOffice });
-      if (!cancelled) setAlerts((data ?? []) as { alert_type: string; label: string; cnt: number; href: string }[]);
+      if (!cancelled)
+        setAlerts((data ?? []) as { alert_type: string; label: string; cnt: number; href: string; level: string }[]);
     }
     void fetchAlerts();
     const timer = setInterval(fetchAlerts, 60000);
@@ -149,18 +152,36 @@ export function ChildcareNav() {
           })}
         </nav>
       </div>
-      {alerts.length > 0 && (
+      {alerts.filter((a) => a.level === "action").length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2">
-          <span className="text-sm font-bold text-red-700">⚠ 未対応の重要事項:</span>
-          {alerts.map((a) => (
-            <Link
-              key={a.alert_type}
-              href={`${a.href}${suffix}`}
-              className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100"
-            >
-              {a.label} <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs text-white">{a.cnt}</span>
-            </Link>
-          ))}
+          <span className="text-sm font-bold text-red-700">⚠ 対応が必要:</span>
+          {alerts
+            .filter((a) => a.level === "action")
+            .map((a) => (
+              <Link
+                key={a.alert_type}
+                href={`${a.href}${suffix}`}
+                className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100"
+              >
+                {a.label} <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs text-white">{a.cnt}</span>
+              </Link>
+            ))}
+        </div>
+      )}
+      {alerts.filter((a) => a.level === "info").length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-sky-200 bg-sky-50 px-6 py-2">
+          <span className="text-sm font-bold text-sky-700">🔔 お知らせ:</span>
+          {alerts
+            .filter((a) => a.level === "info")
+            .map((a) => (
+              <Link
+                key={a.alert_type}
+                href={`${a.href}${suffix}`}
+                className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-sky-700 shadow-sm hover:bg-sky-100"
+              >
+                {a.label} <span className="ml-1 rounded-full bg-sky-600 px-1.5 text-xs text-white">{a.cnt}</span>
+              </Link>
+            ))}
         </div>
       )}
     </>
