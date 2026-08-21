@@ -858,6 +858,30 @@ class GuardianService {
     }).toList();
   }
 
+  /// 除去食献立(276・保護者限定公開)。除去食提供中の児の保護者だけに、公開済み allergy_removed 献立を返す。
+  /// 該当外は空。removalKind=除去の種類(卵/そば等)、removalNote=除去・代替内容。
+  Future<List<({DateTime menuDate, String mealSlot, String menuText, String ingredients,
+      String? removalKind, String? removalNote})>> fetchAllergyMenuDaysForChild(
+      String childId, DateTime targetMonth) async {
+    final monthStart = DateTime(targetMonth.year, targetMonth.month, 1);
+    final rows = await _client.rpc('fetch_allergy_menu_days_for_child', params: {
+      'p_child_id': childId,
+      'p_target_month': '${monthStart.year.toString().padLeft(4, '0')}-${monthStart.month.toString().padLeft(2, '0')}-01',
+    });
+    return (rows as List).cast<Map<String, dynamic>>().map((m) {
+      final ing = m['ingredients'];
+      final ingText = (ing is Map && ing['text'] is String) ? ing['text'] as String : '';
+      return (
+        menuDate: DateTime.parse(m['menu_date'] as String),
+        mealSlot: m['meal_slot'] as String,
+        menuText: (m['menu_text'] as String?) ?? '',
+        ingredients: ingText,
+        removalKind: m['removal_kind'] as String?,
+        removalNote: m['removal_note'] as String?,
+      );
+    }).toList();
+  }
+
   /// 年齢区分(0歳..5歳)から保護者の献立food_typeを判定(縮退: 給食段階未実装のため年齢代替)。
   static String foodTypeForAgeGroup(String? ageGroup) {
     final g = int.tryParse((ageGroup ?? '').replaceAll(RegExp(r'[^0-9]'), ''));

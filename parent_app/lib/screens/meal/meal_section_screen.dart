@@ -27,6 +27,9 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
   final Map<String, String> _signedUrls = {};
   // 構造化献立(267/270): 日→区分→本文+材料。子の食種(年齢代替)で取得。
   List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})> _menuDays = const [];
+  // 除去食献立(276・保護者限定): 除去食提供中の児のみ。空なら非表示。
+  List<({DateTime menuDate, String mealSlot, String menuText, String ingredients, String? removalKind, String? removalNote})>
+      _allergyMenuDays = const [];
   // アレルギー除去食の同意(272/273): 同意待ち件数 / 同意履歴の有無。この区画をこの画面内に統合。
   int _pendingConsents = 0;
   bool _hasConsentHistory = false;
@@ -50,13 +53,15 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
       ]);
       final items = results[0] as List<_MenuItem>;
       final menuDays = results[1] as List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})>;
-      // 除去食の同意(件数のみ)。失敗しても献立表示は続行。
+      // 除去食の同意(件数のみ)+ 除去食献立。失敗しても通常献立表示は続行。
       try {
         final pending = await widget.guardianService.fetchPendingMealConsents(widget.child.childId);
         final history = await widget.guardianService.fetchMealConsentHistory(widget.child.childId);
+        final allergyMenu = await widget.guardianService.fetchAllergyMenuDaysForChild(widget.child.childId, _month);
         if (mounted) {
           _pendingConsents = pending.length;
           _hasConsentHistory = history.isNotEmpty;
+          _allergyMenuDays = allergyMenu;
         }
       } catch (_) {}
       // 画像は署名URLを先に取得してインライン表示する。
@@ -132,6 +137,10 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
             ] else ...[
               if (_pendingConsents > 0 || _hasConsentHistory) ...[
                 _consentEntry(),
+                const SizedBox(height: 24),
+              ],
+              if (_allergyMenuDays.isNotEmpty) ...[
+                _allergyMenuSection(),
                 const SizedBox(height: 24),
               ],
               _structuredSection(),
@@ -272,6 +281,106 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
             ),
           ],
       ],
+    );
+  }
+
+  // 除去食献立(276・保護者限定)。除去食提供中の児のみ表示。除去/代替内容を強調。
+  Widget _allergyMenuSection() {
+    final byDate =
+        <DateTime, List<({DateTime menuDate, String mealSlot, String menuText, String ingredients, String? removalKind, String? removalNote})>>{};
+    for (final d in _allergyMenuDays.where((e) => e.menuText.trim().isNotEmpty)) {
+      (byDate[d.menuDate] ??= []).add(d);
+    }
+    final dates = byDate.keys.toList()..sort();
+    if (dates.isEmpty) return const SizedBox.shrink();
+    // 除去の種類(卵/そば等)を集約して見出しに出す。
+    final kinds = _allergyMenuDays
+        .map((e) => e.removalKind)
+        .where((k) => k != null && k.trim().isNotEmpty)
+        .map((k) => k!)
+        .toSet()
+        .join('・');
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warmOrange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.warmOrange.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.no_meals_rounded, size: 18, color: AppColors.warmOrange),
+              const SizedBox(width: 6),
+              const Text('お子さまの除去食献立', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              if (kinds.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: AppColors.warmOrange, borderRadius: BorderRadius.circular(20)),
+                  child: Text('$kinds 除去',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text('園でお子さま用に用意する除去・代替の献立です。',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          for (final date in dates) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${date.month}/${date.day}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  for (final s in (byDate[date]!..sort((a, b) =>
+                      (_slotOrder[a.mealSlot] ?? 9).compareTo(_slotOrder[b.mealSlot] ?? 9))))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 76,
+                            child: Text(_slotLabels[s.mealSlot] ?? s.mealSlot,
+                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.menuText, style: const TextStyle(fontSize: 13, height: 1.3)),
+                                if (s.ingredients.trim().isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text('材料: ${s.ingredients}',
+                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3)),
+                                  ),
+                                if (s.removalNote != null && s.removalNote!.trim().isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text('除去・代替: ${s.removalNote}',
+                                        style: const TextStyle(
+                                            fontSize: 11, color: AppColors.warmOrange, fontWeight: FontWeight.w600, height: 1.3)),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
