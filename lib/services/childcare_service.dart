@@ -1500,6 +1500,15 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 本日の公開済み献立(267)。厨房ページで当日献立を表示。食種×区分。
+  Future<List<Map<String, dynamic>>> fetchPublishedMenuDay(String officeId, DateTime menuDate) async {
+    final rows = await _client.rpc('fetch_published_menu_day', params: {
+      'p_office_id': officeId,
+      'p_menu_date': dateOnly(menuDate),
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 食数の手動再算出(職員以上・ON施設)。
   Future<void> computeMealCounts(String officeId, DateTime businessDate) async {
     await _client.rpc('compute_meal_counts', params: {
