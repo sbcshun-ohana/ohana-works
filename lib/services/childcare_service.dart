@@ -1571,7 +1571,9 @@ class ChildcareService {
   }
 
   /// 当日の共通除去食/弁当持参/給食開始保留の対象児(厨房の誤配膳防止表示用)。
-  Future<List<({String childId, String childName, String? className, String? handling, List<String> targets})>>
+  /// consentStatus(275): 'ok'=保護者同意あり / 'waived'=経過措置 / 'pending'=同意待ち(弁当持参) / null=対象外。
+  Future<List<({String childId, String childName, String? className, String? handling, List<String> targets,
+      String? consentStatus})>>
       fetchDailyEliminationForOffice(String officeId, DateTime businessDate) async {
     final rows = await _client.rpc('fetch_daily_elimination_for_office', params: {
       'p_office_id': officeId,
@@ -1585,6 +1587,7 @@ class ChildcareService {
           className: r['class_name'] as String?,
           handling: r['handling'] as String?,
           targets: ((r['elimination_targets'] as List?) ?? const []).map((e) => e as String).toList(),
+          consentStatus: r['consent_status'] as String?,
         ),
     ];
   }

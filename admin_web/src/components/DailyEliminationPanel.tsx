@@ -10,6 +10,7 @@ type EliminationRow = {
   class_name: string | null;
   handling: string; // 'hold' / 'bento' / 'elimination'
   elimination_targets: string[] | null;
+  consent_status: string | null; // 'ok' / 'waived' / 'pending' / null (275)
 };
 
 type Summary = {
@@ -119,9 +120,15 @@ export function DailyEliminationPanel({ officeId }: { officeId: string }) {
               <span key={r.child_id} className="rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-800">
                 {r.child_name}
                 {r.class_name && `(${r.class_name})`}
+                {r.consent_status === "pending" && (
+                  <span className="ml-1 rounded bg-amber-600 px-1.5 py-0.5 text-xs font-bold text-white">同意待ち</span>
+                )}
               </span>
             ))}
           </div>
+          <p className="mt-1 text-xs text-slate-400">
+            「同意待ち」= 除去食の給食会議・保護者同意がまだのため、当面は弁当持参です(同意後に除去食提供へ)。
+          </p>
         </div>
       )}
 

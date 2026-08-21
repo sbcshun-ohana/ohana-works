@@ -35,7 +35,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
   String? _error;
   List<Map<String, dynamic>> _board = const [];
   List<Map<String, dynamic>> _changes = const [];
-  List<({String childId, String childName, String? className, String? handling, List<String> targets})> _special =
+  List<({String childId, String childName, String? className, String? handling, List<String> targets, String? consentStatus})> _special =
       const [];
   List<Map<String, dynamic>> _suspended = const [];
 
@@ -352,13 +352,17 @@ class _KitchenScreenState extends State<KitchenScreen> {
         ],
       );
 
-  Widget _chips(List<({String childId, String childName, String? className, String? handling, List<String> targets})> list) =>
+  Widget _chips(List<({String childId, String childName, String? className, String? handling, List<String> targets, String? consentStatus})> list) =>
       Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
           for (final s in list)
-            Chip(label: Text('${s.childName}${s.className != null ? '(${s.className})' : ''}')),
+            Chip(
+              label: Text('${s.childName}${s.className != null ? '(${s.className})' : ''}'
+                  '${s.consentStatus == 'pending' ? ' ・同意待ち' : ''}'),
+              backgroundColor: s.consentStatus == 'pending' ? AppColors.warmOrange.withValues(alpha: 0.12) : null,
+            ),
         ],
       );
 
