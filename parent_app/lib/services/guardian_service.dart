@@ -773,6 +773,47 @@ class GuardianService {
     });
   }
 
+  /// 給食会議の保護者同意待ち(272)。対象児の未同意の会議 + 提示する同意文言。該当児の保護者のみ。
+  Future<List<({String conferenceId, DateTime? heldOn, String? nutritionistName, String? eliminationPlan,
+      String? consentBody})>> fetchPendingMealConsents(String childId) async {
+    final rows = await _client.rpc('fetch_pending_meal_consents_for_child', params: {'p_child_id': childId});
+    return (rows as List)
+        .map((r) => (
+              conferenceId: r['conference_id'] as String,
+              heldOn: r['held_on'] != null ? DateTime.parse(r['held_on'] as String) : null,
+              nutritionistName: r['nutritionist_name'] as String?,
+              eliminationPlan: r['elimination_plan'] as String?,
+              consentBody: r['consent_body'] as String?,
+            ))
+        .toList();
+  }
+
+  /// 除去食同意の履歴(273)。過去に同意した記録(同意日・同意者名・同意文面・提供方針)。対象児の保護者のみ。
+  Future<List<({String id, DateTime agreedAt, String agreedGuardianName, String? consentText,
+      DateTime? heldOn, String? nutritionistName, String? eliminationPlan})>> fetchMealConsentHistory(
+      String childId) async {
+    final rows = await _client.rpc('fetch_meal_consents_for_child', params: {'p_child_id': childId});
+    return (rows as List)
+        .map((r) => (
+              id: r['id'] as String,
+              agreedAt: DateTime.parse(r['agreed_at'] as String),
+              agreedGuardianName: (r['agreed_guardian_name'] as String?) ?? '',
+              consentText: r['consent_text_snapshot'] as String?,
+              heldOn: r['held_on'] != null ? DateTime.parse(r['held_on'] as String) : null,
+              nutritionistName: r['nutritionist_name'] as String?,
+              eliminationPlan: r['elimination_plan'] as String?,
+            ))
+        .toList();
+  }
+
+  /// 給食会議の除去食提供に同意(272・不変記録)。同意時点の文言がスナップショットされる。
+  Future<void> submitMealConsent({required String conferenceId, required String agreedGuardianName}) async {
+    await _client.rpc('submit_meal_conference_consent', params: {
+      'p_conference_id': conferenceId,
+      'p_agreed_guardian_name': agreedGuardianName,
+    });
+  }
+
   /// 公開済みの献立・食育レター(264)。kind='menu'|'letter'。対象月は月初日(YYYY-MM-01)。
   Future<List<({String kind, String sourcePath, String? sourceFilename, String format, String? publishedAt})>>
       fetchPublishedMealMenu(String officeId, DateTime targetMonth) async {

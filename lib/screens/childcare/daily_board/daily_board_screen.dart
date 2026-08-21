@@ -94,6 +94,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
   Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
       _pickupChangeByChild = const {};
+  // 給食アレルギー対応(232 共通除去食/弁当/保留 + 271 給食停止)が必要な childId。行に「アレルギー対応」マークを出す。
+  Set<String> _allergyChildIds = const {};
 
   @override
   void initState() {
@@ -108,6 +110,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadMedication();
     _loadPickupChanges();
     _loadInfectionFlag();
+    _loadAllergyFlags();
     _subscribe();
     childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
   }
@@ -168,6 +171,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadMedication();
     _loadPickupChanges();
     _loadInfectionFlag();
+    _loadAllergyFlags();
     _subscribe();
   }
 
@@ -328,6 +332,24 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  // 給食アレルギー対応が必要な園児(共通除去食/弁当/保留 + 給食停止)を集約。失敗は非表示(安全側)。
+  Future<void> _loadAllergyFlags() async {
+    try {
+      final elim = await widget.service.fetchDailyEliminationForOffice(_officeId, _businessDate);
+      var susp = <Map<String, dynamic>>[];
+      try {
+        susp = await widget.service.fetchMealSuspendedChildren(_officeId);
+      } catch (_) {}
+      final ids = <String>{
+        ...elim.where((e) => e.handling != null).map((e) => e.childId),
+        ...susp.map((s) => s['child_id'] as String),
+      };
+      if (mounted) setState(() => _allergyChildIds = ids);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+  }
+
   Future<void> _reload() async {
     setState(_load);
     _loadSummary();
@@ -335,6 +357,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadAbsencePeriods();
     _loadMedication();
     _loadPickupChanges();
+    _loadAllergyFlags();
     await _rowsFuture;
   }
 
@@ -787,6 +810,25 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadSummary();
   }
 
+  // 給食アレルギー対応マーク(共通除去食/弁当/保留 or 給食停止の園児)。誤配膳防止のため名前横に表示。
+  Widget _allergyMark() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.punchClockOut.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.punchClockOut.withValues(alpha: 0.4)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.restaurant_rounded, size: 12, color: AppColors.punchClockOut),
+            SizedBox(width: 3),
+            Text('アレルギー対応',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.punchClockOut)),
+          ],
+        ),
+      );
+
   void _onDateChanged(DateTime d) {
     setState(() {
       _businessDate = d;
@@ -798,6 +840,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadAbsencePeriods();
     _loadMedication();
     _loadPickupChanges();
+    _loadAllergyFlags();
   }
 
   // 211: 紙書類の受領記録(AC-12)。一般職員可・記録成立でブロック解除の前提。
@@ -1157,6 +1200,10 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                           ),
                                           const SizedBox(width: 8),
                                           Text(row.className, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                          if (_allergyChildIds.contains(row.childId)) ...[
+                                            const SizedBox(width: 8),
+                                            _allergyMark(),
+                                          ],
                                         ],
                                       ),
                                       const SizedBox(height: 4),

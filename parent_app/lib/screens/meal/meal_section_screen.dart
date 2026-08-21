@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import 'meal_consent_screen.dart';
 
 /// 給食セクション(264・保護者)。公開済みの「今月の献立」と「食育レター」を閲覧する。
 /// 退避構成: 画像はインライン表示、PDF/Excel はタップで署名URL(5分間有効)を表示。
@@ -26,6 +27,9 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
   final Map<String, String> _signedUrls = {};
   // 構造化献立(267/270): 日→区分→本文+材料。子の食種(年齢代替)で取得。
   List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})> _menuDays = const [];
+  // アレルギー除去食の同意(272/273): 同意待ち件数 / 同意履歴の有無。この区画をこの画面内に統合。
+  int _pendingConsents = 0;
+  bool _hasConsentHistory = false;
 
   @override
   void initState() {
@@ -46,6 +50,15 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
       ]);
       final items = results[0] as List<_MenuItem>;
       final menuDays = results[1] as List<({DateTime menuDate, String mealSlot, String menuText, String ingredients})>;
+      // 除去食の同意(件数のみ)。失敗しても献立表示は続行。
+      try {
+        final pending = await widget.guardianService.fetchPendingMealConsents(widget.child.childId);
+        final history = await widget.guardianService.fetchMealConsentHistory(widget.child.childId);
+        if (mounted) {
+          _pendingConsents = pending.length;
+          _hasConsentHistory = history.isNotEmpty;
+        }
+      } catch (_) {}
       // 画像は署名URLを先に取得してインライン表示する。
       for (final it in items.where((e) => e.format == 'image')) {
         try {
@@ -92,7 +105,6 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final menus = _items.where((e) => e.kind == 'menu').toList();
     final letters = _items.where((e) => e.kind == 'letter').toList();
     return Scaffold(
       appBar: AppBar(title: const Text('給食')),
@@ -118,12 +130,68 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
               const SizedBox(height: 40),
               Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
             ] else ...[
+              if (_pendingConsents > 0 || _hasConsentHistory) ...[
+                _consentEntry(),
+                const SizedBox(height: 24),
+              ],
               _structuredSection(),
               const SizedBox(height: 24),
-              _section('献立ファイル(元データ)', menus, Icons.description_rounded),
-              const SizedBox(height: 24),
+              // 献立ファイル(元データ・Excel等)は保護者には非表示(俊指示 2026-08-21)。
               _section('食育レター', letters, Icons.menu_book_rounded),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // アレルギー除去食の同意(272/273)。給食セクション内の一区画として表示し、詳細/履歴は専用画面へ。
+  Widget _consentEntry() {
+    final pending = _pendingConsents > 0;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () async {
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => MealConsentScreen(guardianService: widget.guardianService, child: widget.child),
+          ),
+        );
+        _load();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: pending ? AppColors.warmOrange.withValues(alpha: 0.1) : AppColors.leafGreen.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: pending ? AppColors.warmOrange.withValues(alpha: 0.5) : AppColors.leafGreen.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(pending ? Icons.fact_check_rounded : Icons.check_circle_rounded,
+                color: pending ? AppColors.warmOrange : AppColors.leafGreen),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('アレルギー除去食の同意', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(
+                    pending ? '同意のお願いがあります。タップして確認・同意してください。' : '同意の記録を確認できます。',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            if (pending)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: AppColors.warmOrange, borderRadius: BorderRadius.circular(20)),
+                child: Text('$_pendingConsents',
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+              ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],
         ),
       ),

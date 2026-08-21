@@ -11,6 +11,7 @@ import '../enrollment/enrollment_form_screen.dart';
 import '../food_check/food_check_screen.dart';
 import '../meal/meal_section_screen.dart';
 import '../meal/allergy_incident_report_screen.dart';
+import '../meal/meal_consent_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
 import '../infection/return_notice_screen.dart';
@@ -50,6 +51,10 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   bool _mealSectionEnabled = false;
   // 給食管理(254)。ONのときグリッドに「アレルギー発症報告」を出す(271)。
   bool _mealMgmtEnabled = false;
+  // 給食会議の同意待ち(272)。あるときだけ上部に同意お願いカードを出す。
+  int _pendingMealConsents = 0;
+  // 除去食の同意(未同意 or 履歴あり)のとき、グリッドに「除去食の同意」入口を出す(272/273)。
+  bool _showMealConsentEntry = false;
 
   @override
   void initState() {
@@ -67,6 +72,26 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     try {
       final enabled = await widget.guardianService.isMealManagementEnabled(widget.child.officeId);
       if (mounted) setState(() => _mealMgmtEnabled = enabled);
+      if (enabled) _loadPendingMealConsents();
+    } catch (_) {
+      // 取得失敗時は非表示(安全側)。
+    }
+  }
+
+  Future<void> _loadPendingMealConsents() async {
+    try {
+      final pending = await widget.guardianService.fetchPendingMealConsents(widget.child.childId);
+      var hasHistory = false;
+      try {
+        final history = await widget.guardianService.fetchMealConsentHistory(widget.child.childId);
+        hasHistory = history.isNotEmpty;
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _pendingMealConsents = pending.length;
+          _showMealConsentEntry = pending.isNotEmpty || hasHistory;
+        });
+      }
     } catch (_) {
       // 取得失敗時は非表示(安全側)。
     }
@@ -233,6 +258,49 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     );
   }
 
+  // 給食会議の同意お願いカード(272・§7)。除去食提供の前提となる保護者同意。
+  Widget _mealConsentCard() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warmOrange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.warmOrange.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.restaurant_menu_rounded, color: AppColors.warmOrange),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('アレルギー除去食の提供について同意のお願いがあります',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('給食会議の内容をご確認のうえ、同意をお願いします。', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: () async {
+              final done = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => MealConsentScreen(guardianService: widget.guardianService, child: widget.child),
+                ),
+              );
+              if (done == true) _loadPendingMealConsents();
+            },
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+            label: const Text('内容を確認して同意する'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 入園時基本情報の案内カード(218・草案§8)。状態に応じて文言を変える。
   Widget _enrollmentFormCard() {
     final status = _enrollmentFormStatus!;
@@ -324,6 +392,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
                 if (_enrollmentFormStatus != null && _enrollmentFormStatus != 'approved')
                   _enrollmentFormCard(),
                 for (final c in _infectionCases) _infectionCaseCard(c),
+                if (_pendingMealConsents > 0) _mealConsentCard(),
                 Expanded(child: _buildGrid()),
               ],
             ),
@@ -412,8 +481,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
             ),
           ),
         ),
-      // 給食(264): 今月の献立・食育レター
-      if (_mealSectionEnabled)
+      // 給食(264): 今月の献立・食育レター(+除去食の同意 272/273 をこの中に統合)
+      if (_mealSectionEnabled || _showMealConsentEntry)
         _GridMenuItem(
           icon: Icons.restaurant_menu_rounded,
           color: AppColors.warmOrange,

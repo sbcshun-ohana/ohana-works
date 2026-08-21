@@ -9,6 +9,7 @@ const SUB_ITEMS = [
   { href: "/childcare/menus", label: "献立" },
   { href: "/childcare/menus/day", label: "日別ビュー" },
   { href: "/childcare/allergy-incidents", label: "アレルギー報告" },
+  { href: "/childcare/meal-conferences", label: "給食会議" },
 ];
 
 export function MealSubNav() {

@@ -112,7 +112,9 @@ export function ChildcareNav() {
           const active =
             pathname === item.href ||
             (item.href === MEAL_HREF &&
-              (pathname.startsWith("/childcare/menus") || pathname.startsWith("/childcare/allergy-incidents")));
+              (pathname.startsWith("/childcare/menus") ||
+                pathname.startsWith("/childcare/allergy-incidents") ||
+                pathname.startsWith("/childcare/meal-conferences")));
           return (
             <Link
               key={item.href}
