@@ -746,6 +746,33 @@ class GuardianService {
     }
   }
 
+  /// 給食管理(254)の機能フラグ。アレルギー発症報告の出し分けに使用。OFF/失敗は false。
+  Future<bool> isMealManagementEnabled(String officeId) async {
+    try {
+      final data = await _client.rpc('is_meal_management_enabled_for_office', params: {'p_office_id': officeId});
+      return data == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// アレルギー発症報告(271)。食べたもの・症状(必須)・発生日時・受診予定。→園の主任以上へ重要通知。
+  Future<void> submitAllergyIncidentReport({
+    required String childId,
+    String? eatenFood,
+    required String symptoms,
+    DateTime? occurredAt,
+    String? hospitalPlan,
+  }) async {
+    await _client.rpc('submit_allergy_incident_report', params: {
+      'p_child_id': childId,
+      'p_eaten_food': eatenFood,
+      'p_symptoms': symptoms,
+      'p_occurred_at': occurredAt?.toUtc().toIso8601String(),
+      'p_hospital_plan': hospitalPlan,
+    });
+  }
+
   /// 公開済みの献立・食育レター(264)。kind='menu'|'letter'。対象月は月初日(YYYY-MM-01)。
   Future<List<({String kind, String sourcePath, String? sourceFilename, String format, String? publishedAt})>>
       fetchPublishedMealMenu(String officeId, DateTime targetMonth) async {

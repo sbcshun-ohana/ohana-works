@@ -81,6 +81,8 @@ function ChildcareMealBoardContent() {
   const [menuDay, setMenuDay] = useState<
     { food_type: string; removal_kind: string | null; meal_slot: string; menu_text: string | null; removal_note: string | null }[]
   >([]);
+  // 給食停止中(弁当持参・アレルギー確認中)の園児。厨房が提供対象外を把握できるよう先頭に表示(271)。
+  const [suspended, setSuspended] = useState<{ child_id: string; child_name: string; note: string | null }[]>([]);
   const [adjRow, setAdjRow] = useState("");
   const [adjSlot, setAdjSlot] = useState("lunch");
   const [adjDelta, setAdjDelta] = useState("1");
@@ -118,6 +120,9 @@ function ChildcareMealBoardContent() {
     void supabase
       .rpc("fetch_published_menu_day", { p_office_id: selectedOffice, p_menu_date: businessDate })
       .then(({ data }) => setMenuDay((data ?? []) as typeof menuDay));
+    void supabase
+      .rpc("fetch_meal_suspended_children_for_office", { p_office_id: selectedOffice })
+      .then(({ data }) => setSuspended((data ?? []) as { child_id: string; child_name: string; note: string | null }[]));
   }, [selectedOffice, businessDate, reloadToken]);
 
   const run = useCallback(
@@ -295,6 +300,21 @@ function ChildcareMealBoardContent() {
         </p>
 
         {err && <p className="text-sm font-medium text-red-500">{err}</p>}
+
+        {suspended.length > 0 && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
+            <h3 className="text-sm font-bold text-red-700">🍱 給食停止中(弁当持参・アレルギー確認中) {suspended.length}名</h3>
+            <p className="mt-1 text-xs text-red-600">この園児には給食を提供しないでください(食数から除外)。</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {suspended.map((s) => (
+                <span key={s.child_id} className="rounded-lg bg-white px-3 py-1 text-sm font-semibold text-red-700 shadow-sm">
+                  {s.child_name}
+                  {s.note ? <span className="ml-1 text-xs font-normal text-slate-500">({s.note})</span> : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           <table className="w-full text-left text-sm">

@@ -110,7 +110,9 @@ export function ChildcareNav() {
         {items.map((item) => {
           // 給食管理タブは食数ボード/献立(サブナビ)いずれの配下でもアクティブ表示。
           const active =
-            pathname === item.href || (item.href === MEAL_HREF && pathname.startsWith("/childcare/menus"));
+            pathname === item.href ||
+            (item.href === MEAL_HREF &&
+              (pathname.startsWith("/childcare/menus") || pathname.startsWith("/childcare/allergy-incidents")));
           return (
             <Link
               key={item.href}

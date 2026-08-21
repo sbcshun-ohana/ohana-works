@@ -37,6 +37,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
   List<Map<String, dynamic>> _changes = const [];
   List<({String childId, String childName, String? className, String? handling, List<String> targets})> _special =
       const [];
+  List<Map<String, dynamic>> _suspended = const [];
 
   @override
   void initState() {
@@ -53,11 +54,16 @@ class _KitchenScreenState extends State<KitchenScreen> {
       final board = await widget.service.fetchMealBoard(widget.officeId, _date);
       final special = await widget.service.fetchDailyEliminationForOffice(widget.officeId, _date);
       final changes = await widget.service.fetchMealChanges(widget.officeId, _date);
+      List<Map<String, dynamic>> suspended = const [];
+      try {
+        suspended = await widget.service.fetchMealSuspendedChildren(widget.officeId);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
         _special = special;
         _changes = changes;
+        _suspended = suspended;
         _loading = false;
       });
     } catch (_) {
@@ -204,6 +210,29 @@ class _KitchenScreenState extends State<KitchenScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // 給食停止中(弁当持参・アレルギー確認中)。誤提供防止のため最上部に大きく表示(271)。
+        if (_suspended.isNotEmpty) ...[
+          _sectionTitle('給食停止中(弁当持参・アレルギー確認中)', AppColors.punchClockOut, _suspended.length),
+          ..._suspended.map((s) => Card(
+                color: AppColors.punchClockOut.withValues(alpha: 0.1),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      const Text('🍱  ', style: TextStyle(fontSize: 18)),
+                      Expanded(
+                        child: Text(
+                          '${s['child_name'] ?? ''}${(s['note'] != null && (s['note'] as String).isNotEmpty) ? '  (${s['note']})' : ''}',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                      ),
+                      const Text('給食提供なし', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.punchClockOut)),
+                    ],
+                  ),
+                ),
+              )),
+          const SizedBox(height: 16),
+        ],
         // 食数表
         Card(
           child: Padding(

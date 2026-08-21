@@ -38,6 +38,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
   bool _busy = false;
   String? _error;
   List<Map<String, dynamic>> _board = const [];
+  List<Map<String, dynamic>> _suspended = const [];
 
   @override
   void initState() {
@@ -52,9 +53,14 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
     });
     try {
       final board = await widget.service.fetchMealBoard(widget.officeId, _date);
+      List<Map<String, dynamic>> suspended = const [];
+      try {
+        suspended = await widget.service.fetchMealSuspendedChildren(widget.officeId);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
+        _suspended = suspended;
         _loading = false;
       });
     } catch (_) {
@@ -146,6 +152,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
           child: Text('9:31に自動算出された暫定値です。数字をタップで期限内変更(昼食10:00/午後14:00/朝9:30)、「承認」で確定。',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         ),
+        if (_suspended.isNotEmpty) _suspendedBanner(),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(8),
@@ -161,6 +168,41 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
       ],
     );
   }
+
+  Widget _suspendedBanner() => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFDECEC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF3B4B4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('🍱 給食停止中(弁当持参・アレルギー確認中) ${_suspended.length}名',
+                style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFC0392B))),
+            const SizedBox(height: 4),
+            const Text('この園児には給食を提供しないでください。', style: TextStyle(fontSize: 12, color: Color(0xFFC0392B))),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final s in _suspended)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                      '${s['child_name'] ?? ''}${(s['note'] != null && (s['note'] as String).isNotEmpty) ? ' (${s['note']})' : ''}',
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFC0392B)),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
 
   Widget _header() => Row(
         children: [

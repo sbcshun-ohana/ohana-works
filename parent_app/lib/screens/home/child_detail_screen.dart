@@ -10,6 +10,7 @@ import '../communication_book/communication_book_notice_list_screen.dart';
 import '../enrollment/enrollment_form_screen.dart';
 import '../food_check/food_check_screen.dart';
 import '../meal/meal_section_screen.dart';
+import '../meal/allergy_incident_report_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
 import '../infection/return_notice_screen.dart';
@@ -47,6 +48,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   bool _foodCheckEnabled = false;
   // 給食セクション(264)。施設フラグONのときグリッドに「給食」を出す。
   bool _mealSectionEnabled = false;
+  // 給食管理(254)。ONのときグリッドに「アレルギー発症報告」を出す(271)。
+  bool _mealMgmtEnabled = false;
 
   @override
   void initState() {
@@ -57,6 +60,16 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     _loadEnrollmentFormStatus();
     _loadFoodCheckEnabled();
     _loadMealSectionEnabled();
+    _loadMealMgmtEnabled();
+  }
+
+  Future<void> _loadMealMgmtEnabled() async {
+    try {
+      final enabled = await widget.guardianService.isMealManagementEnabled(widget.child.officeId);
+      if (mounted) setState(() => _mealMgmtEnabled = enabled);
+    } catch (_) {
+      // 取得失敗時は非表示(安全側)。
+    }
   }
 
   Future<void> _loadFoodCheckEnabled() async {
@@ -408,6 +421,21 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           onTap: () => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => MealSectionScreen(
+                guardianService: widget.guardianService,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      // アレルギー発症報告(271): 給食後の症状を園へ報告 → 園が給食停止(弁当持参)を判断
+      if (_mealMgmtEnabled)
+        _GridMenuItem(
+          icon: Icons.report_gmailerrorred_rounded,
+          color: AppColors.warmOrange,
+          label: 'アレルギー発症報告',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => AllergyIncidentReportScreen(
                 guardianService: widget.guardianService,
                 child: widget.child,
               ),
