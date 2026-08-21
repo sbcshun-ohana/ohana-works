@@ -46,6 +46,8 @@ export function ChildcareNav() {
   // 対象施設リスト(supportOffices)は null=未取得/取得失敗 を意味し、その場合は安全側でタブを表示する。
   const [childcareOffices, setChildcareOffices] = useState<ChildcareOffice[]>([]);
   const [supportOffices, setSupportOffices] = useState<ChildcareOffice[] | null>(null);
+  // 重要事項アラート(274)。どのページでも未対応の重要事項に気づけるよう、ナビ下に赤バーで表示。
+  const [alerts, setAlerts] = useState<{ alert_type: string; label: string; cnt: number; href: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +91,23 @@ export function ChildcareNav() {
   const supportVisible =
     supportOffices === null ? true : effectiveOffice ? supportOffices.some((o) => o.office_id === effectiveOffice) : true;
 
+  // 重要事項アラートを実効施設で取得。60秒ごとに自動更新し、対応済みで消える。
+  useEffect(() => {
+    if (!effectiveOffice) return;
+    let cancelled = false;
+    const supabase = createClient();
+    async function fetchAlerts() {
+      const { data } = await supabase.rpc("fetch_childcare_alerts_for_office", { p_office_id: effectiveOffice });
+      if (!cancelled) setAlerts((data ?? []) as { alert_type: string; label: string; cnt: number; href: string }[]);
+    }
+    void fetchAlerts();
+    const timer = setInterval(fetchAlerts, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [effectiveOffice]);
+
   const items = CHILDCARE_NAV_ITEMS.filter(
     (item) =>
       (item.href !== THERAPY_HREF || therapyVisible) &&
@@ -105,29 +124,45 @@ export function ChildcareNav() {
   const suffix = query ? `?${query}` : "";
 
   return (
-    <div className="border-b border-slate-200 bg-slate-50 px-6 py-2">
-      <nav className="flex gap-1">
-        {items.map((item) => {
-          // 給食管理タブは食数ボード/献立(サブナビ)いずれの配下でもアクティブ表示。
-          const active =
-            pathname === item.href ||
-            (item.href === MEAL_HREF &&
-              (pathname.startsWith("/childcare/menus") ||
-                pathname.startsWith("/childcare/allergy-incidents") ||
-                pathname.startsWith("/childcare/meal-conferences")));
-          return (
+    <>
+      <div className="border-b border-slate-200 bg-slate-50 px-6 py-2">
+        <nav className="flex gap-1">
+          {items.map((item) => {
+            // 給食管理タブは食数ボード/献立(サブナビ)いずれの配下でもアクティブ表示。
+            const active =
+              pathname === item.href ||
+              (item.href === MEAL_HREF &&
+                (pathname.startsWith("/childcare/menus") ||
+                  pathname.startsWith("/childcare/allergy-incidents") ||
+                  pathname.startsWith("/childcare/meal-conferences")));
+            return (
+              <Link
+                key={item.href}
+                href={`${item.href}${suffix}`}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  active ? "bg-white text-sky-700 shadow-sm" : "text-slate-500 hover:bg-white/60"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+      {alerts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2">
+          <span className="text-sm font-bold text-red-700">⚠ 未対応の重要事項:</span>
+          {alerts.map((a) => (
             <Link
-              key={item.href}
-              href={`${item.href}${suffix}`}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                active ? "bg-white text-sky-700 shadow-sm" : "text-slate-500 hover:bg-white/60"
-              }`}
+              key={a.alert_type}
+              href={`${a.href}${suffix}`}
+              className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100"
             >
-              {item.label}
+              {a.label} <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs text-white">{a.cnt}</span>
             </Link>
-          );
-        })}
-      </nav>
-    </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

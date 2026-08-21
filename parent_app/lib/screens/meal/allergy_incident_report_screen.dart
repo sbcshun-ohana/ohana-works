@@ -22,6 +22,7 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
   final _symptoms = TextEditingController();
   final _hospitalPlan = TextEditingController();
   DateTime _occurredAt = DateTime.now();
+  DateTime? _hospitalDate; // 受診予定日(任意・カレンダー選択)
   bool _submitting = false;
 
   @override
@@ -30,6 +31,28 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
     _symptoms.dispose();
     _hospitalPlan.dispose();
     super.dispose();
+  }
+
+  // 受診予定日(カレンダー)と受診予定(自由記載)を1つの文言にまとめる。両方任意。
+  String? _composeHospitalPlan() {
+    final parts = <String>[];
+    if (_hospitalDate != null) {
+      parts.add('${_hospitalDate!.year}年${_hospitalDate!.month}月${_hospitalDate!.day}日');
+    }
+    if (_hospitalPlan.text.trim().isNotEmpty) parts.add(_hospitalPlan.text.trim());
+    return parts.isEmpty ? null : parts.join(' / ');
+  }
+
+  Future<void> _pickHospitalDate() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _hospitalDate ?? now,
+      firstDate: now.subtract(const Duration(days: 3)),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    setState(() => _hospitalDate = date);
   }
 
   Future<void> _pickOccurredAt() async {
@@ -60,7 +83,7 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
         eatenFood: _eatenFood.text.trim().isEmpty ? null : _eatenFood.text.trim(),
         symptoms: _symptoms.text.trim(),
         occurredAt: _occurredAt,
-        hospitalPlan: _hospitalPlan.text.trim().isEmpty ? null : _hospitalPlan.text.trim(),
+        hospitalPlan: _composeHospitalPlan(),
       );
       if (!mounted) return;
       await showDialog<void>(
@@ -127,6 +150,25 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
             onPressed: _pickOccurredAt,
             icon: const Icon(Icons.schedule_rounded, size: 18),
             label: Text(occurredLabel),
+          ),
+          const SizedBox(height: 18),
+          const Text('受診予定日(任意)', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _pickHospitalDate,
+                icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                label: Text(_hospitalDate != null
+                    ? '${_hospitalDate!.year}年${_hospitalDate!.month}月${_hospitalDate!.day}日'
+                    : '日付を選択'),
+              ),
+              if (_hospitalDate != null)
+                TextButton(
+                  onPressed: () => setState(() => _hospitalDate = null),
+                  child: const Text('クリア'),
+                ),
+            ],
           ),
           const SizedBox(height: 18),
           const Text('受診予定(任意)', style: TextStyle(fontWeight: FontWeight.w700)),
