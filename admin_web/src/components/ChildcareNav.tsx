@@ -84,11 +84,16 @@ export function ChildcareNav() {
 
   // タブ切替後も選択中の施設(?office=)とクラス(?class=)を引き継ぐ。
   const office = searchParams.get("office");
-  // 現在の実効施設(ヘッダーの selectedOffice 導出と一致): ?office= が有効ならそれ、無ければ先頭施設。
+  // 現在の実効施設(useChildcareOffices の selectedOffice 導出と一致させる):
+  // ?office= が有効ならそれ、無ければ「大和オハナ保育園」を名前優先、無ければ先頭施設。
+  // ※先頭施設だけで判定するとページ本体(大和)とアラート集計の施設がズレてバーが出ない不具合になる。
   const effectiveOffice =
     office && childcareOffices.some((o) => o.office_id === office)
       ? office
-      : childcareOffices[0]?.office_id ?? office ?? null;
+      : childcareOffices.find((o) => o.office_name === "大和オハナ保育園")?.office_id ??
+        childcareOffices[0]?.office_id ??
+        office ??
+        null;
   // 支援保育タブ: 対象施設リスト未取得/失敗(null)なら表示、取得済みなら実効施設が対象に含まれるときのみ表示。
   const supportVisible =
     supportOffices === null ? true : effectiveOffice ? supportOffices.some((o) => o.office_id === effectiveOffice) : true;

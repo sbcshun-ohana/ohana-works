@@ -62,7 +62,7 @@ function MealConferencesContent() {
   const [formHeldOn, setFormHeldOn] = useState("");
   const [formNutritionist, setFormNutritionist] = useState("");
   const [formPlan, setFormPlan] = useState("");
-  const [formAttendees, setFormAttendees] = useState<string[]>([]);
+  const [formAttendees, setFormAttendees] = useState<string[]>([""]); // 出席者プルダウンの行(空=未選択)
   const [busy, setBusy] = useState(false);
 
   // テンプレ編集
@@ -103,13 +103,14 @@ function MealConferencesContent() {
     }
     setBusy(true);
     const supabase = createClient();
+    const attendees = formAttendees.filter(Boolean);
     const { error: e } = await supabase.rpc("create_meal_conference", {
       p_child_id: formChild,
       p_diagnosis_id: null,
       p_held_on: formHeldOn || null,
       p_nutritionist_name: formNutritionist || null,
       p_elimination_plan: formPlan || null,
-      p_attendee_employee_ids: formAttendees.length > 0 ? formAttendees : null,
+      p_attendee_employee_ids: attendees.length > 0 ? attendees : null,
     });
     setBusy(false);
     if (e) {
@@ -120,7 +121,7 @@ function MealConferencesContent() {
     setFormHeldOn("");
     setFormNutritionist("");
     setFormPlan("");
-    setFormAttendees([]);
+    setFormAttendees([""]);
     setReloadToken((t) => t + 1);
   }
 
@@ -239,22 +240,45 @@ function MealConferencesContent() {
               {staff.length === 0 ? (
                 <p className="text-xs text-slate-400">職員一覧を取得できませんでした。</p>
               ) : (
-                <div className="flex max-h-40 flex-wrap gap-x-4 gap-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  {staff.map((s) => (
-                    <label key={s.employee_id} className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={formAttendees.includes(s.employee_id)}
+                <div className="space-y-2">
+                  {formAttendees.map((selectedId, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={selectedId}
                         onChange={(e) =>
-                          setFormAttendees((prev) =>
-                            e.target.checked ? [...prev, s.employee_id] : prev.filter((id) => id !== s.employee_id),
-                          )
+                          setFormAttendees((prev) => prev.map((v, i) => (i === idx ? e.target.value : v)))
                         }
-                      />
-                      <span className="text-slate-700">{s.name}</span>
-                    </label>
+                        className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2"
+                      >
+                        <option value="">選択してください</option>
+                        {staff
+                          // 他の行で選択済みの職員は除外(重複防止)。自行の選択値は残す。
+                          .filter((s) => s.employee_id === selectedId || !formAttendees.includes(s.employee_id))
+                          .map((s) => (
+                            <option key={s.employee_id} value={s.employee_id}>
+                              {s.name}
+                            </option>
+                          ))}
+                      </select>
+                      {formAttendees.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setFormAttendees((prev) => prev.filter((_, i) => i !== idx))}
+                          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-400 hover:bg-slate-50"
+                          aria-label="この出席者を削除"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setFormAttendees((prev) => [...prev, ""])}
+                    className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                  >
+                    ＋ 出席者を追加
+                  </button>
                 </div>
               )}
             </div>
