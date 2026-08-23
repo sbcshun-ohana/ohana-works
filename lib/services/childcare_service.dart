@@ -1500,6 +1500,27 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 園で提供しない食材のアレルギー(272・台帳表示のみ・食数非連動)。allergen/severity/note。
+  Future<List<Map<String, dynamic>>> fetchChildAllergenAlerts(String childId) async {
+    final rows = await _client.rpc('fetch_child_allergen_alerts', params: {'p_child_id': childId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 非提供食材アレルギーの登録(272・主任以上)。severity: mild/severe/anaphylaxis|null。
+  Future<void> setChildAllergenAlert(String childId, String allergen, String? severity, String? note) async {
+    await _client.rpc('set_child_allergen_alert', params: {
+      'p_child_id': childId,
+      'p_allergen': allergen,
+      'p_severity': severity,
+      'p_note': note,
+    });
+  }
+
+  /// 非提供食材アレルギーの削除(272・主任以上)。
+  Future<void> deleteChildAllergenAlert(String id) async {
+    await _client.rpc('delete_child_allergen_alert', params: {'p_id': id});
+  }
+
   /// 給食停止中(弁当持参・アレルギー確認中)の園児一覧(271)。食数ボード/厨房で提供対象外を把握。
   Future<List<Map<String, dynamic>>> fetchMealSuspendedChildren(String officeId) async {
     final rows = await _client.rpc('fetch_meal_suspended_children_for_office', params: {

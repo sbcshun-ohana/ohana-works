@@ -33,6 +33,7 @@ class ChildRegisterTab extends StatefulWidget {
     required this.service,
     required this.childId,
     this.officeId,
+    this.isManager = false,
   });
 
   final ChildcareService service;
@@ -40,6 +41,9 @@ class ChildRegisterTab extends StatefulWidget {
 
   /// 入園予定クラスの推定表示に使う(未指定なら推定なし)。
   final String? officeId;
+
+  /// 主任以上のとき、非提供食材アレルギー(272)の追加・削除を許可する。
+  final bool isManager;
 
   @override
   State<ChildRegisterTab> createState() => _ChildRegisterTabState();
@@ -107,6 +111,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
   List<Map<String, dynamic>> _classHistory = const [];
   List<Map<String, dynamic>> _foodProgress = const [];
   Map<String, dynamic>? _mealStatus;
+  List<Map<String, dynamic>> _allergenAlerts = const []; // 園で提供しない食材アレルギー(272)
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -123,6 +128,11 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
     try {
       final register = await widget.service.fetchChildRegister(widget.childId);
       final classHistory = await widget.service.fetchChildClassHistory(widget.childId);
+      // 園で提供しない食材のアレルギー(272)。取得失敗は空(安全側)。
+      var allergenAlerts = const <Map<String, dynamic>>[];
+      try {
+        allergenAlerts = await widget.service.fetchChildAllergenAlerts(widget.childId);
+      } catch (_) {}
       // 食材チェック進捗(224)・給食状態(227): 施設フラグONのときだけ表示
       var foodProgress = const <Map<String, dynamic>>[];
       Map<String, dynamic>? mealStatus;
@@ -152,6 +162,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
           _classHistory = classHistory;
           _foodProgress = foodProgress;
           _mealStatus = mealStatus;
+          _allergenAlerts = allergenAlerts;
           _plannedClassLabel = planned;
           _isLoading = false;
         });
@@ -218,6 +229,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
                 ),
             ]),
           if (_mealStatus != null) _mealStatusCard(_mealStatus!),
+          _allergenAlertsCard(),
           if (_foodProgress.isNotEmpty)
             _card('食材チェック進捗(必須確認食材)', [
               for (final p in _foodProgress)
@@ -316,6 +328,157 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
         ],
       ),
     );
+  }
+
+  static const _severityLabels = {'mild': '軽度', 'severe': '重度', 'anaphylaxis': 'アナフィラキシー'};
+
+  /// 園で提供しない食材のアレルギー(272・台帳表示のみ・食数非連動)。主任以上は追加・削除可。
+  Widget _allergenAlertsCard() {
+    if (_allergenAlerts.isEmpty && !widget.isManager) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.deepOrange),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text('園で提供しない食材のアレルギー',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.deepOrange)),
+              ),
+              if (widget.isManager)
+                TextButton.icon(
+                  onPressed: _addAllergenAlert,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('追加'),
+                ),
+            ],
+          ),
+          const Text('ナッツ等、園で提供しない食材のアレルギーを記録します(緊急時把握用・給食の食数には連動しません)。',
+              style: TextStyle(fontSize: 11, color: Colors.grey)),
+          const SizedBox(height: 8),
+          if (_allergenAlerts.isEmpty)
+            const Text('登録はありません', style: TextStyle(fontSize: 13, color: Colors.grey))
+          else
+            for (final a in _allergenAlerts)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('${a['allergen'] ?? ''}',
+                          style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.deepOrange)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (a['severity'] != null)
+                            Text(_severityLabels[a['severity']] ?? '${a['severity']}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          if (a['note'] != null && (a['note'] as String).isNotEmpty)
+                            Text('${a['note']}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                        ],
+                      ),
+                    ),
+                    if (widget.isManager)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.grey),
+                        onPressed: () => _deleteAllergenAlert(a['id'] as String),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addAllergenAlert() async {
+    final allergenCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    String? severity;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('非提供食材アレルギーの追加', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: allergenCtrl,
+                decoration: const InputDecoration(labelText: '食材・物質(必須)', hintText: '例: ナッツ / 落花生'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: severity,
+                decoration: const InputDecoration(labelText: '重症度(任意)'),
+                items: const [
+                  DropdownMenuItem(value: 'mild', child: Text('軽度')),
+                  DropdownMenuItem(value: 'severe', child: Text('重度')),
+                  DropdownMenuItem(value: 'anaphylaxis', child: Text('アナフィラキシー')),
+                ],
+                onChanged: (v) => setLocal(() => severity = v),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(labelText: 'メモ(任意)', hintText: '例: 微量でも反応・エピペン携帯'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('登録')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    if (allergenCtrl.text.trim().isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('食材を入力してください')));
+      return;
+    }
+    try {
+      await widget.service.setChildAllergenAlert(
+          widget.childId, allergenCtrl.text.trim(), severity, noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('登録に失敗しました: $e')));
+    }
+  }
+
+  Future<void> _deleteAllergenAlert(String id) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: const Text('この非提供食材アレルギーを削除しますか?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.service.deleteChildAllergenAlert(id);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除に失敗しました: $e')));
+    }
   }
 
   Widget _card(String title, List<Widget> children) {

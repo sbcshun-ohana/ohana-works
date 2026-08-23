@@ -268,6 +268,7 @@ class _ChildRegisterListScreenState extends State<ChildRegisterListScreen> {
             officeId: widget.officeId,
             businessDate: widget.businessDate,
             openRegisterTab: true,
+            isManager: widget.isManager,
           ),
         ),
       ],

@@ -69,6 +69,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         officeId: widget.officeId,
         businessDate: widget.businessDate,
         openRegisterTab: widget.openRegisterTab,
+        isManager: widget.isManager,
       ),
     );
   }
@@ -85,6 +86,7 @@ class ChildDetailBody extends StatefulWidget {
     required this.officeId,
     required this.businessDate,
     this.openRegisterTab = false,
+    this.isManager = false,
   });
 
   final ChildcareService service;
@@ -92,6 +94,7 @@ class ChildDetailBody extends StatefulWidget {
   final String officeId;
   final DateTime businessDate;
   final bool openRegisterTab;
+  final bool isManager;
 
   @override
   State<ChildDetailBody> createState() => _ChildDetailBodyState();
@@ -161,6 +164,7 @@ class _ChildDetailBodyState extends State<ChildDetailBody> {
                       service: widget.service,
                       childId: widget.childId,
                       officeId: widget.officeId,
+                      isManager: widget.isManager,
                     ),
                   ],
                 ),
