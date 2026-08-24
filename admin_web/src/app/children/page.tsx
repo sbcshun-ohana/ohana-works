@@ -59,6 +59,7 @@ function ChildcareChildrenPageContent() {
   const [weeklyRow, setWeeklyRow] = useState<ChildMasterRow | null>(null);
   const [developmentRow, setDevelopmentRow] = useState<ChildMasterRow | null>(null);
   const [developmentEnabled, setDevelopmentEnabled] = useState(false);
+  const [kahai, setKahai] = useState<Record<string, boolean>>({}); // child_id→加配(個人案対象)
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -101,7 +102,22 @@ function ChildcareChildrenPageContent() {
         }
         setRows((data ?? []) as ChildMasterRow[]);
       });
+    // 加配(個人案対象)フラグ(290)。指導計画の個人案対象判定に使用。
+    supabase
+      .rpc("fetch_child_kahai_flags", { p_office_id: selectedOffice })
+      .then(({ data }) => {
+        const m: Record<string, boolean> = {};
+        for (const r of (data ?? []) as { child_id: string; individual_plan_target: boolean }[]) m[r.child_id] = r.individual_plan_target;
+        setKahai(m);
+      });
   }, [selectedOffice, reloadToken]);
+
+  async function toggleKahai(childId: string, on: boolean) {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_child_individual_plan_target", { p_child_id: childId, p_on: on });
+    if (error) { alert(`設定できません: ${error.message}`); return; }
+    setKahai((prev) => ({ ...prev, [childId]: on }));
+  }
 
   const classOrder = classOrderIndex(classes);
   // 入園予定(仮登録)は本体の表と分けて表示する(クラス未所属・基本情報未入力のため)
@@ -384,6 +400,19 @@ function ChildcareChildrenPageContent() {
                               className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
                             >
                               期間設定
+                            </button>
+                          )}
+                          {isManager && !isWithdrawn && (
+                            <button
+                              onClick={() => toggleKahai(row.child_id, !kahai[row.child_id])}
+                              className={`rounded-lg border px-3 py-1 text-xs font-medium ${
+                                kahai[row.child_id]
+                                  ? "border-violet-400 bg-violet-50 text-violet-700"
+                                  : "border-slate-300 text-slate-500 hover:bg-slate-100"
+                              }`}
+                              title="加配(個人案の対象。3〜5歳児で加配の場合は月案に個人案が必要)"
+                            >
+                              加配{kahai[row.child_id] ? "：対象" : ""}
                             </button>
                           )}
                           <button

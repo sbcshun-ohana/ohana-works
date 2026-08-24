@@ -60,7 +60,7 @@ function GuidancePlansContent() {
   const [plans, setPlans] = useState<PlanListRow[]>([]);
   const [templates, setTemplates] = useState<{ id: string; plan_type: string; age_variant: string | null; title: string; is_published: boolean }[]>([]);
   const [detail, setDetail] = useState<PlanDetail | null>(null);
-  const [children, setChildren] = useState<{ child_id: string; display_name: string; class_id: string | null }[]>([]);
+  const [individualTargets, setIndividualTargets] = useState<{ child_id: string; display_name: string; is_kahai: boolean }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -74,17 +74,15 @@ function GuidancePlansContent() {
     let cancelled = false;
     void (async () => {
       const supabase = createClient();
-      const [{ data: adminData }, { data: cls }, { data: pl }, { data: ch }] = await Promise.all([
+      const [{ data: adminData }, { data: cls }, { data: pl }] = await Promise.all([
         supabase.rpc("is_childcare_admin", { target_office_id: selectedOffice }),
         supabase.rpc("fetch_childcare_classes", { p_office_id: selectedOffice }),
         supabase.rpc("fetch_guidance_plans_for_office", { p_office_id: selectedOffice, p_fiscal_year: fiscalYear, p_plan_type: null }),
-        supabase.rpc("fetch_children_for_office_master", { p_office_id: selectedOffice }),
       ]);
       if (cancelled) return;
       setIsAdmin(adminData === true);
       setClasses((cls ?? []) as ClassRow[]);
       setPlans((pl ?? []) as PlanListRow[]);
-      setChildren((ch ?? []).map((c: Record<string, unknown>) => ({ child_id: c.child_id as string, display_name: c.display_name as string, class_id: (c.class_id as string) ?? null })));
       if (adminData === true) {
         const { data: t } = await supabase.rpc("fetch_guidance_plan_templates");
         if (!cancelled) setTemplates((t ?? []) as typeof templates);
@@ -122,6 +120,12 @@ function GuidancePlansContent() {
     d.plan.evaluation = d.plan.evaluation ?? {};
     setDetail(d);
     setSavedAt(null);
+    if (d.plan.plan_type === "monthly") {
+      const { data: tg } = await supabase.rpc("fetch_guidance_individual_targets", { p_plan_id: id });
+      setIndividualTargets((tg ?? []) as { child_id: string; display_name: string; is_kahai: boolean }[]);
+    } else {
+      setIndividualTargets([]);
+    }
   }
 
   // 本文/評価の自動保存(デバウンス)。
@@ -258,7 +262,7 @@ function GuidancePlansContent() {
         </section>
 
         {/* エディタ */}
-        {detail && <PlanEditor detail={detail} isManager={isManager} isAdmin={isAdmin} childList={children}
+        {detail && <PlanEditor detail={detail} isManager={isManager} isAdmin={isAdmin} individualTargets={individualTargets}
           savedAt={savedAt} onField={setField} onInsert={insertExample} onSaveIndividual={saveIndividual}
           onClose={() => setDetail(null)}
           onSubmit={() => runAction(async (s) => await s.rpc("submit_guidance_plan", { p_id: detail.plan.id }), "申請しました")}
@@ -274,7 +278,7 @@ function GuidancePlansContent() {
 
 function PlanEditor(props: {
   detail: PlanDetail; isManager: boolean; isAdmin: boolean; busy: boolean; savedAt: string | null;
-  childList: { child_id: string; display_name: string; class_id: string | null }[];
+  individualTargets: { child_id: string; display_name: string; is_kahai: boolean }[];
   onField: (s: string, k: string, v: string) => void;
   onInsert: (s: string, k: string, v: string) => void;
   onSaveIndividual: (childId: string, content: Record<string, string>) => void;
@@ -283,7 +287,7 @@ function PlanEditor(props: {
   const { detail, isManager, isAdmin } = props;
   const p = detail.plan;
   const st = p.status;
-  const targetChildren = p.plan_type === "monthly" && p.class_id ? props.childList.filter((c) => c.class_id === p.class_id) : [];
+  const targetChildren = props.individualTargets;
 
   return (
     <section className="space-y-4 rounded-2xl border-2 border-sky-200 bg-white p-5 shadow-sm">
