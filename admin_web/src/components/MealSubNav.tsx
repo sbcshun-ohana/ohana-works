@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 // 給食管理の内部サブナビ。食数ボード/献立/(将来: 検食チェック等)を1つの「給食管理」内で振り分ける。
 const SUB_ITEMS = [
   { href: "/childcare/meal-board", label: "食数ボード" },
+  { href: "/childcare/meal-summary", label: "食数集計" },
   { href: "/childcare/meal-photos", label: "給食写真" },
   { href: "/childcare/menus", label: "献立" },
   { href: "/childcare/menus/day", label: "日別ビュー" },
