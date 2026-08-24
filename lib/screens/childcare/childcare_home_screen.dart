@@ -13,6 +13,7 @@ import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
 import 'daily_board/daily_board_screen.dart';
+import 'guidance/guidance_plans_screen.dart';
 import 'health/temperature_screen.dart';
 import 'incident/incident_list_screen.dart';
 import 'staff_messages/staff_message_list_screen.dart';
@@ -37,6 +38,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
   final DateTime _businessDate = DateTime.now();
   bool _internalNotesEnabled = false;
   bool _incidentEnabled = false;
+  bool _guidancePlansEnabled = false;
   int _incidentOpenCount = 0;
   // 園内連絡(156): 自分宛て未確認件数(タイルバッジ+ログイン後バナー)。
   int _staffMessageUnack = 0;
@@ -111,6 +113,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
     if (office == null) return;
     final enabled = await widget.service.isChildInternalNotesEnabledForOffice(office.officeId);
     final incident = await widget.service.isIncidentReportsEnabledForOffice(office.officeId);
+    final guidance = await widget.service.isGuidancePlansEnabledForOffice(office.officeId);
     final openCount = incident && office.isManager
         ? await widget.service.countOpenIncidentReports(office.officeId)
         : 0;
@@ -118,6 +121,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
       setState(() {
         _internalNotesEnabled = enabled;
         _incidentEnabled = incident;
+        _guidancePlansEnabled = guidance;
         _incidentOpenCount = openCount;
       });
     }
@@ -297,6 +301,18 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
                 color: AppColors.punchClockOut,
                 label: _incidentOpenCount > 0 ? 'ヒヤリハット・事故報告(未$_incidentOpenCount)' : 'ヒヤリハット・事故報告',
                 onTap: () => _push(IncidentListScreen(
+                  service: widget.service,
+                  officeId: office.officeId,
+                  isManager: office.isManager,
+                )),
+              ),
+            // 指導計画(287-298): guidance_plans_enabled がONの施設のみ。一般職員がiPadで作成。
+            if (_guidancePlansEnabled)
+              _HomeTile(
+                icon: Icons.event_note_rounded,
+                color: AppColors.leafGreen,
+                label: '指導計画',
+                onTap: () => _push(GuidancePlansScreen(
                   service: widget.service,
                   officeId: office.officeId,
                   isManager: office.isManager,

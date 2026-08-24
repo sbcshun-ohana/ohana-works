@@ -1500,6 +1500,77 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  // ===== 指導計画・保育安全計画(287-297)=====
+  Future<bool> isGuidancePlansEnabledForOffice(String officeId) async {
+    try {
+      final d = await _client.rpc('is_guidance_plans_enabled_for_office', params: {'p_office_id': officeId});
+      return d == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchGuidancePlansForOffice(String officeId, int fiscalYear, {String? planType}) async {
+    final rows = await _client.rpc('fetch_guidance_plans_for_office',
+        params: {'p_office_id': officeId, 'p_fiscal_year': fiscalYear, 'p_plan_type': planType});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<String> ensureGuidancePlan(String officeId, String? classId, String planType, int fiscalYear,
+      {int? month, DateTime? weekStart}) async {
+    final id = await _client.rpc('ensure_guidance_plan', params: {
+      'p_office_id': officeId,
+      'p_class_id': classId,
+      'p_plan_type': planType,
+      'p_fiscal_year': fiscalYear,
+      'p_month': month,
+      'p_week_start': weekStart != null ? dateOnly(weekStart) : null,
+    });
+    return id as String;
+  }
+
+  Future<Map<String, dynamic>> fetchGuidancePlan(String id) async {
+    final d = await _client.rpc('fetch_guidance_plan', params: {'p_id': id});
+    return (d as Map).cast<String, dynamic>();
+  }
+
+  Future<void> saveGuidancePlanContent(String id, Map<String, dynamic> content) async {
+    await _client.rpc('save_guidance_plan_content', params: {'p_id': id, 'p_content': content});
+  }
+
+  Future<void> saveGuidancePlanEvaluation(String id, Map<String, dynamic> evaluation) async {
+    await _client.rpc('save_guidance_plan_evaluation', params: {'p_id': id, 'p_evaluation': evaluation});
+  }
+
+  Future<void> upsertGuidancePlanIndividual(String planId, String childId, Map<String, dynamic> content) async {
+    await _client.rpc('upsert_guidance_plan_individual',
+        params: {'p_plan_id': planId, 'p_child_id': childId, 'p_content': content});
+  }
+
+  Future<List<Map<String, dynamic>>> fetchGuidanceIndividualTargets(String planId) async {
+    final rows = await _client.rpc('fetch_guidance_individual_targets', params: {'p_plan_id': planId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> submitGuidancePlan(String id) async => _client.rpc('submit_guidance_plan', params: {'p_id': id});
+  Future<void> chiefCheckGuidancePlan(String id) async => _client.rpc('chief_check_guidance_plan', params: {'p_id': id});
+  Future<void> approveGuidancePlan(String id) async => _client.rpc('approve_guidance_plan', params: {'p_id': id});
+  Future<void> rejectGuidancePlan(String id, String reason) async =>
+      _client.rpc('reject_guidance_plan', params: {'p_id': id, 'p_reason': reason});
+  Future<void> copyPreviousGuidancePlan(String id) async => _client.rpc('copy_previous_guidance_plan', params: {'p_id': id});
+
+  /// AI下書き生成(299/Edge Function generate-guidance-draft)。連絡帳・クラス活動・家庭連絡・前回計画を
+  /// 素材に各欄の下書き文を生成して返す。戻り値 {mock:bool, sections:{欄key:文}, source_counts:{...}}。
+  /// ANTHROPIC_API_KEY未設定時は mock:true(サンプル下書き)。
+  Future<Map<String, dynamic>> generateGuidanceDraft(String planId) async {
+    final res = await _client.functions.invoke('generate-guidance-draft', body: {'plan_id': planId});
+    final data = res.data;
+    if (data is Map && data['error'] != null) {
+      throw Exception(data['error'].toString());
+    }
+    return (data as Map).cast<String, dynamic>();
+  }
+
   /// 園で提供しない食材のアレルギー(272・台帳表示のみ・食数非連動)。allergen/severity/note。
   Future<List<Map<String, dynamic>>> fetchChildAllergenAlerts(String childId) async {
     final rows = await _client.rpc('fetch_child_allergen_alerts', params: {'p_child_id': childId});
