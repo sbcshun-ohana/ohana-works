@@ -290,6 +290,28 @@ function PlanEditor(props: {
   const st = p.status;
   const targetChildren = props.individualTargets;
 
+  async function exportExcel() {
+    const XLSX = await import("xlsx");
+    const val = (sk: string, key: string) => (isReflection(sk, key) ? p.evaluation[key] : p.content[key]) ?? "";
+    const period = p.month ? `${p.month}月` : p.week_start_date ? `${p.week_start_date}の週` : "";
+    const aoa: (string | number)[][] = [[detail.template.title], [`${p.fiscal_year}年度 ${period}`], []];
+    for (const sec of detail.template.sections) {
+      aoa.push([sec.label]);
+      for (const f of sec.fields) aoa.push([f.label, val(sec.key, f.key)]);
+      aoa.push([]);
+    }
+    if (detail.individual.length > 0) {
+      aoa.push(["個人案"], ["園児", "子どもの姿", "ねらい", "配慮・環境構成", "評価・反省"]);
+      for (const e of detail.individual)
+        aoa.push([e.child_name, e.content.kidsstate ?? "", e.content.aim ?? "", e.content.consideration ?? "", e.content.reflection ?? ""]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{ wch: 22 }, { wch: 40 }, { wch: 24 }, { wch: 24 }, { wch: 24 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "指導計画");
+    XLSX.writeFile(wb, `${detail.template.title}_${p.fiscal_year}${period ? "_" + period : ""}.xlsx`);
+  }
+
   return (
     <section className="space-y-4 rounded-2xl border-2 border-sky-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -304,6 +326,8 @@ function PlanEditor(props: {
           )}
           <button onClick={() => window.open(`/childcare/guidance-plans/print?id=${p.id}`, "_blank")}
             className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">印刷 / PDF</button>
+          <button onClick={exportExcel}
+            className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Excel</button>
           <button onClick={props.onClose} className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50">閉じる</button>
         </div>
       </div>
