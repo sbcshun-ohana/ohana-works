@@ -4,9 +4,8 @@
 // 職員向け個人日誌(§16)も同時生成する。外部送信データはfetch_ai_allowed_context()
 // (allowlist方式)で取得したものに限定する。
 //
-// 現時点ではANTHROPIC_API_KEY未登録のため、callAI()はモック実装(mockGenerate)を返す。
-// 事前準備(実施時): `supabase secrets set ANTHROPIC_API_KEY=<APIキー>`
-// 差し替え方法: callAI()内の「ここから下」のTODOをAnthropic Messages APIの実呼び出しに置き換えるだけでよい。
+// ANTHROPIC_API_KEY 設定時は Anthropic Messages API(claude-haiku)で実生成、未設定時はモック(mockGenerate)。
+// キー投入: `supabase secrets set ANTHROPIC_API_KEY=<APIキー> --project-ref <ref>`(ターミナル直接入力)。
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -85,9 +84,19 @@ function buildUserPrompt(
   });
 }
 
+// アクション別の指示文(userPromptのJSONに加えて、モデルに具体的なタスクを伝える)。
+const ACTION_GUIDE: Record<Action, string> = {
+  generate: "context の today_input(クラス活動・園児個別メモ)を基に、当日の連絡帳本文を新規作成してください。保護者からの連絡(guardian_message)には必ず返答を含めます。",
+  regenerate: "context の today_input を基に、当日の連絡帳本文を作り直してください。保護者からの連絡には必ず返答を含めます。",
+  shorten: "current_text を、意味・事実・数値を保ったまま半分程度の長さに要約してください。",
+  lengthen: "current_text を、新しい事実を追加せずに表現を膨らませて詳しくしてください。",
+  soften: "current_text を、よりやわらかく温かい表現に整えてください。内容は変えません。",
+  add_care: "current_text に、保護者への気遣いの一文を自然に一つ加えてください。他は変えません。",
+  clarify: "current_text の重要事項(持ち物・連絡・注意点)がより明確に伝わるよう整えてください。事実は変えません。",
+  admin_revise: "instruction の指示に従って current_text を修正してください。安全ルールは厳守します。",
+};
+
 // --- AIプロバイダ呼び出しの唯一の差し替えポイント ---
-// ANTHROPIC_API_KEY登録・実装後は、apiKeyが設定されている分岐の中身を
-// 実際のAnthropic Messages API呼び出しに置き換える。
 async function callAI(
   systemPrompt: string,
   userPrompt: string,
@@ -99,10 +108,42 @@ async function callAI(
   if (!apiKey) {
     return mockGenerate(action, context, currentText);
   }
-  // TODO: ANTHROPIC_API_KEY登録後に実装する。
-  // 例: https://api.anthropic.com/v1/messages へ systemPrompt/userPrompt を渡し、
-  // contact_text/journal_sectionsを組み立てて返す。
-  throw new Error("Anthropic API呼び出しは未実装です(現時点ではモックのみサポート)");
+  return generateWithAnthropic(apiKey, systemPrompt, userPrompt, action);
+}
+
+// Anthropic Messages API 実生成(analyze-menu-import / generate-guidance-draft と同型)。
+async function generateWithAnthropic(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  action: Action,
+): Promise<AIResult> {
+  const wantsJournal = action === "generate" || action === "regenerate";
+  const outputSpec = wantsJournal
+    ? `出力はJSONオブジェクトのみ: {"contact_text":"<保護者向け連絡帳本文>","journal_sections":{"fact":"<事実>","support":"<保育者の援助>","reaction":"<子どもの反応>","progress":"<育ち・経過>","consideration":"<配慮>","handover":"<引き継ぎ>"}}`
+    : `出力はJSONオブジェクトのみ: {"contact_text":"<修正後の保護者向け連絡帳本文>"}`;
+  const system = `${systemPrompt}\n\n【出力形式】\n${outputSpec}\n説明文・前置き・コードブロックは一切出力しないでください。`;
+  const user = `【入力(JSON)】\n${userPrompt}\n\n【今回のタスク】\n${ACTION_GUIDE[action]}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2000,
+      system,
+      messages: [{ role: "user", content: user }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Anthropic API error: ${res.status} ${await res.text()}`);
+  const json = await res.json();
+  const text = (json.content?.[0]?.text ?? "").trim();
+  const cleaned = text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  const parsed = JSON.parse(cleaned);
+  return {
+    contact_text: String(parsed.contact_text ?? ""),
+    journal_sections: wantsJournal ? ((parsed.journal_sections ?? null) as JournalSections | null) : null,
+  };
 }
 
 function mockGenerate(
