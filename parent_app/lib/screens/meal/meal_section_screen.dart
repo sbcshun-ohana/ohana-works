@@ -166,7 +166,7 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
                   icon: Icons.report_gmailerrorred_rounded,
                   color: AppColors.danger,
                   label: 'アレルギー発症報告',
-                  desc: '給食後の症状を園へ報告します',
+                  desc: 'ご家庭で食べたものの症状を園へ報告します',
                   onTap: () => Navigator.of(context).push<void>(MaterialPageRoute(
                     builder: (_) => AllergyIncidentReportScreen(guardianService: widget.guardianService, child: widget.child),
                   )),

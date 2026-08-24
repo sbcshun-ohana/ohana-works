@@ -4,7 +4,7 @@ import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 
-/// アレルギー発症報告(271・保護者)。給食後の症状を園へ報告する。
+/// アレルギー発症報告(271・保護者)。ご家庭で食べたものでアレルギー反応が出た場合に園へ報告する。
 /// 送信すると園の主任以上へ重要通知が届き、園が給食停止(弁当持参)の要否を判断する。
 /// 自動では給食は止まらない(§7.2)。
 class AllergyIncidentReportScreen extends StatefulWidget {
@@ -120,8 +120,8 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              '${widget.child.displayName}さんに給食後のアレルギー反応がみられた場合に報告してください。'
-              '送信すると園に通知が届きます。緊急時はまず園へお電話ください。',
+              '${widget.child.displayName}さんが、ご家庭で食べたものでアレルギー反応が出た場合に報告してください。'
+              '園が内容を確認し、給食での対応(除去等)を検討します。送信すると園に通知が届きます。緊急時はまず園へお電話ください。',
               style: const TextStyle(fontSize: 13, height: 1.5),
             ),
           ),
@@ -130,7 +130,7 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
           const SizedBox(height: 6),
           TextField(
             controller: _eatenFood,
-            decoration: const InputDecoration(hintText: '例: 給食の卵焼き / おやつのクッキー', border: OutlineInputBorder()),
+            decoration: const InputDecoration(hintText: '例: 卵焼き / 牛乳 / パン(ご家庭で食べたもの)', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 18),
           const Text('症状(必須)', style: TextStyle(fontWeight: FontWeight.w700)),
