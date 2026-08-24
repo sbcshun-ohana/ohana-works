@@ -270,6 +270,7 @@ function GuidancePlansContent() {
           onApprove={() => runAction(async (s) => await s.rpc("approve_guidance_plan", { p_id: detail.plan.id }), "承認しました")}
           onReject={() => { const r = window.prompt("差し戻し理由(必須)"); if (!r) return; void runAction(async (s) => await s.rpc("reject_guidance_plan", { p_id: detail.plan.id, p_reason: r }), "差し戻しました"); }}
           onCancel={() => { const r = window.prompt("承認取消の理由(必須)"); if (!r) return; void runAction(async (s) => await s.rpc("cancel_guidance_plan_approval", { p_id: detail.plan.id, p_reason: r }), "承認を取り消しました"); }}
+          onCopyPrevious={() => { if (!window.confirm("前回(前月/前週/前年度)の内容をコピーします。現在の入力は上書きされます。よろしいですか?")) return; void runAction(async (s) => await s.rpc("copy_previous_guidance_plan", { p_id: detail.plan.id }), "前回の内容をコピーしました"); }}
           busy={busy} />}
       </main>
     </div>
@@ -282,7 +283,7 @@ function PlanEditor(props: {
   onField: (s: string, k: string, v: string) => void;
   onInsert: (s: string, k: string, v: string) => void;
   onSaveIndividual: (childId: string, content: Record<string, string>) => void;
-  onClose: () => void; onSubmit: () => void; onChiefCheck: () => void; onApprove: () => void; onReject: () => void; onCancel: () => void;
+  onClose: () => void; onSubmit: () => void; onChiefCheck: () => void; onApprove: () => void; onReject: () => void; onCancel: () => void; onCopyPrevious: () => void;
 }) {
   const { detail, isManager, isAdmin } = props;
   const p = detail.plan;
@@ -297,6 +298,10 @@ function PlanEditor(props: {
         </h3>
         <div className="flex items-center gap-3">
           {props.savedAt && <span className="text-xs text-slate-400">{props.savedAt}</span>}
+          {st !== "approved" && (
+            <button onClick={props.onCopyPrevious} disabled={props.busy}
+              className="rounded-lg border border-violet-300 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50">前回コピー</button>
+          )}
           <button onClick={() => window.open(`/childcare/guidance-plans/print?id=${p.id}`, "_blank")}
             className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">印刷 / PDF</button>
           <button onClick={props.onClose} className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50">閉じる</button>
