@@ -30,6 +30,9 @@ class _CommunicationBookDetailScreenState extends State<CommunicationBookDetailS
   bool _isLoading = true;
   bool _isConfirmed = false;
   bool _isConfirming = false;
+  // 本日の給食(300): 当日の公開写真をサムネイルで導線表示。
+  List<({String id, String storagePath, String? caption})> _mealPhotos = const [];
+  final Map<String, String> _mealPhotoUrls = {};
 
   @override
   void initState() {
@@ -48,12 +51,39 @@ class _CommunicationBookDetailScreenState extends State<CommunicationBookDetailS
       entryId: widget.entryId,
       guardianId: widget.guardianId,
     ));
+    // 本日の給食写真(公開済み)。失敗しても連絡帳表示は続行。
+    try {
+      final photos = await widget.guardianService.fetchPublishedMealPhotos(entry.childId, entry.businessDate);
+      for (final p in photos) {
+        try {
+          _mealPhotoUrls[p.storagePath] = await widget.guardianService.mealPhotoSignedUrl(p.storagePath);
+        } catch (_) {}
+      }
+      _mealPhotos = photos;
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _entry = entry;
       _isConfirmed = confirmed;
       _isLoading = false;
     });
+  }
+
+  void _openMealPhoto(String url, String? caption) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(child: InteractiveViewer(child: Image.network(url))),
+            if ((caption ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(12), child: Text(caption!)),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmImportantMatter() async {
@@ -125,6 +155,31 @@ class _CommunicationBookDetailScreenState extends State<CommunicationBookDetailS
                     ],
                   ),
                 ),
+                if (_mealPhotos.isNotEmpty)
+                  _SectionCard(
+                    title: '本日の給食',
+                    child: SizedBox(
+                      height: 96,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _mealPhotos.length,
+                        separatorBuilder: (_, i) => const SizedBox(width: 8),
+                        itemBuilder: (_, i) {
+                          final p = _mealPhotos[i];
+                          final url = _mealPhotoUrls[p.storagePath];
+                          if (url == null) return const SizedBox(width: 96);
+                          return GestureDetector(
+                            onTap: () => _openMealPhoto(url, p.caption),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(url, width: 96, height: 96, fit: BoxFit.cover,
+                                  errorBuilder: (_, e, s) => const SizedBox(width: 96)),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 _SectionCard(
                   title: '検温',
                   child: Text(
