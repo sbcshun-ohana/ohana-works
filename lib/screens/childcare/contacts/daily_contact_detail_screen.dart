@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../models/childcare.dart';
@@ -68,14 +70,42 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
   final _adminCommentController = TextEditingController();
   final _supplyItemController = TextEditingController();
 
+  // 自動下書き保存(俊指示 2026-08-24): 入力を止めて約1.2秒後に静かに保存。
+  // _load中や再読込中は保存をスケジュールしない(_suppressAutosave)。
+  Timer? _autosaveTimer;
+  bool _suppressAutosave = true;
+  bool _dirty = false;
+  String? _autosaveStatus; // 「保存中…」/「下書き保存しました HH:mm」
+
   @override
   void initState() {
     super.initState();
+    for (final c in [_guardianController, _todayNotesController, _freeNotesController, _currentTextController]) {
+      c.addListener(_onEdit);
+    }
     _load();
   }
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
+    // 離脱時の最終フラッシュ(await不可のため fire-and-forget)。編集可能で未保存のときのみ。
+    // .then内が破棄後のコントローラを読まないよう、値を先にローカルへ取り出す。
+    if (_dirty && _canEditInput && _contact?.contactId != null) {
+      final cid = _contact!.contactId!;
+      final gm = _guardianController.text.trim();
+      final tn = _todayNotesController.text.trim();
+      final fn = _freeNotesController.text.trim();
+      final ct = _currentTextController.text;
+      final svc = widget.service;
+      svc
+          .updateDailyContactInput(cid,
+              guardianMessage: gm.isEmpty ? null : gm,
+              childTodayNotes: tn.isEmpty ? null : tn,
+              freeNotes: fn.isEmpty ? null : fn)
+          .then((_) => svc.saveCurrentText(cid, ct, isInitial: false))
+          .catchError((_) {});
+    }
     _guardianController.dispose();
     _todayNotesController.dispose();
     _freeNotesController.dispose();
@@ -85,7 +115,34 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
     super.dispose();
   }
 
+  // 編集検知 → デバウンスして自動保存。
+  void _onEdit() {
+    if (_suppressAutosave || !_canEditInput || _contact?.contactId == null) return;
+    _dirty = true;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 1200), _autosave);
+  }
+
+  // 静かに下書き保存(スナックバー・全画面リロードなし)。一覧チップだけ更新。
+  Future<void> _autosave() async {
+    if (!_dirty || !_canEditInput || _contact?.contactId == null || _isBusy) return;
+    if (mounted) setState(() => _autosaveStatus = '保存中…');
+    try {
+      await _saveInput();
+      _dirty = false;
+      widget.onChanged?.call();
+      if (mounted) {
+        final now = TimeOfDay.now();
+        setState(() => _autosaveStatus =
+            '下書き保存しました ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _autosaveStatus = '自動保存に失敗(手動で保存してください)');
+    }
+  }
+
   Future<void> _load() async {
+    _suppressAutosave = true; // 読込中の text 設定で自動保存が走らないように。
     setState(() => _isLoading = true);
     try {
       _myEmployeeId = await widget.service.fetchMyEmployeeId();
@@ -130,6 +187,8 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
+      _dirty = false;
+      _suppressAutosave = false; // 読込完了後はユーザー編集で自動保存を有効化。
     }
   }
 
@@ -482,11 +541,34 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                     Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)),
                   ],
                   const SizedBox(height: 24),
-                  if (_canEditInput)
-                    OutlinedButton(
-                      onPressed: _isBusy ? null : () => _run(_saveInput),
-                      child: const Text('下書き保存'),
+                  if (_canEditInput) ...[
+                    Row(
+                      children: [
+                        OutlinedButton(
+                          onPressed: _isBusy ? null : () => _run(_saveInput),
+                          child: const Text('今すぐ下書き保存'),
+                        ),
+                        const SizedBox(width: 12),
+                        if (_autosaveStatus != null)
+                          Flexible(
+                            child: Text(
+                              _autosaveStatus!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _autosaveStatus!.contains('失敗')
+                                    ? AppColors.punchClockOut
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text('入力は自動で下書き保存されます(戻っても保存済み)。',
+                          style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   if (_canSubmit)
                     ElevatedButton(onPressed: _isBusy ? null : _submit, child: const Text('申請する')),
