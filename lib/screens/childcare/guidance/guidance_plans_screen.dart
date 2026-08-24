@@ -242,7 +242,8 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
   }
 
   Widget _dashboardPanel() {
-    final nowMonth = DateTime.now().month;
+    // 「月案」列は上部プルダウンで選択中の月(_month)に連動させる(俊指示 2026-08-24)。
+    final selMonth = _month;
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
@@ -269,10 +270,10 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
-                  children: const [
-                    Expanded(flex: 3, child: Text('クラス', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-                    Expanded(flex: 3, child: Text('年間指導計画', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-                    Expanded(flex: 3, child: Text('今月の月案', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                  children: [
+                    const Expanded(flex: 3, child: Text('クラス', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                    const Expanded(flex: 3, child: Text('年間指導計画', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                    Expanded(flex: 3, child: Text('$selMonth月の月案', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
                   ],
                 ),
               ),
@@ -283,7 +284,7 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
                     children: [
                       Expanded(flex: 3, child: Text(c.className, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
                       Expanded(flex: 3, child: _statusCell(_planFor(c.classId, 'annual'), c.classId, 'annual', null)),
-                      Expanded(flex: 3, child: _statusCell(_planFor(c.classId, 'monthly', month: nowMonth), c.classId, 'monthly', nowMonth)),
+                      Expanded(flex: 3, child: _statusCell(_planFor(c.classId, 'monthly', month: selMonth), c.classId, 'monthly', selMonth)),
                     ],
                   ),
                 ),
@@ -722,7 +723,22 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
     final lookup = _fieldLookup();
     // テンプレに存在する欄のみ、テンプレ順で並べる。
     final ordered = lookup.keys.where((k) => sections.containsKey(k)).toList();
+    final selected = <String>{...ordered}; // 既定=全選択
     final applied = <String>{};
+    void applySelected(bool append) {
+      for (final key in ordered) {
+        if (!selected.contains(key)) continue;
+        final add = sections[key] as String? ?? '';
+        if (append) {
+          final cur = (_content[key] as String?) ?? '';
+          _setField(lookup[key]!.sectionKey, key, cur.trim().isEmpty ? add : '$cur\n$add');
+        } else {
+          _setField(lookup[key]!.sectionKey, key, add);
+        }
+        applied.add(key);
+      }
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -755,18 +771,34 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
                   decoration: BoxDecoration(color: AppColors.warmOrange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
                   child: const Text('※ サンプル下書きです(AIキー未設定)。キー設定後に実際の記録から生成されます。', style: TextStyle(fontSize: 12)),
                 ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('各欄ごとに「採用(置換)」か「追記」を選んでください。既存の入力は自分で書き換えできます。',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              // 全選択/全解除
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text('採用する欄にチェックを入れ、下の「選択を採用/追記」でまとめて反映できます。',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    ),
+                    TextButton(
+                      onPressed: () => setSheet(() {
+                        if (selected.length == ordered.length) {
+                          selected.clear();
+                        } else {
+                          selected
+                            ..clear()
+                            ..addAll(ordered);
+                        }
+                      }),
+                      child: Text(selected.length == ordered.length ? '全解除' : '全選択'),
+                    ),
+                  ],
                 ),
               ),
               Expanded(
                 child: ListView(
                   controller: scroll,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   children: [
                     for (final key in ordered)
                       _aiPreviewCard(
@@ -774,21 +806,37 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
                         current: (_content[key] as String?) ?? '',
                         proposal: sections[key] as String? ?? '',
                         applied: applied.contains(key),
-                        onAdopt: () {
-                          _setField(lookup[key]!.sectionKey, key, sections[key] as String? ?? '');
-                          setSheet(() => applied.add(key));
-                        },
-                        onAppend: () {
-                          final cur = (_content[key] as String?) ?? '';
-                          final add = sections[key] as String? ?? '';
-                          _setField(lookup[key]!.sectionKey, key, cur.trim().isEmpty ? add : '$cur\n$add');
-                          setSheet(() => applied.add(key));
-                        },
+                        checked: selected.contains(key),
+                        onToggle: () => setSheet(() => selected.contains(key) ? selected.remove(key) : selected.add(key)),
                       ),
-                    const SizedBox(height: 24),
-                    FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
-                    const SizedBox(height: 24),
                   ],
+                ),
+              ),
+              // 一括アクションバー
+              SafeArea(
+                top: false,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFDDE3E0)))),
+                  child: Row(
+                    children: [
+                      Text('${selected.length}件選択', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: selected.isEmpty ? null : () => setSheet(() => applySelected(true)),
+                        icon: const Icon(Icons.playlist_add, size: 18),
+                        label: const Text('選択を追記'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: selected.isEmpty ? null : () => setSheet(() => applySelected(false)),
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text('選択を採用(置換)'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -803,25 +851,31 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
     required String current,
     required String proposal,
     required bool applied,
-    required VoidCallback onAdopt,
-    required VoidCallback onAppend,
+    required bool checked,
+    required VoidCallback onToggle,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: applied ? AppColors.leafGreen : const Color(0xFFDDE3E0)),
+        border: Border.all(color: applied ? AppColors.leafGreen : (checked ? Colors.purple.withValues(alpha: 0.4) : const Color(0xFFDDE3E0))),
         borderRadius: BorderRadius.circular(12),
         color: applied ? AppColors.leafGreen.withValues(alpha: 0.06) : Colors.white,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
-              if (applied) const Text('反映済', style: TextStyle(fontSize: 12, color: AppColors.leafGreen, fontWeight: FontWeight.w700)),
-            ],
+          InkWell(
+            onTap: onToggle,
+            child: Row(
+              children: [
+                Icon(checked ? Icons.check_box : Icons.check_box_outline_blank,
+                    color: checked ? Colors.purple : AppColors.textSecondary, size: 22),
+                const SizedBox(width: 8),
+                Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
+                if (applied) const Text('反映済', style: TextStyle(fontSize: 12, color: AppColors.leafGreen, fontWeight: FontWeight.w700)),
+              ],
+            ),
           ),
           if (current.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -836,15 +890,6 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(8)),
             child: Text(proposal, style: const TextStyle(fontSize: 14)),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(onPressed: onAppend, icon: const Icon(Icons.playlist_add, size: 18), label: const Text('追記')),
-              const SizedBox(width: 8),
-              FilledButton.icon(onPressed: onAdopt, icon: const Icon(Icons.check, size: 18), label: const Text('採用(置換)')),
-            ],
           ),
         ],
       ),
