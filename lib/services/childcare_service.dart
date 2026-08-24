@@ -1561,6 +1561,12 @@ class ChildcareService {
       _client.rpc('reject_guidance_plan', params: {'p_id': id, 'p_reason': reason});
   Future<void> copyPreviousGuidancePlan(String id) async => _client.rpc('copy_previous_guidance_plan', params: {'p_id': id});
 
+  /// 指導計画の未完了タスク(306・主任以上)。未提出=action/承認待ち=info。
+  Future<List<Map<String, dynamic>>> fetchGuidancePlanTasks(String officeId) async {
+    final rows = await _client.rpc('fetch_guidance_plan_tasks_for_office', params: {'p_office_id': officeId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   // ===== 給食写真(300) =====
   /// 撮影画像を meal-photos バケットへアップロードし、承認待ちで登録(submit_meal_photo)。
   Future<void> submitMealPhoto(String officeId, DateTime businessDate, Uint8List bytes, {String? caption}) async {

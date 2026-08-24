@@ -45,6 +45,7 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
   List<Map<String, dynamic>> _plans = const [];
   String? _listTab; // 一覧のクラス別タブ選択(classId、または '__none__'=園全体)
   bool _showDashboard = true; // 管理者向け提出状況パネルの開閉
+  List<Map<String, dynamic>> _tasks = const []; // 未完了タスク(主任以上・306)
   Map<String, dynamic>? _detail; // {plan, template, individual}
   List<Map<String, dynamic>> _targets = const [];
   bool _loading = true;
@@ -71,10 +72,17 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
     try {
       final classes = await widget.service.fetchChildcareClasses(widget.officeId);
       final plans = await widget.service.fetchGuidancePlansForOffice(widget.officeId, _fiscalYear);
+      List<Map<String, dynamic>> tasks = const [];
+      if (widget.isManager) {
+        try {
+          tasks = await widget.service.fetchGuidancePlanTasks(widget.officeId);
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {
         _classes = classes;
         _plans = plans;
+        _tasks = tasks;
         _loading = false;
       });
     } catch (_) {
@@ -212,6 +220,10 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _selectorCard(),
+        if (widget.isManager && _tasks.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _taskAlertPanel(),
+        ],
         if (widget.isManager) ...[
           const SizedBox(height: 16),
           _dashboardPanel(),
@@ -247,6 +259,50 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
       return p;
     }
     return null;
+  }
+
+  // 未完了タスクのアラート(主任以上・306)。未提出=赤(action)/承認待ち=青(info)。
+  Widget _taskAlertPanel() {
+    final action = _tasks.where((t) => t['level'] == 'action').toList();
+    final info = _tasks.where((t) => t['level'] == 'info').toList();
+    Widget line(Map<String, dynamic> t) {
+      final isAction = t['level'] == 'action';
+      final color = isAction ? AppColors.punchClockOut : AppColors.skyBlue;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Icon(isAction ? Icons.error_outline : Icons.info_outline, size: 16, color: color),
+            const SizedBox(width: 6),
+            Expanded(child: Text(t['message'] as String? ?? '', style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600))),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: (action.isNotEmpty ? AppColors.punchClockOut : AppColors.skyBlue).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: (action.isNotEmpty ? AppColors.punchClockOut : AppColors.skyBlue).withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.assignment_late_outlined, size: 20, color: action.isNotEmpty ? AppColors.punchClockOut : AppColors.skyBlue),
+              const SizedBox(width: 8),
+              Text('未完了タスク(${_tasks.length}件)', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...action.map(line),
+          ...info.map(line),
+        ],
+      ),
+    );
   }
 
   Widget _dashboardPanel() {

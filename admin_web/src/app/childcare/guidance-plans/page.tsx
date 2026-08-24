@@ -65,6 +65,7 @@ function GuidancePlansContent() {
   const [busy, setBusy] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [listTab, setListTab] = useState<string>("__none__"); // 一覧のクラス別タブ(classId or '__none__'=園全体)
+  const [tasks, setTasks] = useState<{ message: string; level: string }[]>([]); // 未完了タスク(主任以上・306)
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -88,9 +89,16 @@ function GuidancePlansContent() {
         const { data: t } = await supabase.rpc("fetch_guidance_plan_templates");
         if (!cancelled) setTemplates((t ?? []) as typeof templates);
       }
+      // 未完了タスク(主任以上・306)。
+      if (isManager) {
+        const { data: tk } = await supabase.rpc("fetch_guidance_plan_tasks_for_office", { p_office_id: selectedOffice });
+        if (!cancelled) setTasks((tk ?? []) as { message: string; level: string }[]);
+      } else if (!cancelled) {
+        setTasks([]);
+      }
     })();
     return () => { cancelled = true; };
-  }, [selectedOffice, fiscalYear, reloadToken]);
+  }, [selectedOffice, fiscalYear, reloadToken, isManager]);
 
   async function openOrCreate() {
     if (!selectedOffice) return;
@@ -239,6 +247,21 @@ function GuidancePlansContent() {
           <button onClick={openOrCreate} disabled={busy}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">開く / 作成</button>
         </section>
+
+        {/* 未完了タスク(主任以上・306): 未提出=赤/承認待ち=青 */}
+        {isManager && tasks.length > 0 && (
+          <section className={`rounded-2xl border p-4 shadow-sm ${tasks.some((t) => t.level === "action") ? "border-red-200 bg-red-50/40" : "border-sky-200 bg-sky-50/40"}`}>
+            <div className="mb-2 text-sm font-bold text-slate-800">未完了タスク({tasks.length}件)</div>
+            <div className="space-y-1">
+              {tasks.filter((t) => t.level === "action").map((t, i) => (
+                <div key={`a${i}`} className="text-sm font-semibold text-red-600">● {t.message}</div>
+              ))}
+              {tasks.filter((t) => t.level === "info").map((t, i) => (
+                <div key={`i${i}`} className="text-sm font-semibold text-sky-700">● {t.message}</div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 一覧: クラス別タブ + 種別ごとにグルーピング */}
         {(() => {
