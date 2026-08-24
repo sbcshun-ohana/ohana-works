@@ -113,7 +113,7 @@ language plpgsql stable security definer set search_path = public as $$
 declare v_office uuid;
 begin
   if not guardian_has_child_access(p_child_id) then raise exception 'not authorized'; end if;
-  select office_id into v_office from children where id = p_child_id;
+  select ch.office_id into v_office from children ch where ch.id = p_child_id;
   return query
     select d.id, d.title, d.fiscal_year, d.version, d.storage_path, d.published_at,
            (c.id is not null), c.agreed_at
