@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Fragment, Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
@@ -16,6 +16,7 @@ type Conference = {
   child_name: string;
   held_on: string | null;
   nutritionist_name: string | null;
+  elimination_plan: string | null;
   status: string;
   created_at: string;
   consent_at: string | null;
@@ -55,6 +56,7 @@ function MealConferencesContent() {
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [unackConsents, setUnackConsents] = useState(0); // 未確認の保護者同意(お知らせ)件数(281)
+  const [expandedId, setExpandedId] = useState<string | null>(null); // 記録内容の展開(309)
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -358,29 +360,51 @@ function MealConferencesContent() {
               )}
               {conferences.map((c) => {
                 const st = STATUS_LABEL[c.status] ?? { label: c.status, cls: "bg-slate-100 text-slate-500" };
+                const open = expandedId === c.id;
                 return (
-                  <tr key={c.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-3 py-3 font-medium text-slate-800">{c.child_name}</td>
-                    <td className="px-3 py-3 text-slate-500">{fmtDate(c.held_on)}</td>
-                    <td className="px-3 py-3 text-slate-500">{c.nutritionist_name || "—"}</td>
-                    <td className="px-3 py-3 text-slate-500">
-                      {c.attendee_names && c.attendee_names.length > 0 ? c.attendee_names.join("、") : "—"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
-                    </td>
-                    <td className="px-3 py-3 text-slate-500">{c.consent_at ? fmtDate(c.consent_at) : "—"}</td>
-                    <td className="px-3 py-3 text-right">
-                      {isManager && c.status !== "cancelled" && !c.consent_at && (
-                        <button
-                          onClick={() => cancelConference(c.id)}
-                          className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50"
-                        >
-                          取消
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                  <Fragment key={c.id}>
+                    <tr className="border-b border-slate-100">
+                      <td className="px-3 py-3 font-medium text-slate-800">{c.child_name}</td>
+                      <td className="px-3 py-3 text-slate-500">{fmtDate(c.held_on)}</td>
+                      <td className="px-3 py-3 text-slate-500">{c.nutritionist_name || "—"}</td>
+                      <td className="px-3 py-3 text-slate-500">
+                        {c.attendee_names && c.attendee_names.length > 0 ? c.attendee_names.join("、") : "—"}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
+                      </td>
+                      <td className="px-3 py-3 text-slate-500">{c.consent_at ? fmtDate(c.consent_at) : "—"}</td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setExpandedId(open ? null : c.id)}
+                            className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                          >
+                            {open ? "閉じる" : "記録内容"}
+                          </button>
+                          {isManager && c.status !== "cancelled" && !c.consent_at && (
+                            <button
+                              onClick={() => cancelConference(c.id)}
+                              className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50"
+                            >
+                              取消
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr className="border-b border-slate-100 bg-slate-50/60">
+                        <td colSpan={7} className="px-4 py-3">
+                          <div className="text-xs font-semibold text-slate-500">除去・代替の提供方針(会議で話し合われた内容)</div>
+                          <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                            {c.elimination_plan?.trim() ? c.elimination_plan : "(記録なし)"}
+                          </div>
+                          <div className="mt-2 text-xs text-slate-400">記録日時: {fmtDate(c.created_at)}</div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
