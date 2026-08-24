@@ -129,6 +129,26 @@ function ChildcareDailyBoardPageContent() {
     setReloadToken((t) => t + 1);
   }
 
+  // 感染症案件の取消(206・cancel_infection_case・主任以上)。誤登録等をクローズ(closed_reason=cancelled)。
+  async function cancelInfectionCase(caseId: string, label: string) {
+    const reason = window.prompt(`${label}を取り消します。理由を入力してください(必須)。`);
+    if (reason == null) return;
+    if (reason.trim() === "") {
+      showToast("取消理由を入力してください");
+      return;
+    }
+    const { error } = await createClient().rpc("cancel_infection_case", {
+      p_case_id: caseId,
+      p_reason: reason.trim(),
+    });
+    if (error) {
+      showToast(`取消に失敗しました: ${error.message}`);
+      return;
+    }
+    showToast(`${label}を取り消しました`);
+    setReloadToken((t) => t + 1);
+  }
+
   // 感染症案件バッジ用(206)。child_id→リスト(病名/必要書類/書類状態)。
   const [infectionByChild, setInfectionByChild] = useState<
     Record<string, { case_id: string; disease_name: string | null; required_document: string; document_state: string; received_by_name: string | null; received_at: string | null }[]>
@@ -910,6 +930,15 @@ function ChildcareDailyBoardPageContent() {
                                 紙受領
                               </button>
                             )}
+                            {/* C-2: 案件取消(cancel_infection_case・主任以上・誤登録等)。理由必須。 */}
+                            <button
+                              onClick={() =>
+                                cancelInfectionCase(ic.case_id, `${ic.disease_name ?? "感染症"}の案件`)
+                              }
+                              className="rounded-lg border border-red-200 px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50"
+                            >
+                              取消
+                            </button>
                           </span>
                         );
                       })}
