@@ -320,6 +320,12 @@ function PlanEditor(props: {
         </h3>
         <div className="flex items-center gap-3">
           {props.savedAt && <span className="text-xs text-slate-400">{props.savedAt}</span>}
+          <button onClick={async () => {
+            const { data, error } = await createClient().rpc("fetch_previous_guidance_plan_id", { p_id: p.id });
+            if (error) { alert(error.message); return; }
+            if (!data) { alert("前回の計画が見つかりません"); return; }
+            window.open(`/childcare/guidance-plans/print?id=${data}`, "_blank");
+          }} className="rounded-lg border border-violet-300 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50">前回を参照</button>
           {st !== "approved" && (
             <button onClick={props.onCopyPrevious} disabled={props.busy}
               className="rounded-lg border border-violet-300 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50">前回コピー</button>
