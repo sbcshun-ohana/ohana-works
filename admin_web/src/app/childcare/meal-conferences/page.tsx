@@ -54,6 +54,7 @@ function MealConferencesContent() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [unackConsents, setUnackConsents] = useState(0); // 未確認の保護者同意(お知らせ)件数(281)
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -73,12 +74,14 @@ function MealConferencesContent() {
     let cancelled = false;
     void (async () => {
       const supabase = createClient();
-      const [{ data: adminData }, { data: ch }, { data: st }, { data: conf, error: confErr }] = await Promise.all([
-        supabase.rpc("is_childcare_admin", { target_office_id: selectedOffice }),
-        supabase.rpc("fetch_children_for_office_master", { p_office_id: selectedOffice }),
-        supabase.rpc("fetch_childcare_office_staff", { p_office_id: selectedOffice }),
-        supabase.rpc("fetch_meal_conferences_for_office", { p_office_id: selectedOffice, p_only_unconsented: false }),
-      ]);
+      const [{ data: adminData }, { data: ch }, { data: st }, { data: conf, error: confErr }, { data: unack }] =
+        await Promise.all([
+          supabase.rpc("is_childcare_admin", { target_office_id: selectedOffice }),
+          supabase.rpc("fetch_children_for_office_master", { p_office_id: selectedOffice }),
+          supabase.rpc("fetch_childcare_office_staff", { p_office_id: selectedOffice }),
+          supabase.rpc("fetch_meal_conferences_for_office", { p_office_id: selectedOffice, p_only_unconsented: false }),
+          supabase.rpc("fetch_unacknowledged_meal_consent_count", { p_office_id: selectedOffice }),
+        ]);
       if (cancelled) return;
       setIsAdmin(adminData === true);
       setChildren((ch ?? []) as Child[]);
@@ -86,6 +89,7 @@ function MealConferencesContent() {
       if (confErr) setError(confErr.message);
       else setError(null);
       setConferences((conf ?? []) as Conference[]);
+      setUnackConsents((unack as number) ?? 0);
       if (adminData === true) {
         const { data: t } = await supabase.rpc("fetch_meal_consent_templates", { p_office_id: selectedOffice });
         if (!cancelled) setTemplates((t ?? []) as Template[]);
@@ -95,6 +99,16 @@ function MealConferencesContent() {
       cancelled = true;
     };
   }, [selectedOffice, reloadToken]);
+
+  async function acknowledgeConsents() {
+    const supabase = createClient();
+    const { error: e } = await supabase.rpc("acknowledge_meal_consents", { p_office_id: selectedOffice });
+    if (e) {
+      alert(`確認できません: ${e.message}`);
+      return;
+    }
+    setReloadToken((t) => t + 1); // お知らせバナーが消える(上部アラートバーは60秒以内/再読込で反映)
+  }
 
   async function createConference() {
     if (!formChild) {
@@ -187,6 +201,24 @@ function MealConferencesContent() {
         </div>
 
         {error && <p className="text-sm font-medium text-red-500">{error}</p>}
+
+        {unackConsents > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+            <span className="text-sm font-semibold text-sky-800">
+              🔔 除去食の保護者同意が {unackConsents}件 あります（未確認）
+            </span>
+            {isManager ? (
+              <button
+                onClick={acknowledgeConsents}
+                className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700"
+              >
+                確認済みにする（お知らせを消す）
+              </button>
+            ) : (
+              <span className="text-xs text-sky-700">主任以上が「確認済み」にできます</span>
+            )}
+          </div>
+        )}
 
         {!isManager && (
           <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
