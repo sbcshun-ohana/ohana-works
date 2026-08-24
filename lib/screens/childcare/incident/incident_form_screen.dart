@@ -303,7 +303,8 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
       await widget.service.deleteIncidentReport(id);
       if (mounted) {
         _snack('下書きを削除しました');
-        Navigator.of(context).pop(true);
+        // 'deleted' を返し、詳細画面には再取得させず一覧まで戻す(削除済みデータの取得エラー防止)。
+        Navigator.of(context).pop('deleted');
       }
     } catch (e) {
       if (mounted) {

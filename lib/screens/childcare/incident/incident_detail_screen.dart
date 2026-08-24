@@ -360,10 +360,16 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
   }
 
   Future<void> _edit() async {
-    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+    final result = await Navigator.of(context).push<Object?>(MaterialPageRoute(
       builder: (_) => IncidentFormScreen(service: widget.service, officeId: widget.officeId, reportId: widget.reportId),
     ));
-    if (changed == true) {
+    if (!mounted) return;
+    // 下書き削除時: この詳細画面のデータは消えているため再取得せず、一覧まで戻す。
+    if (result == 'deleted') {
+      Navigator.of(context).pop(true); // 一覧へ(削除を反映)
+      return;
+    }
+    if (result == true) {
       _changed = true;
       _load();
     }
