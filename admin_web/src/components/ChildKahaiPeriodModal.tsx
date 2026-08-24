@@ -13,24 +13,29 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const [endDraft, setEndDraft] = useState<Record<string, string>>({}); // 適用中の期間を終了する日
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const s = createClient();
-      const { data } = await s.rpc("fetch_child_kahai_periods", { p_child_id: childId });
-      if (!cancelled) setPeriods((data ?? []) as Period[]);
+      const { data, error } = await s.rpc("fetch_child_kahai_periods", { p_child_id: childId });
+      if (cancelled) return;
+      if (error) { setErr(`取得エラー: ${error.message}`); return; }
+      setPeriods((data ?? []) as Period[]);
     })();
     return () => { cancelled = true; };
   }, [childId, reload]);
 
   async function add() {
-    if (!start) { alert("開始日を入力してください"); return; }
+    if (!start) { setErr("開始日を入力してください"); return; }
     setBusy(true);
+    setErr(null);
     const s = createClient();
     const { error } = await s.rpc("add_child_kahai_period", { p_child_id: childId, p_start: start, p_end: end || null, p_note: note || null });
     setBusy(false);
-    if (error) { alert(`登録できません: ${error.message}`); return; }
+    if (error) { setErr(`登録できません: ${error.message}`); return; }
     setStart(""); setEnd(""); setNote("");
     setReload((t) => t + 1);
   }
@@ -39,6 +44,17 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
     const s = createClient();
     const { error } = await s.rpc("delete_child_kahai_period", { p_id: id });
     if (error) { alert(`削除できません: ${error.message}`); return; }
+    setReload((t) => t + 1);
+  }
+  // 適用中の期間に終了日を入れて加配を外す(履歴として残す)。
+  async function endPeriod(p: Period) {
+    const endDate = endDraft[p.id] || new Date().toISOString().slice(0, 10);
+    if (endDate < p.start_date) { setErr("終了日は開始日以降にしてください"); return; }
+    setBusy(true); setErr(null);
+    const s = createClient();
+    const { error } = await s.rpc("update_child_kahai_period", { p_id: p.id, p_start: p.start_date, p_end: endDate, p_note: p.note });
+    setBusy(false);
+    if (error) { setErr(`終了できません: ${error.message}`); return; }
     setReload((t) => t + 1);
   }
 
@@ -53,6 +69,7 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
           <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-600">閉じる</button>
         </div>
         <p className="mt-1 text-xs text-slate-400">加配になる期間を登録します。外れたら終了日を入れて履歴として残します。期間中はその月の月案に個人案が必要になります。</p>
+        {err && <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm font-medium text-red-600">{err}</p>}
 
         <div className="mt-3 space-y-2">
           {periods.length === 0 && <p className="text-sm text-slate-400">加配の履歴はありません</p>}
@@ -63,7 +80,16 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
               </span>
               <span className="font-medium text-slate-700">{p.start_date} 〜 {p.end_date ?? "継続中"}</span>
               {p.note && <span className="text-xs text-slate-500">{p.note}</span>}
-              <button onClick={() => del(p.id)} className="ml-auto text-xs text-red-500 hover:underline">削除</button>
+              <div className="ml-auto flex items-center gap-2">
+                {!p.end_date && (
+                  <>
+                    <input type="date" value={endDraft[p.id] ?? ""} onChange={(e) => setEndDraft((d) => ({ ...d, [p.id]: e.target.value }))}
+                      className="rounded border border-slate-300 px-2 py-0.5 text-xs" title="加配を終了する日(未指定なら本日)" />
+                    <button onClick={() => endPeriod(p)} disabled={busy} className="rounded-lg border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50">加配を終了</button>
+                  </>
+                )}
+                <button onClick={() => del(p.id)} className="text-xs text-red-500 hover:underline">削除</button>
+              </div>
             </div>
           ))}
         </div>
