@@ -307,6 +307,72 @@ function GuidancePlansContent() {
   );
 }
 
+// 保育安全計画のExcel出力(こども家庭庁様式の構造で aoa 構築)。SheetJS(community)のためセル装飾は付かないが、
+// 月別グリッド・マニュアル表・期別表など様式のレイアウト構造を再現する。
+function exportSafetyExcel(XLSX: typeof import("xlsx"), p: { content: Record<string, string>; fiscal_year: number }, filename: string) {
+  const c = (k: string) => p.content[k] ?? "";
+  const H1 = [4, 5, 6, 7, 8, 9], H2 = [10, 11, 12, 1, 2, 3];
+  const MANUALS: { label: string; k: string; sub?: boolean }[] = [
+    { label: "重大事故防止マニュアル", k: "daijiko" },
+    { label: "　└ 午睡", k: "m_nap", sub: true }, { label: "　└ 食事", k: "m_meal", sub: true },
+    { label: "　└ プール・水遊び", k: "m_pool", sub: true }, { label: "　└ 園外活動", k: "m_outdoor", sub: true },
+    { label: "　└ バス送迎(実施時)", k: "m_bus", sub: true }, { label: "　└ 降雪(必要時)", k: "m_snow", sub: true },
+    { label: "災害時マニュアル", k: "saigai" }, { label: "119番対応時マニュアル", k: "t119" },
+    { label: "救急対応時マニュアル", k: "kyukyu" }, { label: "不審者対応時マニュアル", k: "fushinsha" },
+  ];
+  const TERMS = [["term1", "4〜6月"], ["term2", "7〜9月"], ["term3", "10〜12月"], ["term4", "1〜3月"]];
+  const aoa: string[][] = [];
+  const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
+  const wide = (label: string) => { merges.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: 6 } }); aoa.push([label]); };
+  wide(`保育安全計画　令和${p.fiscal_year}年度`);
+  wide("◎安全点検");
+  wide("(1) 施設・設備・園外環境(散歩コースや緊急避難先等)の安全点検");
+  aoa.push(["月", ...H1.map((m) => `${m}月`)]);
+  aoa.push(["重点点検箇所", ...H1.map((m) => c(`inspect_m${m}`))]);
+  aoa.push(["月", ...H2.map((m) => `${m}月`)]);
+  aoa.push(["重点点検箇所", ...H2.map((m) => c(`inspect_m${m}`))]);
+  wide("(2) マニュアルの策定・共有");
+  aoa.push(["分野", "策定時期", "見直し(再点検)予定時期", "掲示・管理場所"]);
+  for (const m of MANUALS) {
+    const label = m.sub && c(`${m.k}_check`) ? `${m.label}（${c(`${m.k}_check`)}）` : m.label;
+    aoa.push([label, c(`${m.k}_estab`), c(`${m.k}_review`), c(`${m.k}_place`)]);
+  }
+  wide("◎児童・保護者に対する安全指導等");
+  wide("(1) 児童への安全指導");
+  aoa.push(["", ...TERMS.map((t) => t[1])]);
+  aoa.push(["乳児・1歳以上3歳未満児", ...TERMS.map((t) => c(`infant_${t[0]}`))]);
+  aoa.push(["3歳以上児", ...TERMS.map((t) => c(`over3_${t[0]}`))]);
+  wide("(2) 保護者への説明・共有");
+  aoa.push([...TERMS.map((t) => t[1])]);
+  aoa.push([...TERMS.map((t) => c(`guardian_${t[0]}`))]);
+  wide("◎訓練・研修");
+  wide("(1) 訓練のテーマ・取組");
+  aoa.push(["月", ...H1.map((m) => `${m}月`)]);
+  aoa.push(["避難訓練等", ...H1.map((m) => c(`hinan_m${m}`))]);
+  aoa.push(["その他", ...H1.map((m) => c(`other_m${m}`))]);
+  aoa.push(["月", ...H2.map((m) => `${m}月`)]);
+  aoa.push(["避難訓練等", ...H2.map((m) => c(`hinan_m${m}`))]);
+  aoa.push(["その他", ...H2.map((m) => c(`other_m${m}`))]);
+  wide("(2) 訓練の参加予定者(全員参加を除く)");
+  aoa.push(["訓練内容", "参加予定者"]);
+  for (let i = 1; i <= 5; i++) aoa.push([c(`drill${i}_content`), c(`drill${i}_who`)]);
+  wide("(3) 職員への研修・講習(園内実施・外部実施を明記)");
+  aoa.push([...TERMS.map((t) => t[1])]);
+  aoa.push([...TERMS.map((t) => c(`staff_${t[0]}`))]);
+  wide("(4) 行政等が実施する訓練・講習スケジュール");
+  aoa.push([c("admin_schedule")]);
+  wide("◎再発防止策の徹底(ヒヤリ・ハット事例の収集・分析及び対策とその共有)");
+  aoa.push([c("prevention")]);
+  wide("◎その他の安全確保に向けた取組");
+  aoa.push([c("other")]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+  ws["!merges"] = merges;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "保育安全計画");
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
 function PlanEditor(props: {
   detail: PlanDetail; isManager: boolean; isAdmin: boolean; busy: boolean; savedAt: string | null;
   individualTargets: { child_id: string; display_name: string; is_kahai: boolean }[];
@@ -324,6 +390,11 @@ function PlanEditor(props: {
     const XLSX = await import("xlsx");
     const val = (sk: string, key: string) => (isReflection(sk, key) ? p.evaluation[key] : p.content[key]) ?? "";
     const period = p.month ? `${p.month}月` : p.week_start_date ? `${p.week_start_date}の週` : "";
+    // 保育安全計画は様式構造(月別グリッド・マニュアル表・期別表)で出力。
+    if (p.plan_type === "safety") {
+      exportSafetyExcel(XLSX, p, `${detail.template.title}_${p.fiscal_year}`);
+      return;
+    }
     const aoa: (string | number)[][] = [[detail.template.title], [`${p.fiscal_year}年度 ${period}`], []];
     for (const sec of detail.template.sections) {
       aoa.push([sec.label]);
