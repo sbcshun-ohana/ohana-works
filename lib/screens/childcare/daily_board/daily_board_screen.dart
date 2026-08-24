@@ -96,6 +96,11 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       _pickupChangeByChild = const {};
   // 給食アレルギー対応(232 共通除去食/弁当/保留 + 271 給食停止)が必要な childId。行に「アレルギー対応」マークを出す。
   Set<String> _allergyChildIds = const {};
+  // Phase C(315): 一時外出。外出中の児 childId→(外出ID/理由/戻り予定/超過)。バッジ+戻り操作用。
+  Map<String, ({String id, String reason, String? reasonNote, DateTime? returnPlannedAt, DateTime? outAt, bool isOverdue})>
+      _outingByChild = const {};
+  // 一時外出フラグ。ON施設のみ行アクションに「一時外出」を出す(療育外出フラグを流用)。
+  bool _outingEnabled = false;
 
   @override
   void initState() {
@@ -111,6 +116,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadPickupChanges();
     _loadInfectionFlag();
     _loadAllergyFlags();
+    _loadOutingEnabled();
+    _loadOutings();
     _subscribe();
     childcareActiveOfficeId.addListener(_onSharedOfficeChanged);
   }
@@ -172,6 +179,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadPickupChanges();
     _loadInfectionFlag();
     _loadAllergyFlags();
+    _loadOutingEnabled();
+    _loadOutings();
     _subscribe();
   }
 
@@ -323,6 +332,178 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     }
   }
 
+  // Phase C(315): 一時外出フラグ(療育外出フラグを流用)。ON施設のみ行アクション「一時外出」を出す。
+  Future<void> _loadOutingEnabled() async {
+    try {
+      final data = await Supabase.instance.client
+          .rpc('is_therapy_outing_enabled_for_office', params: {'p_office_id': _officeId});
+      if (mounted) setState(() => _outingEnabled = data == true);
+    } catch (_) {
+      if (mounted) setState(() => _outingEnabled = false);
+    }
+  }
+
+  // 外出中の児を取得(バッジ+戻り操作用)。付加情報のため失敗は握りつぶし(非表示=安全側)。
+  Future<void> _loadOutings() async {
+    try {
+      final m = await widget.service.fetchChildOutingsForOffice(_officeId, _businessDate);
+      if (mounted) setState(() => _outingByChild = m);
+    } catch (_) {
+      // 取得失敗時は前回値のまま/非表示。
+    }
+  }
+
+  String _outingReasonLabel(String r) => r == 'therapy' ? '療育' : r == 'checkup' ? '健診' : 'その他';
+  String _hmDt(DateTime dt) {
+    final l = dt.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Phase C(315): 一時外出シート。外出中なら「戻り/降園変換」、未外出なら「理由+戻り予定→外出開始」。
+  Future<void> _openOuting(DailyBoardRow row) async {
+    final active = _outingByChild[row.childId];
+    if (active != null) {
+      await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('一時外出中: ${row.nameLabel}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 8),
+              Text('理由: ${_outingReasonLabel(active.reason)}'
+                  '${active.reasonNote != null ? '(${active.reasonNote})' : ''}'),
+              if (active.outAt != null) Text('外出: ${_hmDt(active.outAt!)}'),
+              if (active.returnPlannedAt != null)
+                Text('戻り予定: ${_hmDt(active.returnPlannedAt!)}',
+                    style: TextStyle(color: active.isOverdue ? AppColors.punchClockOut : null,
+                        fontWeight: active.isOverdue ? FontWeight.w700 : null)),
+              if (active.isOverdue)
+                const Text('⚠ 戻り予定を過ぎています', style: TextStyle(color: AppColors.punchClockOut, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                icon: const Icon(Icons.login_rounded),
+                label: const Text('戻り(再入室)を記録'),
+                onPressed: () => Navigator.pop(ctx, 'return'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('降園に変換(主任以上)'),
+                onPressed: () => Navigator.pop(ctx, 'depart'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
+            ],
+          ),
+        ),
+      ).then((choice) async {
+        if (choice == 'return') {
+          try {
+            await widget.service.endChildOuting(active.id);
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('戻りの記録に失敗しました: $e')));
+          }
+          await _afterOutingChange();
+        } else if (choice == 'depart') {
+          try {
+            await widget.service.convertOutingToDeparture(active.id);
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('降園変換に失敗しました(主任以上のみ): $e')));
+          }
+          await _afterOutingChange();
+        }
+      });
+      return;
+    }
+    // 未外出 → 開始フォーム(理由+戻り予定必須)。
+    var reason = 'checkup';
+    TimeOfDay? planned;
+    final noteCtrl = TextEditingController();
+    final started = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('一時外出の登録: ${row.nameLabel}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 12),
+              const Text('理由', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final r in const ['therapy', 'checkup', 'other'])
+                    ChoiceChip(
+                      label: Text(_outingReasonLabel(r)),
+                      selected: reason == r,
+                      onSelected: (_) => setSheet(() => reason = r),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(labelText: '補足(任意)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Text('戻り予定 *  '),
+                  OutlinedButton(
+                    onPressed: () async {
+                      final t = await showTimeDropdownPicker(context: ctx, initialTime: TimeOfDay.now());
+                      if (t != null) setSheet(() => planned = t);
+                    },
+                    child: Text(planned == null
+                        ? '時刻を選択'
+                        : '${planned!.hour.toString().padLeft(2, '0')}:${planned!.minute.toString().padLeft(2, '0')}'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル'))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: planned == null ? null : () => Navigator.pop(ctx, true),
+                      child: const Text('外出開始'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (started != true || planned == null) return;
+    try {
+      await widget.service.startChildOuting(
+          row.childId, reason, noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+          _businessDateAt(planned!.hour, planned!.minute));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('外出の登録に失敗しました: $e')));
+    }
+    await _afterOutingChange();
+  }
+
+  Future<void> _afterOutingChange() async {
+    if (!mounted) return;
+    setState(_load);
+    _loadOutings();
+    _loadSummary();
+    await _rowsFuture;
+  }
+
   Future<void> _loadPickupChanges() async {
     try {
       final m = await widget.service.fetchBoardPickupChangesForOffice(_officeId, _businessDate);
@@ -358,6 +539,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadMedication();
     _loadPickupChanges();
     _loadAllergyFlags();
+    _loadOutings();
     await _rowsFuture;
   }
 
@@ -841,6 +1023,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadMedication();
     _loadPickupChanges();
     _loadAllergyFlags();
+    _loadOutings();
   }
 
   // 211: 紙書類の受領記録(AC-12)。一般職員可・記録成立でブロック解除の前提。
@@ -1262,6 +1445,15 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                           if (_infectionControlEnabled)
                                             _actionIcon(Icons.medical_information_rounded, '引き継ぎカード',
                                                 const Color(0xFFB05FA0), () => _openHandoverCard(row)),
+                                          // Phase C(315): 一時外出(療育/健診/その他)。外出中は紫色で強調。
+                                          if (_outingEnabled)
+                                            _actionIcon(
+                                                Icons.directions_walk_rounded,
+                                                '一時外出',
+                                                _outingByChild.containsKey(row.childId)
+                                                    ? const Color(0xFF7A5FC0)
+                                                    : AppColors.textSecondary,
+                                                () => _openOuting(row)),
                                         ],
                                       ),
                                       // 登園・お迎え時間バッジ。氏名・続柄は連絡帳から廃止(申請・連絡に一本化)
@@ -1278,6 +1470,19 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             '療育外出中'
                                             '${row.therapyOutAt != null ? '(${row.therapyOutAt!.toLocal().hour.toString().padLeft(2, '0')}:${row.therapyOutAt!.toLocal().minute.toString().padLeft(2, '0')})' : ''}',
                                             const Color(0xFF7A5FC0)),
+                                      // Phase C(315): 一時外出中バッジ。戻り予定超過は赤で強調。タップで戻り/降園変換。
+                                      if (_outingByChild[row.childId] != null)
+                                        InkWell(
+                                          onTap: () => _openOuting(row),
+                                          child: _miniBadge(
+                                              Icons.directions_walk_rounded,
+                                              '外出中: ${_outingReasonLabel(_outingByChild[row.childId]!.reason)}'
+                                              '${_outingByChild[row.childId]!.returnPlannedAt != null ? ' 戻り予定${_hmDt(_outingByChild[row.childId]!.returnPlannedAt!)}' : ''}'
+                                              '${_outingByChild[row.childId]!.isOverdue ? ' ⚠超過' : ''}',
+                                              _outingByChild[row.childId]!.isOverdue
+                                                  ? AppColors.punchClockOut
+                                                  : const Color(0xFF7A5FC0)),
+                                        ),
                                       if (_displayAbsencePeriod(row) != null)
                                         _miniAbsenceBadge(_displayAbsencePeriod(row)!),
                                       // 承認済み 遅刻/早退(俊指示 2026-08-14: 欠席と同様にボードで見えるように)
