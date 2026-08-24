@@ -117,8 +117,15 @@ class _ImportantMattersScreenState extends State<ImportantMattersScreen> {
                             const Icon(Icons.check_circle_rounded, color: AppColors.leafGreen),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: Text('同意済みです${d.agreedAt != null ? '（${d.agreedAt!.substring(0, 10)}）' : ''}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('同意済みです${d.agreedAt != null ? '（${d.agreedAt!.substring(0, 10)}）' : ''}',
+                                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  const Text('重要事項説明書はいつでもこの画面からご確認いただけます。',
+                                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                ],
+                              ),
                             ),
                           ],
                         ),
