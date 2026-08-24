@@ -283,6 +283,36 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
     }
   }
 
+  Future<void> _deleteDraft() async {
+    final id = widget.reportId;
+    if (id == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('下書きを削除', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: const Text('この下書きを削除します。元に戻せません。よろしいですか?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _saving = true);
+    try {
+      await widget.service.deleteIncidentReport(id);
+      if (mounted) {
+        _snack('下書きを削除しました');
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _snack('削除できません: ${_cleanError(e)}');
+      }
+    }
+  }
+
   Future<void> _submit() async {
     final id = await _save();
     if (id == null) return;
@@ -310,7 +340,18 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.reportId == null ? '報告書の作成' : '報告書の編集')),
+      appBar: AppBar(
+        title: Text(widget.reportId == null ? '報告書の作成' : '報告書の編集'),
+        actions: [
+          // 既存下書きのみ削除可(283)。申請中/承認済はこの画面に来ない。
+          if (widget.reportId != null && !_loading)
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: 'この下書きを削除',
+              onPressed: _saving ? null : _deleteDraft,
+            ),
+        ],
+      ),
       bottomNavigationBar: _loading
           ? null
           : SafeArea(

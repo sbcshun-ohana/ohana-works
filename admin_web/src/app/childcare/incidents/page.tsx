@@ -361,6 +361,23 @@ function ChildcareIncidentsPageContent() {
               return { error };
             }, "承認を取り消しました");
           }}
+          onDelete={() => {
+            if (!window.confirm("この下書きを削除します。元に戻せません。よろしいですか?")) return;
+            void (async () => {
+              setBusy(true);
+              const supabase = createClient();
+              const { error } = await supabase.rpc("delete_incident_report", { p_id: detailId });
+              setBusy(false);
+              if (error) {
+                alert(`削除できません: ${error.message}`);
+                return;
+              }
+              setDetailId(null);
+              setDetail(null);
+              setClosure(null);
+              setReloadToken((t) => t + 1);
+            })();
+          }}
         />
       )}
 
@@ -396,6 +413,7 @@ function DetailDrawer({
   onApprove,
   onReject,
   onCancel,
+  onDelete,
 }: {
   detail: IncidentDetail | null;
   report: Record<string, unknown> | null;
@@ -410,6 +428,7 @@ function DetailDrawer({
   onApprove: () => void;
   onReject: () => void;
   onCancel: () => void;
+  onDelete: () => void;
 }) {
   const s = (report?.["status"] as string) ?? "";
   const rt = (report?.["report_type"] as string) ?? "";
@@ -574,6 +593,7 @@ function DetailDrawer({
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
               {s === "draft" && (
                 <>
+                  <button disabled={busy} onClick={onDelete} className="mr-auto rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">削除</button>
                   <button disabled={busy} onClick={onEdit} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">編集</button>
                   <button disabled={busy} onClick={onSubmit} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">申請する</button>
                 </>

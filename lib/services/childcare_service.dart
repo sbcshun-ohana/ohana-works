@@ -1777,6 +1777,11 @@ class ChildcareService {
     await _client.rpc('submit_incident_report', params: {'p_id': id});
   }
 
+  /// 下書き(draft)のヒヤリハット・事故報告を削除(283・作成者本人 or 主任以上)。
+  Future<void> deleteIncidentReport(String id) async {
+    await _client.rpc('delete_incident_report', params: {'p_id': id});
+  }
+
   Future<void> chiefApproveIncidentReport(String id) async {
     await _client.rpc('chief_approve_incident_report', params: {'p_id': id});
   }
