@@ -14,7 +14,10 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
   const [err, setErr] = useState<string | null>(null);
-  const [endDraft, setEndDraft] = useState<Record<string, string>>({}); // 適用中の期間を終了する日
+  const [editId, setEditId] = useState<string | null>(null); // 編集中の期間
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editNote, setEditNote] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -46,15 +49,18 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
     if (error) { alert(`削除できません: ${error.message}`); return; }
     setReload((t) => t + 1);
   }
-  // 適用中の期間に終了日を入れて加配を外す(履歴として残す)。
-  async function endPeriod(p: Period) {
-    const endDate = endDraft[p.id] || new Date().toISOString().slice(0, 10);
-    if (endDate < p.start_date) { setErr("終了日は開始日以降にしてください"); return; }
+  function startEdit(p: Period) {
+    setEditId(p.id); setEditStart(p.start_date); setEditEnd(p.end_date ?? ""); setEditNote(p.note ?? ""); setErr(null);
+  }
+  // 期間の後からの変更(開始/終了日・メモ)。終了日を早める短縮もここで行う。
+  async function saveEdit(id: string) {
+    if (!editStart) { setErr("開始日を入力してください"); return; }
     setBusy(true); setErr(null);
     const s = createClient();
-    const { error } = await s.rpc("update_child_kahai_period", { p_id: p.id, p_start: p.start_date, p_end: endDate, p_note: p.note });
+    const { error } = await s.rpc("update_child_kahai_period", { p_id: id, p_start: editStart, p_end: editEnd || null, p_note: editNote || null });
     setBusy(false);
-    if (error) { setErr(`終了できません: ${error.message}`); return; }
+    if (error) { setErr(`変更できません: ${error.message}`); return; }
+    setEditId(null);
     setReload((t) => t + 1);
   }
 
@@ -74,22 +80,34 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
         <div className="mt-3 space-y-2">
           {periods.length === 0 && <p className="text-sm text-slate-400">加配の履歴はありません</p>}
           {periods.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2 text-sm">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isActive(p) ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
-                {isActive(p) ? "適用中" : "期間外"}
-              </span>
-              <span className="font-medium text-slate-700">{p.start_date} 〜 {p.end_date ?? "継続中"}</span>
-              {p.note && <span className="text-xs text-slate-500">{p.note}</span>}
-              <div className="ml-auto flex items-center gap-2">
-                {!p.end_date && (
-                  <>
-                    <input type="date" value={endDraft[p.id] ?? ""} onChange={(e) => setEndDraft((d) => ({ ...d, [p.id]: e.target.value }))}
-                      className="rounded border border-slate-300 px-2 py-0.5 text-xs" title="加配を終了する日(未指定なら本日)" />
-                    <button onClick={() => endPeriod(p)} disabled={busy} className="rounded-lg border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50">加配を終了</button>
-                  </>
-                )}
-                <button onClick={() => del(p.id)} className="text-xs text-red-500 hover:underline">削除</button>
-              </div>
+            <div key={p.id} className="rounded-lg border border-slate-200 p-2 text-sm">
+              {editId === p.id ? (
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-xs text-slate-500">開始日
+                    <input type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="mt-0.5 block rounded border border-slate-300 px-2 py-1 text-sm" />
+                  </label>
+                  <label className="text-xs text-slate-500">終了日(空=継続中)
+                    <input type="date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="mt-0.5 block rounded border border-slate-300 px-2 py-1 text-sm" />
+                  </label>
+                  <label className="flex-1 text-xs text-slate-500">メモ
+                    <input type="text" value={editNote} onChange={(e) => setEditNote(e.target.value)} className="mt-0.5 block w-full rounded border border-slate-300 px-2 py-1 text-sm" />
+                  </label>
+                  <button onClick={() => saveEdit(p.id)} disabled={busy} className="rounded-lg bg-violet-600 px-3 py-1 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">保存</button>
+                  <button onClick={() => setEditId(null)} className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500">キャンセル</button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isActive(p) ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
+                    {isActive(p) ? "適用中" : "期間外"}
+                  </span>
+                  <span className="font-medium text-slate-700">{p.start_date} 〜 {p.end_date ?? "継続中"}</span>
+                  {p.note && <span className="text-xs text-slate-500">{p.note}</span>}
+                  <div className="ml-auto flex items-center gap-3">
+                    <button onClick={() => startEdit(p)} className="text-xs font-semibold text-sky-600 hover:underline">編集</button>
+                    <button onClick={() => del(p.id)} className="text-xs text-red-500 hover:underline">削除</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
