@@ -386,6 +386,67 @@ function PlanEditor(props: {
   const st = p.status;
   const targetChildren = props.individualTargets;
 
+  // AI下書き(月案・週案・未承認時)。連絡帳等を素材に各欄の下書きを生成→チェックで一括採用/追記。
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSections, setAiSections] = useState<Record<string, string>>({});
+  const [aiMock, setAiMock] = useState(false);
+  const [aiCounts, setAiCounts] = useState<{ contacts?: number; activities?: number; home?: number }>({});
+  const [aiSelected, setAiSelected] = useState<Set<string>>(new Set());
+  const [aiApplied, setAiApplied] = useState<Set<string>>(new Set());
+  const canAi = (p.plan_type === "monthly" || p.plan_type === "weekly") && st !== "approved";
+
+  // fieldKey → {sectionKey, label} をテンプレから作る。
+  function fieldLookup(): Record<string, { sectionKey: string; label: string }> {
+    const out: Record<string, { sectionKey: string; label: string }> = {};
+    for (const sec of detail.template.sections) {
+      for (const f of sec.fields) {
+        out[f.key] = { sectionKey: sec.key, label: sec.label === f.label || !f.label ? sec.label : `${sec.label} / ${f.label}` };
+      }
+    }
+    return out;
+  }
+  const aiOrdered = Object.keys(fieldLookup()).filter((k) => k in aiSections);
+
+  async function generateAi() {
+    setAiBusy(true);
+    try {
+      const { data, error } = await createClient().functions.invoke("generate-guidance-draft", { body: { plan_id: p.id } });
+      if (error) { alert(`AI生成に失敗しました: ${error.message}`); return; }
+      const d = data as { mock?: boolean; sections?: Record<string, string>; source_counts?: { contacts?: number; activities?: number; home?: number } };
+      const secs = d.sections ?? {};
+      if (Object.keys(secs).length === 0) { alert("生成できる下書きがありませんでした"); return; }
+      setAiSections(secs);
+      setAiMock(d.mock === true);
+      setAiCounts(d.source_counts ?? {});
+      const lk = fieldLookup();
+      setAiSelected(new Set(Object.keys(secs).filter((k) => k in lk)));
+      setAiApplied(new Set());
+      setAiOpen(true);
+    } catch (e) {
+      alert(`AI生成に失敗しました: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function applyAi(append: boolean) {
+    const lk = fieldLookup();
+    const applied = new Set(aiApplied);
+    for (const key of aiOrdered) {
+      if (!aiSelected.has(key)) continue;
+      const add = aiSections[key] ?? "";
+      if (append) {
+        const cur = detail.plan.content[key] ?? "";
+        props.onField(lk[key].sectionKey, key, cur.trim() ? `${cur}\n${add}` : add);
+      } else {
+        props.onField(lk[key].sectionKey, key, add);
+      }
+      applied.add(key);
+    }
+    setAiApplied(applied);
+  }
+
   async function exportExcel() {
     const XLSX = await import("xlsx");
     const val = (sk: string, key: string) => (isReflection(sk, key) ? p.evaluation[key] : p.content[key]) ?? "";
@@ -421,6 +482,12 @@ function PlanEditor(props: {
         </h3>
         <div className="flex items-center gap-3">
           {props.savedAt && <span className="text-xs text-slate-400">{props.savedAt}</span>}
+          {canAi && (
+            <button onClick={() => void generateAi()} disabled={aiBusy}
+              className="rounded-lg border border-purple-300 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50">
+              {aiBusy ? "生成中…" : "✨ AIで下書き"}
+            </button>
+          )}
           <button onClick={async () => {
             const { data, error } = await createClient().rpc("fetch_previous_guidance_plan_id", { p_id: p.id });
             if (error) { alert(error.message); return; }
@@ -440,6 +507,58 @@ function PlanEditor(props: {
       </div>
       {p.rejected_reason && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-600">差し戻し/取消理由: {p.rejected_reason}</p>}
       {st === "approved" && <p className="rounded-lg bg-emerald-50 p-2 text-xs text-emerald-700">承認済みです。本文は編集できません(評価・反省欄は記入可能)。修正は承認取消から。</p>}
+
+      {aiOpen && (() => {
+        const lk = fieldLookup();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAiOpen(false)}>
+            <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
+                <span className="text-base font-bold text-purple-700">✨ AI下書きの確認</span>
+                <span className="ml-auto text-xs text-slate-400">連絡帳{aiCounts.contacts ?? 0}・活動{aiCounts.activities ?? 0}・家庭{aiCounts.home ?? 0}</span>
+              </div>
+              {aiMock && <div className="mx-5 mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">※ サンプル下書きです(AIキー未設定)。キー設定後に実際の記録から生成されます。</div>}
+              <div className="flex items-center gap-2 px-5 py-2">
+                <span className="text-xs text-slate-500">採用する欄にチェック → 下の「選択を採用/追記」でまとめて反映。</span>
+                <button className="ml-auto text-xs font-semibold text-purple-700"
+                  onClick={() => setAiSelected(aiSelected.size === aiOrdered.length ? new Set() : new Set(aiOrdered))}>
+                  {aiSelected.size === aiOrdered.length ? "全解除" : "全選択"}
+                </button>
+              </div>
+              <div className="flex-1 space-y-3 overflow-y-auto px-5 pb-3">
+                {aiOrdered.map((key) => {
+                  const checked = aiSelected.has(key);
+                  const applied = aiApplied.has(key);
+                  const cur = detail.plan.content[key] ?? "";
+                  return (
+                    <div key={key} className={`rounded-xl border p-3 ${applied ? "border-emerald-300 bg-emerald-50/40" : checked ? "border-purple-300" : "border-slate-200"}`}>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={checked} onChange={() => {
+                          const n = new Set(aiSelected);
+                          if (n.has(key)) { n.delete(key); } else { n.add(key); }
+                          setAiSelected(n);
+                        }} />
+                        <span className="font-bold text-slate-800">{lk[key].label}</span>
+                        {applied && <span className="ml-auto text-xs font-semibold text-emerald-600">反映済</span>}
+                      </label>
+                      {cur.trim() && <p className="mt-2 whitespace-pre-wrap text-xs text-slate-400">現在: {cur}</p>}
+                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-purple-50/60 p-2 text-sm text-slate-800">{aiSections[key]}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-3">
+                <span className="text-sm text-slate-500">{aiSelected.size}件選択</span>
+                <button disabled={aiSelected.size === 0} onClick={() => applyAi(true)}
+                  className="ml-auto rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">選択を追記</button>
+                <button disabled={aiSelected.size === 0} onClick={() => applyAi(false)}
+                  className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50">選択を採用(置換)</button>
+                <button onClick={() => setAiOpen(false)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50">閉じる</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {detail.template.sections.map((sec) => (
         <div key={sec.key} className="rounded-xl border border-slate-200 p-3">
