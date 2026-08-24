@@ -1595,6 +1595,42 @@ class ChildcareService {
   Future<String> mealPhotoSignedUrl(String storagePath) async =>
       _client.storage.from('meal-photos').createSignedUrl(storagePath, 60 * 5);
 
+  // ===== 厨房専用アプリ(304) =====
+  /// ログイン中の職員が厨房専用アカウントか。
+  Future<bool> isKitchenOnlyEmployee() async {
+    final d = await _client.rpc('is_kitchen_only_employee');
+    return d == true;
+  }
+
+  /// 厨房アカウントが管理する施設(施設割当×給食管理ON)。
+  Future<List<Map<String, dynamic>>> fetchMyKitchenOffices() async {
+    final rows = await _client.rpc('fetch_my_kitchen_offices');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// その日の残量(グラム)を記録。
+  Future<void> setMealLeftover(String officeId, DateTime businessDate, int? grams) async {
+    await _client.rpc('set_meal_leftover', params: {
+      'p_office_id': officeId,
+      'p_business_date': businessDate.toIso8601String().substring(0, 10),
+      'p_grams': grams,
+    });
+  }
+
+  /// 月別集計(施設×暦月・日別×食事区分の園児/職員+残量)。
+  Future<List<Map<String, dynamic>>> fetchMealMonthlySummary(String officeId, int year, int month) async {
+    final rows = await _client.rpc('fetch_meal_monthly_summary',
+        params: {'p_office_id': officeId, 'p_year': year, 'p_month': month});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 食事区分ごとの各施設必要数(指定日・複数施設)。
+  Future<List<Map<String, dynamic>>> fetchMealSlotCrossoffice(List<String> officeIds, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_slot_crossoffice',
+        params: {'p_office_ids': officeIds, 'p_business_date': businessDate.toIso8601String().substring(0, 10)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// AI下書き生成(299/Edge Function generate-guidance-draft)。連絡帳・クラス活動・家庭連絡・前回計画を
   /// 素材に各欄の下書き文を生成して返す。戻り値 {mock:bool, sections:{欄key:文}, source_counts:{...}}。
   /// ANTHROPIC_API_KEY未設定時は mock:true(サンプル下書き)。

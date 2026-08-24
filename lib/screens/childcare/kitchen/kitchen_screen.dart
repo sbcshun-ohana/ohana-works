@@ -39,6 +39,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
   List<({String childId, String childName, String? className, String? handling, List<String> targets, String? consentStatus})> _special =
       const [];
   List<Map<String, dynamic>> _suspended = const [];
+  int? _leftover; // その日の残量(g)
   late final AnimationController _flash;
 
   @override
@@ -68,12 +69,20 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
       try {
         suspended = await widget.service.fetchMealSuspendedChildren(widget.officeId);
       } catch (_) {}
+      int? leftover;
+      try {
+        final sum = await widget.service.fetchMealMonthlySummary(widget.officeId, _date.year, _date.month);
+        final ds = _date.toIso8601String().substring(0, 10);
+        final row = sum.where((r) => (r['business_date'] as String?) == ds).firstOrNull;
+        leftover = (row?['leftover_grams'] as num?)?.toInt();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
         _special = special;
         _changes = changes;
         _suspended = suspended;
+        _leftover = leftover;
         _loading = false;
       });
     } catch (_) {
@@ -332,8 +341,49 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         const SizedBox(height: 12),
         _sectionTitle('給食開始保留', AppColors.warmOrange, hold.length),
         if (hold.isEmpty) _emptyLine('対象児はいません') else _chips(hold),
+        const SizedBox(height: 16),
+        _leftoverCard(),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  /// その日の残量(g)入力(304)。施設×日×1項目。
+  Widget _leftoverCard() {
+    final ctrl = TextEditingController(text: _leftover?.toString() ?? '');
+    ctrl.selection = TextSelection.collapsed(offset: ctrl.text.length);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Text('本日の残量', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(width: 16),
+            SizedBox(
+              width: 140,
+              child: TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, suffixText: 'g'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: () async {
+                final g = int.tryParse(ctrl.text.trim());
+                try {
+                  await widget.service.setMealLeftover(widget.officeId, _date, g);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('残量を保存しました')));
+                  await _load();
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存できません: $e')));
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

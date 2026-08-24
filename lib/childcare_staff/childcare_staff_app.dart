@@ -6,6 +6,7 @@ import '../kiosk/models/paired_device.dart';
 import '../kiosk/services/device_pairing_service.dart';
 import '../screens/childcare/childcare_home_screen.dart';
 import '../screens/childcare/childcare_menu_screen.dart';
+import '../screens/childcare/kitchen/kitchen_home_screen.dart';
 import '../screens/childcare/pin_login_screen.dart';
 import '../screens/login_screen.dart';
 import '../services/childcare_service.dart';
@@ -99,42 +100,51 @@ class _ChildcareRootRouter extends StatefulWidget {
 }
 
 class _ChildcareRootRouterState extends State<_ChildcareRootRouter> {
-  late Future<bool> _homeEnabledFuture;
+  // 0=従来メニュー / 1=保育ホーム / 2=厨房専用ホーム
+  late Future<int> _routeFuture;
 
   @override
   void initState() {
     super.initState();
-    _homeEnabledFuture = _resolveHomeEnabled();
+    _routeFuture = _resolveRoute();
   }
 
-  Future<bool> _resolveHomeEnabled() async {
+  Future<int> _resolveRoute() async {
+    // 厨房専用アカウント(304)は最優先で厨房ホームへ。
+    try {
+      if (await widget.service.isKitchenOnlyEmployee()) return 2;
+    } catch (_) {}
     try {
       final offices = await widget.service.fetchMyChildcareOffices();
       for (final office in offices) {
         if (await widget.service.isChildcareHomeEnabled(office.officeId)) {
-          return true;
+          return 1;
         }
       }
     } catch (_) {
       // 取得失敗は安全側=従来メニュー。
     }
-    return false;
+    return 0;
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _homeEnabledFuture,
+    return FutureBuilder<int>(
+      future: _routeFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (snapshot.data == true) {
-          return ChildcareHomeScreen(service: widget.service);
+        switch (snapshot.data) {
+          case 2:
+            return KitchenHomeScreen(service: widget.service);
+          case 1:
+            return ChildcareHomeScreen(service: widget.service);
+          default:
+            return ChildcareMenuScreen(service: widget.service);
         }
-        return ChildcareMenuScreen(service: widget.service);
       },
     );
   }
