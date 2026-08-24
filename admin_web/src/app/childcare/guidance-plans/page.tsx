@@ -293,6 +293,8 @@ function PlanEditor(props: {
         </h3>
         <div className="flex items-center gap-3">
           {props.savedAt && <span className="text-xs text-slate-400">{props.savedAt}</span>}
+          <button onClick={() => window.open(`/childcare/guidance-plans/print?id=${p.id}`, "_blank")}
+            className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">印刷 / PDF</button>
           <button onClick={props.onClose} className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50">閉じる</button>
         </div>
       </div>
