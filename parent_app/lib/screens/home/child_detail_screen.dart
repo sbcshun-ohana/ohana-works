@@ -9,6 +9,7 @@ import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
 import '../enrollment/enrollment_form_screen.dart';
 import '../meal/meal_section_screen.dart';
+import '../important_matters/important_matters_screen.dart';
 import '../meal/meal_consent_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
@@ -51,6 +52,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
   bool _mealMgmtEnabled = false;
   // 給食会議の同意待ち(272)。あるときだけ上部に同意お願いカードを出す。
   int _pendingMealConsents = 0;
+  // 重要事項説明書(310)。公開中の文書と世帯の同意状況。
+  ({String id, String title, int fiscalYear, int version, String storagePath, bool consented, String? agreedAt})? _importantMatters;
   // 除去食の同意(未同意 or 履歴あり)のとき、グリッドに「除去食の同意」入口を出す(272/273)。
   bool _showMealConsentEntry = false;
 
@@ -64,6 +67,21 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     _loadFoodCheckEnabled();
     _loadMealSectionEnabled();
     _loadMealMgmtEnabled();
+    _loadImportantMatters();
+  }
+
+  Future<void> _loadImportantMatters() async {
+    try {
+      final d = await widget.guardianService.fetchActiveImportantMatters(widget.child.childId);
+      if (mounted) setState(() => _importantMatters = d);
+    } catch (_) {}
+  }
+
+  Future<void> _openImportantMatters() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => ImportantMattersScreen(guardianService: widget.guardianService, child: widget.child),
+    ));
+    _loadImportantMatters();
   }
 
   Future<void> _loadMealMgmtEnabled() async {
@@ -256,6 +274,41 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
     );
   }
 
+  // 重要事項説明書の同意お願いカード(310)。同意は必須(未同意は利用不可)。
+  Widget _importantMattersCard() {
+    return InkWell(
+      onTap: _openImportantMatters,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.danger.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.danger.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.assignment_late_rounded, color: AppColors.danger, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('重要事項説明書へのご同意をお願いします',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                  const SizedBox(height: 2),
+                  Text('${_importantMatters!.title}(${_importantMatters!.fiscalYear}年度) ・ 同意は保育園のご利用に必須です',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.danger),
+          ],
+        ),
+      ),
+    );
+  }
+
   // 給食会議の同意お願いカード(272・§7)。除去食提供の前提となる保護者同意。
   Widget _mealConsentCard() {
     return Container(
@@ -387,6 +440,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // 重要事項説明書 未同意=必須のため最上部に強めのカード(310)。
+                if (_importantMatters != null && !_importantMatters!.consented) _importantMattersCard(),
                 if (_enrollmentFormStatus != null && _enrollmentFormStatus != 'approved')
                   _enrollmentFormCard(),
                 for (final c in _infectionCases) _infectionCaseCard(c),
@@ -399,6 +454,13 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
 
   Widget _buildGrid() {
     final items = <Widget>[
+      if (_importantMatters != null)
+        _GridMenuItem(
+          icon: Icons.description_rounded,
+          color: _importantMatters!.consented ? AppColors.leafGreen : AppColors.danger,
+          label: '重要事項説明書',
+          onTap: _openImportantMatters,
+        ),
       if (_enabledFeatures.contains('attendance_qr'))
         _GridMenuItem(
           icon: Icons.qr_code_2_rounded,

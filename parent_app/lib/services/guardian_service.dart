@@ -598,6 +598,35 @@ class GuardianService {
     return _client.storage.from('document-templates').createSignedUrl(path, 300);
   }
 
+  /// 重要事項説明書(310): 対象児の施設で公開中の最新文書+世帯の同意状況。未公開ならnull。
+  Future<({String id, String title, int fiscalYear, int version, String storagePath, bool consented, String? agreedAt})?>
+      fetchActiveImportantMatters(String childId) async {
+    final rows = await _client.rpc('fetch_active_important_matters', params: {'p_child_id': childId});
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    if (list.isEmpty) return null;
+    final m = list.first;
+    return (
+      id: m['id'] as String,
+      title: m['title'] as String? ?? '重要事項説明書',
+      fiscalYear: (m['fiscal_year'] as num?)?.toInt() ?? 0,
+      version: (m['version'] as num?)?.toInt() ?? 1,
+      storagePath: m['storage_path'] as String,
+      consented: m['consented'] == true,
+      agreedAt: m['agreed_at'] as String?,
+    );
+  }
+
+  /// 重要事項説明書PDFの署名URL(5分)。
+  Future<String> importantMattersSignedUrl(String path) {
+    return _client.storage.from('important-matters').createSignedUrl(path, 300);
+  }
+
+  /// 重要事項説明書に同意(世帯単位・不変記録)。
+  Future<void> submitImportantMattersConsent(String documentId, String childId, String agreedName) async {
+    await _client.rpc('submit_important_matters_consent',
+        params: {'p_document_id': documentId, 'p_child_id': childId, 'p_agreed_name': agreedName});
+  }
+
   /// 一斉配信の添付(208)。RLSで自分宛の承認済みお知らせの分のみ返る。
   Future<List<({String filePath, String fileName, String? contentType})>>
       fetchBroadcastNoticeAttachments(String noticeId) async {
