@@ -6,7 +6,6 @@ import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
 import { ChildClassChangeModal } from "@/components/ChildClassChangeModal";
 import { ChildDevelopmentModal } from "@/components/ChildDevelopmentModal";
-import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildKahaiPeriodModal } from "@/components/ChildKahaiPeriodModal";
 import { DevelopmentApprovalPanel } from "@/components/DevelopmentApprovalPanel";
 import { ChildRegisterEditModal } from "@/components/ChildRegisterEditModal";
@@ -42,8 +41,6 @@ function ChildcareChildrenPageContent() {
   const [registerEditRow, setRegisterEditRow] = useState<ChildMasterRow | null>(null);
   const [classChangeRow, setClassChangeRow] = useState<ChildMasterRow | null>(null);
   const [withdrawingRow, setWithdrawingRow] = useState<ChildMasterRow | null>(null);
-  const [internalNotesRow, setInternalNotesRow] = useState<ChildMasterRow | null>(null);
-  const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [therapyRow, setTherapyRow] = useState<ChildMasterRow | null>(null);
   const [therapyEnabled, setTherapyEnabled] = useState(false);
   const [weeklyRow, setWeeklyRow] = useState<ChildMasterRow | null>(null);
@@ -56,13 +53,9 @@ function ChildcareChildrenPageContent() {
   useEffect(() => {
     function load() {
       if (!selectedOffice) {
-        setInternalNotesEnabled(false);
         return;
       }
       const supabase = createClient();
-      supabase
-        .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
-        .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
       supabase
         .rpc("is_therapy_outing_enabled_for_office", { p_office_id: selectedOffice })
         .then(({ data }) => setTherapyEnabled(Boolean(data)));
@@ -351,14 +344,6 @@ function ChildcareChildrenPageContent() {
                               クラス変更
                             </button>
                           )}
-                          {internalNotesEnabled && (
-                            <button
-                              onClick={() => setInternalNotesRow(row)}
-                              className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                            >
-                              園内記録
-                            </button>
-                          )}
                           {developmentEnabled && (
                             <button
                               onClick={() => setDevelopmentRow(row)}
@@ -523,15 +508,6 @@ function ChildcareChildrenPageContent() {
             setWithdrawingRow(null);
             setReloadToken((t) => t + 1);
           }}
-        />
-      )}
-
-      {internalNotesRow && (
-        <ChildInternalNotesModal
-          childId={internalNotesRow.child_id}
-          childName={`${internalNotesRow.display_name}${internalNotesRow.honorific_suffix ?? ""}`}
-          officeId={selectedOffice}
-          onClose={() => setInternalNotesRow(null)}
         />
       )}
 
