@@ -4,6 +4,8 @@ import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 import 'meal_consent_screen.dart';
+import 'allergy_incident_report_screen.dart';
+import '../food_check/food_check_screen.dart';
 
 /// 給食セクション(264・保護者)。公開済みの「今月の献立」と「食育レター」を閲覧する。
 /// 退避構成: 画像はインライン表示、PDF/Excel はタップで署名URL(5分間有効)を表示。
@@ -36,6 +38,9 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
   // 本日の給食写真(300・公開済み): 選択月に依らず「今日」の分を表示。
   List<({String id, String storagePath, String? caption})> _todayPhotos = const [];
   final Map<String, String> _photoUrls = {};
+  // 給食入口に統合(俊指示 2026-08-24): 食材チェック(224)・アレルギー発症報告(271)。
+  bool _foodCheckEnabled = false;
+  bool _mealMgmtEnabled = false;
 
   @override
   void initState() {
@@ -66,6 +71,13 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
           _hasConsentHistory = history.isNotEmpty;
           _allergyMenuDays = allergyMenu;
         }
+      } catch (_) {}
+      // 給食入口に統合した機能の表示可否(失敗は非表示=安全側)。
+      try {
+        _foodCheckEnabled = await widget.guardianService.isFoodCheckEnabled(widget.child.childId);
+      } catch (_) {}
+      try {
+        _mealMgmtEnabled = await widget.guardianService.isMealManagementEnabled(widget.child.officeId);
       } catch (_) {}
       // 本日の給食写真(公開済み)。失敗しても献立表示は続行。
       try {
@@ -148,6 +160,31 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
               const SizedBox(height: 40),
               Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
             ] else ...[
+              // アレルギー発症報告(緊急性があるため最上部に目立たせる)。
+              if (_mealMgmtEnabled) ...[
+                _entryButton(
+                  icon: Icons.report_gmailerrorred_rounded,
+                  color: AppColors.danger,
+                  label: 'アレルギー発症報告',
+                  desc: '給食後の症状を園へ報告します',
+                  onTap: () => Navigator.of(context).push<void>(MaterialPageRoute(
+                    builder: (_) => AllergyIncidentReportScreen(guardianService: widget.guardianService, child: widget.child),
+                  )),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (_foodCheckEnabled) ...[
+                _entryButton(
+                  icon: Icons.restaurant_rounded,
+                  color: AppColors.leafGreen,
+                  label: '食材チェック',
+                  desc: '家庭で食べた食材の確認・登録',
+                  onTap: () => Navigator.of(context).push<void>(MaterialPageRoute(
+                    builder: (_) => FoodCheckScreen(guardianService: widget.guardianService, child: widget.child),
+                  )),
+                ),
+                const SizedBox(height: 24),
+              ],
               if (_todayPhotos.isNotEmpty) ...[
                 _todayPhotoSection(),
                 const SizedBox(height: 24),
@@ -165,6 +202,38 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
               // 献立ファイル(元データ・Excel等)は保護者には非表示(俊指示 2026-08-21)。
               _section('食育レター', letters, Icons.menu_book_rounded),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 給食入口に統合した機能への遷移ボタン(食材チェック・アレルギー発症報告)。
+  Widget _entryButton({required IconData icon, required Color color, required String label, required String desc, required VoidCallback onTap}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  Text(desc, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],
         ),
       ),

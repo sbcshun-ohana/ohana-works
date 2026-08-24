@@ -8,9 +8,7 @@ import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
 import '../enrollment/enrollment_form_screen.dart';
-import '../food_check/food_check_screen.dart';
 import '../meal/meal_section_screen.dart';
-import '../meal/allergy_incident_report_screen.dart';
 import '../meal/meal_consent_screen.dart';
 import '../family_report/family_daily_report_screen.dart';
 import '../infection/handover_card_screen.dart';
@@ -466,23 +464,8 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
             ),
           ),
         ),
-      // 食材チェック(224)
-      if (_foodCheckEnabled)
-        _GridMenuItem(
-          icon: Icons.restaurant_rounded,
-          color: AppColors.leafGreen,
-          label: '食材チェック',
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute(
-              builder: (_) => FoodCheckScreen(
-                guardianService: widget.guardianService,
-                child: widget.child,
-              ),
-            ),
-          ),
-        ),
-      // 給食(264): 今月の献立・食育レター(+除去食の同意 272/273 をこの中に統合)
-      if (_mealSectionEnabled || _showMealConsentEntry)
+      // 給食(264): 今月の献立・食育レター + 食材チェック + アレルギー発症報告 + 除去食の同意 をこの中に統合(俊指示 2026-08-24)。
+      if (_mealSectionEnabled || _showMealConsentEntry || _foodCheckEnabled || _mealMgmtEnabled)
         _GridMenuItem(
           icon: Icons.restaurant_menu_rounded,
           color: AppColors.warmOrange,
@@ -490,21 +473,6 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           onTap: () => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => MealSectionScreen(
-                guardianService: widget.guardianService,
-                child: widget.child,
-              ),
-            ),
-          ),
-        ),
-      // アレルギー発症報告(271): 給食後の症状を園へ報告 → 園が給食停止(弁当持参)を判断
-      if (_mealMgmtEnabled)
-        _GridMenuItem(
-          icon: Icons.report_gmailerrorred_rounded,
-          color: AppColors.warmOrange,
-          label: 'アレルギー発症報告',
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute(
-              builder: (_) => AllergyIncidentReportScreen(
                 guardianService: widget.guardianService,
                 child: widget.child,
               ),
