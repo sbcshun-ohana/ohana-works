@@ -20,6 +20,9 @@ type Row = {
   absence_reason: string | null;
 };
 type Edit = { in: string; out: string; ret: string; depart: string };
+// Phase B(317): 要確認(anomaly)。severity=action は補正必須(確認済み不可)。
+type Anomaly = { child_id: string; business_date: string; anomaly_type: string; label: string; severity: string };
+const anomKey = (childId: string, date: string) => `${childId}__${date.slice(0, 10)}`;
 
 function todayStr(): string {
   const d = new Date();
@@ -27,9 +30,6 @@ function todayStr(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
-// 打刻漏れ: 欠席でなく、登園/降園のどちらかがあるのに片方が空。
-const isMissing = (r: Row) =>
-  !r.is_absent && !!(r.in_time || r.depart_time) && (!r.in_time || !r.depart_time);
 
 function AttendanceContent() {
   const { officesError, selectedOffice } = useChildcareOffices();
@@ -39,6 +39,7 @@ function AttendanceContent() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<Row[]>([]);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -49,7 +50,8 @@ function AttendanceContent() {
     const p = (n: number) => String(n).padStart(2, "0");
     const start = mode === "day" ? date : `${year}-${p(month)}-01`;
     const end = mode === "day" ? date : `${year}-${p(month)}-${p(new Date(year, month, 0).getDate())}`;
-    createClient()
+    const supabase = createClient();
+    supabase
       .rpc("fetch_attendance_matrix_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
       .then(({ data, error }) => {
         if (error) { setErr(error.message); setRows([]); return; }
@@ -62,7 +64,19 @@ function AttendanceContent() {
           setEdits(e);
         }
       });
+    // 要確認(317)。付加情報のため失敗しても本体表示は継続。
+    supabase
+      .rpc("fetch_attendance_anomalies_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
+      .then(({ data }) => setAnomalies((data ?? []) as Anomaly[]));
   }, [selectedOffice, mode, date, year, month, reloadToken]);
+
+  // (child_id+日) → 要確認ラベル配列。
+  const anomByKey = new Map<string, string[]>();
+  for (const a of anomalies) {
+    const k = anomKey(a.child_id, a.business_date);
+    if (!anomByKey.has(k)) anomByKey.set(k, []);
+    anomByKey.get(k)!.push(a.label);
+  }
 
   async function saveActuals(childId: string) {
     const e = edits[childId];
@@ -120,8 +134,14 @@ function AttendanceContent() {
               </select>
             </>
           )}
-          <span className="text-xs text-slate-400">※ 赤=打刻漏れ(登園/降園のどちらかが未入力)。編集は主任以上。</span>
+          <span className="text-xs text-slate-400">※ 赤=要確認(補正が必要)。編集は主任以上。</span>
         </div>
+        {anomalies.length > 0 && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            <span className="font-bold">⚠ 要確認 {anomalies.length}件</span>
+            <span className="ml-2 text-red-600">— 登降園実績を補正してください(補正まで請求候補に進みません)。</span>
+          </div>
+        )}
         {err && <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{err}</div>}
 
         {mode === "day" ? <DayView /> : <MonthView />}
@@ -144,11 +164,17 @@ function AttendanceContent() {
             {rows.map((r) => {
               const e = edits[r.child_id] ?? { in: "", out: "", ret: "", depart: "" };
               const set = (k: keyof Edit, v: string) => setEdits((prev) => ({ ...prev, [r.child_id]: { ...e, [k]: v } }));
-              const miss = isMissing(r);
+              const anoms = anomByKey.get(anomKey(r.child_id, date)) ?? [];
+              const miss = anoms.length > 0;
               return (
                 <tr key={r.child_id} className={`border-b border-slate-100 ${miss ? "bg-red-50" : ""}`}>
                   <td className="px-3 py-2 text-slate-500">{r.class_name ?? "—"}</td>
-                  <td className="px-3 py-2 font-medium text-slate-800">{r.child_name}{miss && <span className="ml-1 text-xs font-bold text-red-600">要修正</span>}</td>
+                  <td className="px-3 py-2 font-medium text-slate-800">
+                    {r.child_name}
+                    {anoms.map((l) => (
+                      <span key={l} className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-600">{l}</span>
+                    ))}
+                  </td>
                   <td className="px-3 py-2">
                     <input type="checkbox" checked={r.is_absent} onChange={(ev) => void toggleAbsent(r.child_id, ev.target.checked)} />
                   </td>
@@ -200,10 +226,11 @@ function AttendanceContent() {
                   const r = c.days.get(d);
                   if (!r) return <td key={d} className="px-1 py-1 text-center text-slate-300">·</td>;
                   if (r.is_absent) return <td key={d} className="px-1 py-1 text-center font-bold text-slate-400" title={r.absence_reason ?? "欠席"}>欠</td>;
-                  const miss = isMissing(r);
+                  const anoms = anomByKey.get(anomKey(r.child_id, r.business_date)) ?? [];
+                  const miss = anoms.length > 0;
                   return (
                     <td key={d} className={`px-1 py-1 text-center ${miss ? "bg-red-100 font-bold text-red-600" : "text-slate-600"}`}
-                      title={`${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
+                      title={miss ? `要確認: ${anoms.join(" / ")}` : `${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
                       {miss ? "!" : "◯"}
                     </td>
                   );
