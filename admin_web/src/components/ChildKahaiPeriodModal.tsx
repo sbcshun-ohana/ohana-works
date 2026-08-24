@@ -74,7 +74,7 @@ export function ChildKahaiPeriodModal({ childId, childName, onClose }: { childId
           <h3 className="text-base font-bold text-slate-800">加配(個人案対象)の期間 — {childName}</h3>
           <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-600">閉じる</button>
         </div>
-        <p className="mt-1 text-xs text-slate-400">加配になる期間を登録します。外れたら終了日を入れて履歴として残します。期間中はその月の月案に個人案が必要になります。</p>
+        <p className="mt-1 text-xs text-slate-400">加配になる期間を登録します。外れたら終了日を入れて履歴として残します。<b className="text-slate-600">加配期間中は、月案に個人案が必要になり、連絡帳の提出も必須</b>になります(3〜5歳児でも)。</p>
         {err && <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm font-medium text-red-600">{err}</p>}
 
         <div className="mt-3 space-y-2">

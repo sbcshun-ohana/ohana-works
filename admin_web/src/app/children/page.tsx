@@ -10,7 +10,6 @@ import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
 import { ChildKahaiPeriodModal } from "@/components/ChildKahaiPeriodModal";
 import { DevelopmentApprovalPanel } from "@/components/DevelopmentApprovalPanel";
 import { ChildRegisterEditModal } from "@/components/ChildRegisterEditModal";
-import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
 import { ChildTherapySettingModal } from "@/components/ChildTherapySettingModal";
 import { ChildWeeklyScheduleModal } from "@/components/ChildWeeklyScheduleModal";
 import { CreateChildModal } from "@/components/CreateChildModal";
@@ -21,18 +20,9 @@ import { WithdrawChildModal } from "@/components/WithdrawChildModal";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
 import { classOrderIndex, compareByClassThenName } from "@/lib/childcareClassSort";
-import { currentDate } from "@/lib/datetime";
 import type { ChildMasterRow } from "@/lib/types";
 
-function isCurrentlyRequired(row: ChildMasterRow, today: string): boolean {
-  if (row.family_daily_report_required_from) {
-    const withinPeriod =
-      today >= row.family_daily_report_required_from &&
-      (!row.family_daily_report_required_until || today <= row.family_daily_report_required_until);
-    if (withinPeriod) return true;
-  }
-  return row.class_family_daily_report_required ?? false;
-}
+// 連絡帳提出必須 = クラス基準(0-2歳) OR 加配期間中(295で一本化)。加配期間は kahaiActive で判定。
 
 function ChildcareChildrenPageContent() {
   // 施設選択はヘッダーに集約。selectedOffice は useChildcareOffices が ?office= に追随して供給する。
@@ -44,7 +34,6 @@ function ChildcareChildrenPageContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const [editingRow, setEditingRow] = useState<ChildMasterRow | null>(null);
   const [isPromoting, setIsPromoting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
@@ -119,14 +108,13 @@ function ChildcareChildrenPageContent() {
   const filteredRows = (selectedClassName === null ? enrolledRows : enrolledRows.filter((r) => r.class_name === selectedClassName))
     .slice()
     .sort((a, b) => compareByClassThenName(classOrder, a.class_name, a.display_name, b.class_name, b.display_name));
-  const today = currentDate();
 
   async function cancelProvisionalChild(row: ChildMasterRow) {
     if (!window.confirm(`${row.full_name}さんの仮登録を取り消しますか?(退園済み扱いになります)`)) return;
     const supabase = createClient();
     const { error } = await supabase.rpc("withdraw_child", {
       p_child_id: row.child_id,
-      p_withdrawal_date: today,
+      p_withdrawal_date: new Date().toISOString().slice(0, 10),
     });
     if (error) {
       setRowsError(error.message);
@@ -160,8 +148,8 @@ function ChildcareChildrenPageContent() {
           <div>
             <h2 className="text-lg font-bold text-slate-800">園児マスタ</h2>
             <p className="text-xs text-slate-400">
-              連絡帳提出必須は0〜2歳児クラスは全員必須(クラス基準)です。3歳以上のクラスで発達等の理由により
-              個別に必須化したい場合のみ、対象園児に適用期間を設定してください。
+              連絡帳提出必須は0〜2歳児クラスは全員必須(クラス基準)です。3歳以上のクラスは、
+              「加配」に期間を登録するとその期間中のみ連絡帳提出が必須(かつ月案に個人案が必要)になります。
             </p>
           </div>
           <div className="flex gap-2">
@@ -300,7 +288,7 @@ function ChildcareChildrenPageContent() {
               )}
               {!isLoading &&
                 filteredRows.map((row) => {
-                  const required = isCurrentlyRequired(row, today);
+                  const kahaiOn = kahaiActive.has(row.child_id);
                   const classDefaultRequired = row.class_family_daily_report_required ?? false;
                   const isWithdrawn = row.enrollment_status === "退園済み";
                   return (
@@ -337,21 +325,13 @@ function ChildcareChildrenPageContent() {
                             クラス基準で必須
                           </span>
                         ) : (
-                          <div className="space-y-1">
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                required ? "bg-sky-100 text-sky-700" : "bg-slate-100 text-slate-500"
-                              }`}
-                            >
-                              {required ? "必須(個別設定)" : "任意"}
-                            </span>
-                            {row.family_daily_report_required_from && (
-                              <p className="text-xs text-slate-400">
-                                {row.family_daily_report_required_from} 〜{" "}
-                                {row.family_daily_report_required_until ?? "無期限"}
-                              </p>
-                            )}
-                          </div>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              kahaiOn ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {kahaiOn ? "必須(加配期間中)" : "任意"}
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -385,14 +365,6 @@ function ChildcareChildrenPageContent() {
                               className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
                             >
                               発達記録
-                            </button>
-                          )}
-                          {!classDefaultRequired && !isWithdrawn && (
-                            <button
-                              onClick={() => setEditingRow(row)}
-                              className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                            >
-                              期間設定
                             </button>
                           )}
                           {isManager && !isWithdrawn && (
@@ -454,17 +426,6 @@ function ChildcareChildrenPageContent() {
           isManager={isManager}
           onClose={() => setWeeklyRow(null)}
           onSaved={() => setWeeklyRow(null)}
-        />
-      )}
-
-      {editingRow && (
-        <ChildRequiredPeriodModal
-          row={editingRow}
-          onClose={() => setEditingRow(null)}
-          onSaved={() => {
-            setEditingRow(null);
-            setReloadToken((t) => t + 1);
-          }}
         />
       )}
 
