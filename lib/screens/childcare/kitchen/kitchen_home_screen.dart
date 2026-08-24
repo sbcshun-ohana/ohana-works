@@ -7,6 +7,7 @@ import 'kitchen_screen.dart';
 import 'meal_photo_screen.dart';
 import 'meal_monthly_summary_screen.dart';
 import 'meal_slot_cross_screen.dart';
+import 'meal_conference_view_screen.dart';
 
 /// 厨房専用ホーム(304)。厨房アカウント(is_kitchen_only)でログインした時の初期画面。
 /// 一般職員の7区分ホームは出さず、給食関連の入口だけを表示する。対象施設=施設割当。
@@ -104,6 +105,8 @@ class _KitchenHomeScreenState extends State<KitchenHomeScreen> {
                                 () => _push(MealMonthlySummaryScreen(service: widget.service, offices: _offices, initialOfficeId: _officeId!))),
                             _tile(Icons.view_list_rounded, AppColors.skyBlue, '食事区分ごと(全施設)',
                                 () => _push(MealSlotCrossScreen(service: widget.service, offices: _offices))),
+                            _tile(Icons.groups_rounded, AppColors.punchClockOut, '給食会議(閲覧)',
+                                () => _push(MealConferenceViewScreen(service: widget.service, officeId: _officeId!, officeName: _officeName))),
                           ],
                         ),
                       ),

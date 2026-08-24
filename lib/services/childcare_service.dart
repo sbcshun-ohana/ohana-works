@@ -1631,6 +1631,12 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 厨房向け 給食会議の閲覧(305・対象児/除去提供方針/同意状況)。
+  Future<List<Map<String, dynamic>>> fetchMealConferencesForKitchen(String officeId) async {
+    final rows = await _client.rpc('fetch_meal_conferences_for_kitchen', params: {'p_office_id': officeId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// AI下書き生成(299/Edge Function generate-guidance-draft)。連絡帳・クラス活動・家庭連絡・前回計画を
   /// 素材に各欄の下書き文を生成して返す。戻り値 {mock:bool, sections:{欄key:文}, source_counts:{...}}。
   /// ANTHROPIC_API_KEY未設定時は mock:true(サンプル下書き)。
