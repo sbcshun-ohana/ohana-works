@@ -33,6 +33,9 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
   // アレルギー除去食の同意(272/273): 同意待ち件数 / 同意履歴の有無。この区画をこの画面内に統合。
   int _pendingConsents = 0;
   bool _hasConsentHistory = false;
+  // 本日の給食写真(300・公開済み): 選択月に依らず「今日」の分を表示。
+  List<({String id, String storagePath, String? caption})> _todayPhotos = const [];
+  final Map<String, String> _photoUrls = {};
 
   @override
   void initState() {
@@ -63,6 +66,16 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
           _hasConsentHistory = history.isNotEmpty;
           _allergyMenuDays = allergyMenu;
         }
+      } catch (_) {}
+      // 本日の給食写真(公開済み)。失敗しても献立表示は続行。
+      try {
+        final photos = await widget.guardianService.fetchPublishedMealPhotos(widget.child.childId, DateTime.now());
+        for (final p in photos) {
+          try {
+            _photoUrls[p.storagePath] = await widget.guardianService.mealPhotoSignedUrl(p.storagePath);
+          } catch (_) {}
+        }
+        if (mounted) _todayPhotos = photos;
       } catch (_) {}
       // 画像は署名URLを先に取得してインライン表示する。
       for (final it in items.where((e) => e.format == 'image')) {
@@ -135,6 +148,10 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
               const SizedBox(height: 40),
               Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
             ] else ...[
+              if (_todayPhotos.isNotEmpty) ...[
+                _todayPhotoSection(),
+                const SizedBox(height: 24),
+              ],
               if (_pendingConsents > 0 || _hasConsentHistory) ...[
                 _consentEntry(),
                 const SizedBox(height: 24),
@@ -148,6 +165,63 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
               // 献立ファイル(元データ・Excel等)は保護者には非表示(俊指示 2026-08-21)。
               _section('食育レター', letters, Icons.menu_book_rounded),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 本日の給食(300)。公開済み写真をカードで表示。タップで拡大。
+  Widget _todayPhotoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.photo_camera_rounded, color: AppColors.warmOrange, size: 20),
+            SizedBox(width: 6),
+            Text('本日の給食', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        for (final p in _todayPhotos) ...[
+          if (_photoUrls[p.storagePath] != null)
+            GestureDetector(
+              onTap: () => _openPhoto(_photoUrls[p.storagePath]!, p.caption),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.network(
+                  _photoUrls[p.storagePath]!,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, e, s) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          if ((p.caption ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 12),
+              child: Text(p.caption!, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            )
+          else
+            const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _openPhoto(String url, String? caption) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(child: InteractiveViewer(child: Image.network(url))),
+            if ((caption ?? '').isNotEmpty)
+              Padding(padding: const EdgeInsets.all(12), child: Text(caption!)),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
           ],
         ),
       ),

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/childcare.dart';
@@ -1558,6 +1560,40 @@ class ChildcareService {
   Future<void> rejectGuidancePlan(String id, String reason) async =>
       _client.rpc('reject_guidance_plan', params: {'p_id': id, 'p_reason': reason});
   Future<void> copyPreviousGuidancePlan(String id) async => _client.rpc('copy_previous_guidance_plan', params: {'p_id': id});
+
+  // ===== 給食写真(300) =====
+  /// 撮影画像を meal-photos バケットへアップロードし、承認待ちで登録(submit_meal_photo)。
+  Future<void> submitMealPhoto(String officeId, DateTime businessDate, Uint8List bytes, {String? caption}) async {
+    final d = businessDate.toIso8601String().substring(0, 10);
+    final path = '$officeId/$d/${DateTime.now().microsecondsSinceEpoch}.jpg';
+    await _client.storage.from('meal-photos').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false),
+        );
+    await _client.rpc('submit_meal_photo', params: {
+      'p_office_id': officeId,
+      'p_business_date': d,
+      'p_storage_path': path,
+      'p_caption': caption,
+    });
+  }
+
+  /// 職員向け一覧(自施設・指定日・全ステータス)。
+  Future<List<Map<String, dynamic>>> fetchMealPhotosForOffice(String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_photos_for_office',
+        params: {'p_office_id': officeId, 'p_business_date': businessDate.toIso8601String().substring(0, 10)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> approveMealPhoto(String id) async => _client.rpc('approve_meal_photo', params: {'p_id': id});
+  Future<void> rejectMealPhoto(String id, String reason) async =>
+      _client.rpc('reject_meal_photo', params: {'p_id': id, 'p_reason': reason});
+  Future<void> deleteMealPhoto(String id) async => _client.rpc('delete_meal_photo', params: {'p_id': id});
+
+  /// meal-photos の署名URL(表示用・5分)。
+  Future<String> mealPhotoSignedUrl(String storagePath) async =>
+      _client.storage.from('meal-photos').createSignedUrl(storagePath, 60 * 5);
 
   /// AI下書き生成(299/Edge Function generate-guidance-draft)。連絡帳・クラス活動・家庭連絡・前回計画を
   /// 素材に各欄の下書き文を生成して返す。戻り値 {mock:bool, sections:{欄key:文}, source_counts:{...}}。

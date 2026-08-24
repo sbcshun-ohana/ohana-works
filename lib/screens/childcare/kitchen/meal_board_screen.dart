@@ -5,6 +5,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import 'kitchen_screen.dart';
+import 'meal_photo_screen.dart';
 
 /// 食数ボード(担任用・給食管理 Phase 2)。行区分×食事区分の食数を表示し、自クラスの承認・期限内変更を行う。
 /// 厨房向けの表示(大型アラート等)は「厨房表示」から KitchenScreen へ。
@@ -113,6 +114,18 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
             icon: const Icon(Icons.restaurant_rounded),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => KitchenScreen(service: widget.service, officeId: widget.officeId, businessDate: _date),
+            )),
+          ),
+          IconButton(
+            tooltip: '給食写真',
+            icon: const Icon(Icons.photo_camera_rounded),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => MealPhotoScreen(
+                service: widget.service,
+                officeId: widget.officeId,
+                businessDate: _date,
+                isManager: widget.isManager,
+              ),
             )),
           ),
           BusinessDateAction(date: _date, onChanged: _onDateChanged),

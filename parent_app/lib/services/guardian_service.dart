@@ -882,6 +882,24 @@ class GuardianService {
     }).toList();
   }
 
+  /// 本日の給食写真(300・公開済みのみ)。その子の施設・指定日の公開写真を返す。
+  Future<List<({String id, String storagePath, String? caption})>> fetchPublishedMealPhotos(
+      String childId, DateTime businessDate) async {
+    final d = businessDate.toIso8601String().substring(0, 10);
+    final rows = await _client.rpc('fetch_published_meal_photos_for_guardian',
+        params: {'p_child_id': childId, 'p_business_date': d});
+    return (rows as List).cast<Map<String, dynamic>>().map((m) => (
+          id: m['id'] as String,
+          storagePath: m['storage_path'] as String,
+          caption: m['caption'] as String?,
+        )).toList();
+  }
+
+  /// 給食写真の署名URL(5分間有効)。
+  Future<String> mealPhotoSignedUrl(String path) {
+    return _client.storage.from('meal-photos').createSignedUrl(path, 300);
+  }
+
   /// 年齢区分(0歳..5歳)から保護者の献立food_typeを判定(縮退: 給食段階未実装のため年齢代替)。
   static String foodTypeForAgeGroup(String? ageGroup) {
     final g = int.tryParse((ageGroup ?? '').replaceAll(RegExp(r'[^0-9]'), ''));

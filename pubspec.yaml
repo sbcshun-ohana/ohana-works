@@ -38,6 +38,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.16.0
+  # 給食写真(300): 厨房iPadでカメラ撮影→アップロード。iOSカメラ権限は Info.plist に宣言済み。
+  image_picker: ^1.1.2
   # プッシュ通知(FCM)。staff既定モードのみで初期化・トークン登録する(main.dart/AuthGate)。
   # parent_app と同版に揃える。iOS は GoogleService-Info.plist からネイティブ初期化するため
   # firebase_options.dart は使わない(俊のFirebase console作業で plist を配置)。
