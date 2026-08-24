@@ -14,6 +14,7 @@ const GUIDANCE_HREF = "/childcare/guidance-plans";
 
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
+  { href: "/childcare/attendance", label: "登降園管理" },
   { href: "/childcare/family-reports", label: "家庭での様子" },
   { href: "/childcare/nap", label: "午睡チェック" },
   { href: "/childcare/health-check", label: "健康チェック" },
