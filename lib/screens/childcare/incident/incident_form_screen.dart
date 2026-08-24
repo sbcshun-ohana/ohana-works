@@ -392,13 +392,17 @@ class _IncidentFormScreenState extends State<IncidentFormScreen> {
                       const SizedBox(height: 12),
                     ],
 
-                    _sectionTitleRow('6. 経過と観察記録', () => setState(() => _progress.add(_ProgressLog()))),
-                    ..._progress.asMap().entries.map((e) => _progressCard(e.key, e.value)),
-                    const SizedBox(height: 12),
+                    // 6.経過と観察記録 / 7.保護者連絡 は事故報告(軽症/重大)のみ。
+                    // ヒヤリハットでは不要(俊指示 2026-08-24)。
+                    if (_isAccident) ...[
+                      _sectionTitleRow('6. 経過と観察記録', () => setState(() => _progress.add(_ProgressLog()))),
+                      ..._progress.asMap().entries.map((e) => _progressCard(e.key, e.value)),
+                      const SizedBox(height: 12),
 
-                    _sectionTitleRow('7. 保護者連絡', () => setState(() => _guardians.add(_GuardianContact()))),
-                    ..._guardians.asMap().entries.map((e) => _guardianCard(e.key, e.value)),
-                    const SizedBox(height: 12),
+                      _sectionTitleRow('7. 保護者連絡', () => setState(() => _guardians.add(_GuardianContact()))),
+                      ..._guardians.asMap().entries.map((e) => _guardianCard(e.key, e.value)),
+                      const SizedBox(height: 12),
+                    ],
 
                     if (_isHospital) ...[
                       _sectionTitleRow('受診記録', () => setState(() => _medicals.add(_MedicalVisit()))),

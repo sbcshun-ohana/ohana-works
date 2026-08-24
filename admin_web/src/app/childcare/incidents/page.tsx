@@ -475,33 +475,38 @@ function DetailDrawer({
               </Section>
             )}
 
-            <Section title="経過と観察記録">
-              {arr("progress_logs").length === 0 ? (
-                <p className="text-sm text-slate-400">記録なし</p>
-              ) : (
-                arr("progress_logs").map((p, i) => (
-                  <LogLine
-                    key={i}
-                    head={fmtDateTime(p["logged_at"])}
-                    body={`${PROGRESS_KINDS[String(p["report_kind"])] ?? ""}${p["report_text"] ? `  ${p["report_text"]}` : ""}`}
-                  />
-                ))
-              )}
-            </Section>
+            {/* 経過と観察記録 / 保護者連絡 は事故報告のみ表示(ヒヤリハットでは非表示・俊指示 2026-08-24)。 */}
+            {rt !== "hiyari" && (
+              <Section title="経過と観察記録">
+                {arr("progress_logs").length === 0 ? (
+                  <p className="text-sm text-slate-400">記録なし</p>
+                ) : (
+                  arr("progress_logs").map((p, i) => (
+                    <LogLine
+                      key={i}
+                      head={fmtDateTime(p["logged_at"])}
+                      body={`${PROGRESS_KINDS[String(p["report_kind"])] ?? ""}${p["report_text"] ? `  ${p["report_text"]}` : ""}`}
+                    />
+                  ))
+                )}
+              </Section>
+            )}
 
-            <Section title="保護者連絡">
-              {arr("guardian_contacts").length === 0 ? (
-                <p className="text-sm text-slate-400">記録なし</p>
-              ) : (
-                arr("guardian_contacts").map((c, i) => (
-                  <LogLine
-                    key={i}
-                    head={`${fmtDateTime(c["contacted_at"])}  ・  ${c["contact_book_written"] ? "連絡帳に記載" : "口頭で直接"}`}
-                    body={`${REACTION_KINDS[String(c["reaction_kind"])] ?? ""}${c["reaction_text"] ? `  ${c["reaction_text"]}` : ""}`}
-                  />
-                ))
-              )}
-            </Section>
+            {rt !== "hiyari" && (
+              <Section title="保護者連絡">
+                {arr("guardian_contacts").length === 0 ? (
+                  <p className="text-sm text-slate-400">記録なし</p>
+                ) : (
+                  arr("guardian_contacts").map((c, i) => (
+                    <LogLine
+                      key={i}
+                      head={`${fmtDateTime(c["contacted_at"])}  ・  ${c["contact_book_written"] ? "連絡帳に記載" : "口頭で直接"}`}
+                      body={`${REACTION_KINDS[String(c["reaction_kind"])] ?? ""}${c["reaction_text"] ? `  ${c["reaction_text"]}` : ""}`}
+                    />
+                  ))
+                )}
+              </Section>
+            )}
 
             {rt === "hospital" && (
               <Section title="受診記録">
@@ -1093,6 +1098,9 @@ function IncidentFormDrawer({
               </>
             )}
 
+            {/* 6.経過と観察記録 / 7.保護者連絡 は事故報告のみ。ヒヤリハットでは不要(俊指示 2026-08-24)。 */}
+            {isAccident && (
+            <>
             <FSectionAdd title="6. 経過と観察記録" onAdd={() => setProgress((p) => [...p, { logged_at: nowLocal(), kind: "ok", text: "" }])} />
             {progress.map((p, i) => (
               <div key={i} className="mb-2 rounded-lg border border-slate-200 p-2">
@@ -1141,6 +1149,8 @@ function IncidentFormDrawer({
                 <input value={g.text} onChange={(e) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="相手の反応(その他の場合)" className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
               </div>
             ))}
+            </>
+            )}
 
             {isHospital && (
               <>
