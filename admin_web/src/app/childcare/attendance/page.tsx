@@ -18,7 +18,14 @@ type Row = {
   depart_time: string | null;
   is_absent: boolean;
   absence_reason: string | null;
+  absence_kind: string | null;
 };
+// 出席簿の記号: 病=病欠 / 都=都合欠 / 欠=種別不明の欠席 / ◯=出席 / 空=記録なし。
+function registerSymbol(r: Row): string {
+  if (r.is_absent) return r.absence_kind === "sick_absence" ? "病" : r.absence_kind === "personal_absence" ? "都" : "欠";
+  if (r.in_time || r.depart_time) return "◯";
+  return "";
+}
 type Edit = { in: string; out: string; ret: string; depart: string };
 // Phase B(317): 要確認(anomaly)。severity=action は補正必須(確認済み不可)。
 type Anomaly = { child_id: string; business_date: string; anomaly_type: string; label: string; severity: string };
@@ -102,6 +109,39 @@ function AttendanceContent() {
     setReloadToken((t) => t + 1);
   }
 
+  // 月間出席簿CSV(◯/病/都・園児×日+集計)。選択中の月の rows から生成。UTF-8 BOM。
+  function downloadRegisterCsv() {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const byChild = new Map<string, { name: string; cls: string | null; days: Map<number, Row> }>();
+    for (const r of rows) {
+      const d = new Date(r.business_date).getDate();
+      if (!byChild.has(r.child_id)) byChild.set(r.child_id, { name: r.child_name, cls: r.class_name, days: new Map() });
+      byChild.get(r.child_id)!.days.set(d, r);
+    }
+    const lines: string[][] = [["クラス", "園児", ...days.map(String), "出席", "病欠", "都合欠"]];
+    for (const [, c] of byChild) {
+      let present = 0, sick = 0, personal = 0;
+      const cells = days.map((d) => {
+        const r = c.days.get(d);
+        const s = r ? registerSymbol(r) : "";
+        if (s === "◯") present++;
+        else if (s === "病") sick++;
+        else if (s === "都") personal++;
+        return s;
+      });
+      lines.push([c.cls ?? "", c.name, ...cells, String(present), String(sick), String(personal)]);
+    }
+    const csv = lines.map((row) => row.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `出席簿_${year}-${String(month).padStart(2, "0")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -132,6 +172,13 @@ function AttendanceContent() {
               <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}月</option>)}
               </select>
+              <button
+                onClick={downloadRegisterCsv}
+                disabled={rows.length === 0}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+              >
+                出席簿CSV
+              </button>
             </>
           )}
           <span className="text-xs text-slate-400">※ 赤=要確認(補正が必要)。編集は主任以上。</span>
