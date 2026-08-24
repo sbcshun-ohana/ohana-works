@@ -1,6 +1,6 @@
 -- 310: 重要事項説明書のアプリ化 Phase A(PDF方式)。管理者がPDFを公開→保護者がアプリで閲覧→氏名入力で同意(不変記録)。
--- 同意は園児ごと(給食同意 meal_conference_consents と同型)。将来Phase B=アプリ内構造化作成で置換予定。
-create table important_matters_documents (
+-- 同意は世帯単位(俊確定・一人=世帯全員同意)。将来Phase B=アプリ内構造化作成で置換予定。再実行可(冪等)。
+create table if not exists important_matters_documents (
   id uuid primary key default gen_random_uuid(),
   office_id uuid not null references offices(id),
   fiscal_year int not null,
@@ -13,11 +13,11 @@ create table important_matters_documents (
   note text,
   created_at timestamptz not null default now()
 );
-create index idx_imd_office_year on important_matters_documents(office_id, fiscal_year desc, version desc);
+create index if not exists idx_imd_office_year on important_matters_documents(office_id, fiscal_year desc, version desc);
 alter table important_matters_documents enable row level security;
 
 -- 同意は世帯単位(俊確定): 一人が同意すれば世帯全員(きょうだい・保護者全員)が同意したとみなす。
-create table important_matters_consents (
+create table if not exists important_matters_consents (
   id uuid primary key default gen_random_uuid(),
   document_id uuid not null references important_matters_documents(id) on delete cascade,
   household_id uuid not null references households(id) on delete cascade,
@@ -29,18 +29,20 @@ create table important_matters_consents (
   agreed_at timestamptz not null default now(),
   unique (document_id, household_id)
 );
-create index idx_imc_doc on important_matters_consents(document_id);
-create index idx_imc_household on important_matters_consents(household_id, agreed_at desc);
+create index if not exists idx_imc_doc on important_matters_consents(document_id);
+create index if not exists idx_imc_household on important_matters_consents(household_id, agreed_at desc);
 alter table important_matters_consents enable row level security;
 -- アクセスは security definer RPC のみ(直接のRLSポリシーは置かない)。
 
 -- ===== ストレージ(private) =====
 insert into storage.buckets (id, name, public) values ('important-matters', 'important-matters', false)
 on conflict (id) do nothing;
+drop policy if exists im_storage_staff_rw on storage.objects;
 create policy im_storage_staff_rw on storage.objects
   for all using (bucket_id = 'important-matters' and my_employee_id() is not null)
   with check (bucket_id = 'important-matters' and my_employee_id() is not null);
 -- 保護者=公開済み文書のパスのみ署名URL取得可(自分の子の施設)。
+drop policy if exists im_storage_guardian_read on storage.objects;
 create policy im_storage_guardian_read on storage.objects
   for select using (
     bucket_id = 'important-matters'
@@ -63,7 +65,7 @@ begin
     returning id into v_id;
   return v_id;
 end $$;
-grant execute on function save_important_matters_document(uuid, int, text, text) to authenticated, service_role;
+grant execute on function save_important_matters_document(uuid, int, text, text, text) to authenticated, service_role;
 
 -- 一覧(主任以上)。
 create or replace function fetch_important_matters_documents(p_office_id uuid)
