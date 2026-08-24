@@ -30,7 +30,7 @@ const _slots = [
   (key: 'pm_snack', label: '午後おやつ'),
 ];
 
-class _KitchenScreenState extends State<KitchenScreen> {
+class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProviderStateMixin {
   late DateTime _date = widget.businessDate;
   bool _loading = true;
   String? _error;
@@ -39,11 +39,20 @@ class _KitchenScreenState extends State<KitchenScreen> {
   List<({String childId, String childName, String? className, String? handling, List<String> targets, String? consentStatus})> _special =
       const [];
   List<Map<String, dynamic>> _suspended = const [];
+  late final AnimationController _flash;
 
   @override
   void initState() {
     super.initState();
+    // 変更アラート用の点滅アニメーション(厨房が見落とさないよう全画面で点滅)。
+    _flash = AnimationController(vsync: this, duration: const Duration(milliseconds: 650))..repeat(reverse: true);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _flash.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -153,33 +162,50 @@ class _KitchenScreenState extends State<KitchenScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-              : Column(
+              : Stack(
                   children: [
-                    if (_unacked.isNotEmpty) _alertBanner(),
-                    Expanded(child: RefreshIndicator(onRefresh: _load, child: _body())),
+                    RefreshIndicator(onRefresh: _load, child: _body()),
+                    // §5.2 厨房が見落とさないよう、確定後の変更は全画面点滅オーバーレイで通知。
+                    if (_unacked.isNotEmpty) _fullScreenAlert(),
                   ],
                 ),
     );
   }
 
-  /// §5.2 大型全面アラート(確定後に変更があったとき)。
-  Widget _alertBanner() {
-    return Material(
-      color: AppColors.punchClockOut,
-      child: InkWell(
-        onTap: _acknowledge,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          child: Row(
-            children: [
-              const Icon(Icons.notification_important_rounded, color: Colors.white, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('食数の更新があります(${_unacked.length}件) — タップで変更点を確認',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+  /// §5.2 全画面・点滅アラート(確定後に変更があったとき)。タップで変更点→確認。
+  Widget _fullScreenAlert() {
+    return Positioned.fill(
+      child: AnimatedBuilder(
+        animation: _flash,
+        builder: (context, child) {
+          final t = _flash.value; // 0..1
+          return Material(
+            color: Color.lerp(const Color(0xE6D7263D), const Color(0xF2B00020), t),
+            child: child,
+          );
+        },
+        child: InkWell(
+          onTap: _acknowledge,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.notification_important_rounded, color: Colors.white, size: 88),
+                  const SizedBox(height: 16),
+                  const Text('食数の変更があります', style: TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  Text('${_unacked.length}件の変更が未確認です', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
+                    child: const Text('タップして変更点を確認', style: TextStyle(color: Color(0xFFB00020), fontSize: 20, fontWeight: FontWeight.w900)),
+                  ),
+                ],
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white),
-            ],
+            ),
           ),
         ),
       ),
