@@ -378,7 +378,7 @@ function ChildcareChildrenPageContent() {
                               発達記録
                             </button>
                           )}
-                          {!classDefaultRequired && (
+                          {!classDefaultRequired && !isWithdrawn && (
                             <button
                               onClick={() => setEditingRow(row)}
                               className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
