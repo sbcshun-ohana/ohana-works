@@ -143,21 +143,23 @@ export function ChildcareNav() {
 
   return (
     <>
-      <div className="border-b border-slate-200 bg-slate-50 px-6 py-2">
-        <nav className="flex gap-1">
+      {/* タブは1行の横スクロール(改行しない)。ラベルは折り返さず、狭い幅ではスクロールで全項目にアクセス。 */}
+      <div className="border-b border-slate-200 bg-slate-50">
+        <nav className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:thin]">
           {items.map((item) => {
-            // 給食管理タブは食数ボード/献立(サブナビ)いずれの配下でもアクティブ表示。
+            // 給食管理タブは食数ボード/献立/集計/写真(サブナビ)いずれの配下でもアクティブ表示。
             const active =
               pathname === item.href ||
               (item.href === MEAL_HREF &&
                 (pathname.startsWith("/childcare/menus") ||
+                  pathname.startsWith("/childcare/meal-") ||
                   pathname.startsWith("/childcare/allergy-incidents") ||
                   pathname.startsWith("/childcare/meal-conferences")));
             return (
               <Link
                 key={item.href}
                 href={`${item.href}${suffix}`}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                   active ? "bg-white text-sky-700 shadow-sm" : "text-slate-500 hover:bg-white/60"
                 }`}
               >
