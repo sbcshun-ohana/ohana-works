@@ -4,6 +4,7 @@ import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
+import 'meal_photo_screen.dart';
 
 /// 厨房ページ(給食管理 Phase 2・設計指示書v1.0 §5)。給食情報のみを表示し、他の保育業務へは遷移しない。
 /// 行区分×食事区分の食数(暫定/確定)・共通除去食の対象児・弁当/保留・変更の大型アラート(§5.2)。
@@ -132,7 +133,21 @@ class _KitchenScreenState extends State<KitchenScreen> {
         leading: const OhanaBackHomeLeading(),
         leadingWidth: 200,
         title: const Text('給食管理'),
-        actions: [BusinessDateAction(date: _date, onChanged: _onDateChanged)],
+        actions: [
+          IconButton(
+            tooltip: '給食写真',
+            icon: const Icon(Icons.photo_camera_rounded),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => MealPhotoScreen(
+                service: widget.service,
+                officeId: widget.officeId,
+                businessDate: _date,
+                isManager: false, // 厨房は撮影・自分の未公開削除まで(承認は食数ボード/adminで)
+              ),
+            )),
+          ),
+          BusinessDateAction(date: _date, onChanged: _onDateChanged),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
