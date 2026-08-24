@@ -7,6 +7,7 @@ import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal"
 import { ChildClassChangeModal } from "@/components/ChildClassChangeModal";
 import { ChildDevelopmentModal } from "@/components/ChildDevelopmentModal";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
+import { ChildKahaiPeriodModal } from "@/components/ChildKahaiPeriodModal";
 import { DevelopmentApprovalPanel } from "@/components/DevelopmentApprovalPanel";
 import { ChildRegisterEditModal } from "@/components/ChildRegisterEditModal";
 import { ChildRequiredPeriodModal } from "@/components/ChildRequiredPeriodModal";
@@ -59,7 +60,8 @@ function ChildcareChildrenPageContent() {
   const [weeklyRow, setWeeklyRow] = useState<ChildMasterRow | null>(null);
   const [developmentRow, setDevelopmentRow] = useState<ChildMasterRow | null>(null);
   const [developmentEnabled, setDevelopmentEnabled] = useState(false);
-  const [kahai, setKahai] = useState<Record<string, boolean>>({}); // child_id→加配(個人案対象)
+  const [kahaiActive, setKahaiActive] = useState<Set<string>>(new Set()); // 本日時点で加配適用中の child_id
+  const [kahaiRow, setKahaiRow] = useState<ChildMasterRow | null>(null);   // 加配期間モーダル対象
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -102,22 +104,13 @@ function ChildcareChildrenPageContent() {
         }
         setRows((data ?? []) as ChildMasterRow[]);
       });
-    // 加配(個人案対象)フラグ(290)。指導計画の個人案対象判定に使用。
+    // 加配(個人案対象・291)。本日時点で適用中の児をバッジ表示。期間・履歴はモーダルで編集。
     supabase
-      .rpc("fetch_child_kahai_flags", { p_office_id: selectedOffice })
+      .rpc("fetch_children_kahai_active", { p_office_id: selectedOffice, p_ref_date: new Date().toISOString().slice(0, 10) })
       .then(({ data }) => {
-        const m: Record<string, boolean> = {};
-        for (const r of (data ?? []) as { child_id: string; individual_plan_target: boolean }[]) m[r.child_id] = r.individual_plan_target;
-        setKahai(m);
+        setKahaiActive(new Set((data ?? []).map((r: { child_id: string }) => r.child_id)));
       });
   }, [selectedOffice, reloadToken]);
-
-  async function toggleKahai(childId: string, on: boolean) {
-    const supabase = createClient();
-    const { error } = await supabase.rpc("set_child_individual_plan_target", { p_child_id: childId, p_on: on });
-    if (error) { alert(`設定できません: ${error.message}`); return; }
-    setKahai((prev) => ({ ...prev, [childId]: on }));
-  }
 
   const classOrder = classOrderIndex(classes);
   // 入園予定(仮登録)は本体の表と分けて表示する(クラス未所属・基本情報未入力のため)
@@ -404,15 +397,15 @@ function ChildcareChildrenPageContent() {
                           )}
                           {isManager && !isWithdrawn && (
                             <button
-                              onClick={() => toggleKahai(row.child_id, !kahai[row.child_id])}
+                              onClick={() => setKahaiRow(row)}
                               className={`rounded-lg border px-3 py-1 text-xs font-medium ${
-                                kahai[row.child_id]
+                                kahaiActive.has(row.child_id)
                                   ? "border-violet-400 bg-violet-50 text-violet-700"
                                   : "border-slate-300 text-slate-500 hover:bg-slate-100"
                               }`}
-                              title="加配(個人案の対象。3〜5歳児で加配の場合は月案に個人案が必要)"
+                              title="加配(個人案の対象)の期間・履歴を設定。3〜5歳児で加配期間中は月案に個人案が必要"
                             >
-                              加配{kahai[row.child_id] ? "：対象" : ""}
+                              加配{kahaiActive.has(row.child_id) ? "：適用中" : ""}
                             </button>
                           )}
                           <button
@@ -472,6 +465,14 @@ function ChildcareChildrenPageContent() {
             setEditingRow(null);
             setReloadToken((t) => t + 1);
           }}
+        />
+      )}
+
+      {kahaiRow && (
+        <ChildKahaiPeriodModal
+          childId={kahaiRow.child_id}
+          childName={kahaiRow.display_name}
+          onClose={() => { setKahaiRow(null); setReloadToken((t) => t + 1); }}
         />
       )}
 
