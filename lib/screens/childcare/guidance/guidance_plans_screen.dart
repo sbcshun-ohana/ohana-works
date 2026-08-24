@@ -173,10 +173,18 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final inEditor = _detail != null;
     return Scaffold(
       appBar: AppBar(
-        leading: const OhanaBackHomeLeading(),
-        leadingWidth: 200,
+        // 編集(作成)画面では ← で一覧へ一段戻す。一覧ではホームへ戻る(ロゴ+戻る)。
+        leading: inEditor
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: '一覧へ戻る',
+                onPressed: () => setState(() => _detail = null),
+              )
+            : const OhanaBackHomeLeading(),
+        leadingWidth: inEditor ? null : 200,
         title: const Text('指導計画・保育安全計画'),
       ),
       body: _loading
