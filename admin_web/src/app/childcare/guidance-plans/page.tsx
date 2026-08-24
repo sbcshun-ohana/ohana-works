@@ -64,6 +64,7 @@ function GuidancePlansContent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [listTab, setListTab] = useState<string>("__none__"); // 一覧のクラス別タブ(classId or '__none__'=園全体)
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -239,27 +240,56 @@ function GuidancePlansContent() {
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">開く / 作成</button>
         </section>
 
-        {/* 一覧 */}
-        <section className="overflow-x-auto rounded-2xl bg-white shadow-sm">
-          <table className="min-w-full text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
-              <th className="px-3 py-3">種別</th><th className="px-3 py-3">クラス</th><th className="px-3 py-3">月/週</th><th className="px-3 py-3">状態</th><th className="px-3 py-3">更新</th><th></th>
-            </tr></thead>
-            <tbody>
-              {plans.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">この年度の計画はまだありません</td></tr>}
-              {plans.map((p) => (
-                <tr key={p.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-3 py-3 font-medium text-slate-800">{PLAN_TYPES.find((x) => x.value === p.plan_type)?.label ?? p.plan_type}</td>
-                  <td className="px-3 py-3 text-slate-500">{p.class_name ?? "—"}</td>
-                  <td className="px-3 py-3 text-slate-500">{p.month ? `${p.month}月` : p.week_start_date ? `${p.week_start_date}〜` : "—"}</td>
-                  <td className="px-3 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${(STATUS_LABEL[p.status] ?? STATUS_LABEL.draft).cls}`}>{(STATUS_LABEL[p.status] ?? { label: p.status }).label}</span></td>
-                  <td className="px-3 py-3 text-slate-400">{new Date(p.updated_at).toLocaleDateString("ja-JP")}</td>
-                  <td className="px-3 py-3 text-right"><button onClick={() => loadDetail(p.id)} className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50">開く</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        {/* 一覧: クラス別タブ + 種別ごとにグルーピング */}
+        {(() => {
+          const tabs = [
+            ...classes.map((c) => ({ id: c.class_id, label: c.class_name })),
+            { id: "__none__", label: "園全体" },
+          ];
+          const activeTab = tabs.some((t) => t.id === listTab) ? listTab : (tabs[0]?.id ?? "__none__");
+          const inTab = plans.filter((p) => (p.class_id ?? "__none__") === activeTab);
+          return (
+            <section className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setListTab(t.id)}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                      activeTab === t.id ? "bg-sky-600 text-white" : "bg-white text-slate-500 shadow-sm hover:bg-slate-50"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {inTab.length === 0 ? (
+                <div className="rounded-2xl bg-white p-6 text-center text-sm text-slate-400 shadow-sm">このクラスの計画はまだありません</div>
+              ) : (
+                PLAN_TYPES.filter((pt) => inTab.some((p) => p.plan_type === pt.value)).map((pt) => (
+                  <div key={pt.value} className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-4 py-2 text-sm font-bold text-sky-700">{pt.label}</div>
+                    <table className="min-w-full text-sm">
+                      <thead><tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                        <th className="px-3 py-2">月/週</th><th className="px-3 py-2">状態</th><th className="px-3 py-2">更新</th><th></th>
+                      </tr></thead>
+                      <tbody>
+                        {inTab.filter((p) => p.plan_type === pt.value).map((p) => (
+                          <tr key={p.id} className="border-b border-slate-100 last:border-0">
+                            <td className="px-3 py-3 font-medium text-slate-800">{p.month ? `${p.month}月` : p.week_start_date ? `${p.week_start_date}〜` : "—"}</td>
+                            <td className="px-3 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${(STATUS_LABEL[p.status] ?? STATUS_LABEL.draft).cls}`}>{(STATUS_LABEL[p.status] ?? { label: p.status }).label}</span></td>
+                            <td className="px-3 py-3 text-slate-400">{new Date(p.updated_at).toLocaleDateString("ja-JP")}</td>
+                            <td className="px-3 py-3 text-right"><button onClick={() => loadDetail(p.id)} className="rounded-lg border border-sky-300 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50">開く</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))
+              )}
+            </section>
+          );
+        })()}
 
         {/* エディタ */}
         {detail && <PlanEditor detail={detail} isManager={isManager} isAdmin={isAdmin} individualTargets={individualTargets}
