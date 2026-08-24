@@ -44,6 +44,7 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
   DateTime? _weekStart;
   List<Map<String, dynamic>> _plans = const [];
   String? _listTab; // 一覧のクラス別タブ選択(classId、または '__none__'=園全体)
+  bool _showDashboard = true; // 管理者向け提出状況パネルの開閉
   Map<String, dynamic>? _detail; // {plan, template, individual}
   List<Map<String, dynamic>> _targets = const [];
   bool _loading = true;
@@ -203,6 +204,10 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _selectorCard(),
+        if (widget.isManager) ...[
+          const SizedBox(height: 16),
+          _dashboardPanel(),
+        ],
         const SizedBox(height: 16),
         const Text('作成済みの計画', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
         const SizedBox(height: 8),
@@ -222,6 +227,124 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
             ],
       ],
     );
+  }
+
+  // ===== 提出状況ダッシュボード(管理者向け) =====
+  // クラス×[年間指導計画 / 今月の月案] の状態を一覧。未作成はその場で作成。園全体は全体的な計画/保育安全計画。
+  Map<String, dynamic>? _planFor(String? classId, String type, {int? month}) {
+    for (final p in _plans) {
+      if (p['plan_type'] != type) continue;
+      if ((p['class_id'] as String?) != classId) continue;
+      if (month != null && p['month'] != month) continue;
+      return p;
+    }
+    return null;
+  }
+
+  Widget _dashboardPanel() {
+    final nowMonth = DateTime.now().month;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _showDashboard = !_showDashboard),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.fact_check_outlined, size: 20, color: AppColors.skyBlue),
+                    const SizedBox(width: 8),
+                    Text('提出状況($_fiscalYear年度)', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    const Spacer(),
+                    Icon(_showDashboard ? Icons.expand_less : Icons.expand_more, color: AppColors.textSecondary),
+                  ],
+                ),
+              ),
+            ),
+            if (_showDashboard) ...[
+              // 見出し行
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: const [
+                    Expanded(flex: 3, child: Text('クラス', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                    Expanded(flex: 3, child: Text('年間指導計画', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                    Expanded(flex: 3, child: Text('今月の月案', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                  ],
+                ),
+              ),
+              for (final c in _classes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(flex: 3, child: Text(c.className, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                      Expanded(flex: 3, child: _statusCell(_planFor(c.classId, 'annual'), c.classId, 'annual', null)),
+                      Expanded(flex: 3, child: _statusCell(_planFor(c.classId, 'monthly', month: nowMonth), c.classId, 'monthly', nowMonth)),
+                    ],
+                  ),
+                ),
+              const Divider(height: 16),
+              Row(
+                children: [
+                  const Expanded(flex: 3, child: Text('園全体', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                  Expanded(flex: 3, child: _statusCell(_planFor(null, 'overall'), null, 'overall', null, label: '全体的な計画')),
+                  Expanded(flex: 3, child: _statusCell(_planFor(null, 'safety'), null, 'safety', null, label: '保育安全計画')),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusCell(Map<String, dynamic>? plan, String? classId, String type, int? month, {String? label}) {
+    final status = plan?['status'] as String?;
+    final (color, text) = switch (status) {
+      'approved' => (AppColors.leafGreen, '承認済'),
+      'chief_checked' => (AppColors.skyBlue, '主任確認'),
+      'submitted' => (AppColors.skyBlue, '申請中'),
+      'draft' => (AppColors.warmOrange, '下書き'),
+      _ => (AppColors.textSecondary, '未作成'),
+    };
+    final display = label != null && status == null ? '＋ $label' : (label != null ? '$label:$text' : text);
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: _busy
+            ? null
+            : () {
+                if (plan != null) {
+                  _loadDetail(plan['id'] as String);
+                } else {
+                  _quickCreate(classId, type, month);
+                }
+              },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Text(display, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color), overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _quickCreate(String? classId, String type, int? month) async {
+    setState(() {
+      _planType = type;
+      _classId = classId;
+      if (month != null) _month = month;
+    });
+    await _openOrCreate();
   }
 
   Widget _classTabBar(List<({String id, String label})> tabs) => SingleChildScrollView(
