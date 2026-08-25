@@ -40,6 +40,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
       const [];
   List<Map<String, dynamic>> _suspended = const [];
   int? _leftover; // その日の残量(g)
+  ({bool isStation, int? milkBottles, int nextDaySnack})? _station; // Station固有(340)
   late final AnimationController _flash;
 
   @override
@@ -76,6 +77,10 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         final row = sum.where((r) => (r['business_date'] as String?) == ds).firstOrNull;
         leftover = (row?['leftover_grams'] as num?)?.toInt();
       } catch (_) {}
+      ({bool isStation, int? milkBottles, int nextDaySnack})? station;
+      try {
+        station = await widget.service.fetchMealStationExtras(widget.officeId, _date);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
@@ -83,6 +88,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         _changes = changes;
         _suspended = suspended;
         _leftover = leftover;
+        _station = station;
         _loading = false;
       });
     } catch (_) {
@@ -342,9 +348,62 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         _sectionTitle('給食開始保留', AppColors.warmOrange, hold.length),
         if (hold.isEmpty) _emptyLine('対象児はいません') else _chips(hold),
         const SizedBox(height: 16),
+        if (_station?.isStation ?? false) ...[
+          _stationCard(),
+          const SizedBox(height: 16),
+        ],
         _leftoverCard(),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  /// Mahalo Station固有(340): 明日のおやつ(翌日登園予定数)と今日の牛乳本数(手入力)。
+  Widget _stationCard() {
+    final s = _station!;
+    final ctrl = TextEditingController(text: s.milkBottles?.toString() ?? '');
+    ctrl.selection = TextSelection.collapsed(offset: ctrl.text.length);
+    return Card(
+      color: AppColors.skyBlue.withValues(alpha: 0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('明日のおやつ(登園予定)', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text('${s.nextDaySnack} 名', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+              ],
+            ),
+            const SizedBox(width: 24),
+            const Text('今日の牛乳', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, suffixText: '本'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: () async {
+                final n = int.tryParse(ctrl.text.trim());
+                try {
+                  await widget.service.setMilkBottles(widget.officeId, _date, n);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('牛乳本数を保存しました')));
+                  await _load();
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存できません: $e')));
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -83,6 +83,9 @@ function ChildcareMealBoardContent() {
   >([]);
   // 給食停止中(弁当持参・アレルギー確認中)の園児。厨房が提供対象外を把握できるよう先頭に表示(271)。
   const [suspended, setSuspended] = useState<{ child_id: string; child_name: string; note: string | null }[]>([]);
+  // Mahalo Station固有(340): 牛乳本数(手入力)・明日のおやつ(翌日登園予定数)
+  const [station, setStation] = useState<{ is_station: boolean; milk_bottles: number | null; next_day_snack: number } | null>(null);
+  const [milkInput, setMilkInput] = useState("");
   const [adjRow, setAdjRow] = useState("");
   const [adjSlot, setAdjSlot] = useState("lunch");
   const [adjDelta, setAdjDelta] = useState("1");
@@ -123,6 +126,13 @@ function ChildcareMealBoardContent() {
     void supabase
       .rpc("fetch_meal_suspended_children_for_office", { p_office_id: selectedOffice })
       .then(({ data }) => setSuspended((data ?? []) as { child_id: string; child_name: string; note: string | null }[]));
+    void supabase
+      .rpc("fetch_meal_station_extras", { p_office: selectedOffice, p_date: businessDate })
+      .then(({ data }) => {
+        const s = (data?.[0] ?? null) as { is_station: boolean; milk_bottles: number | null; next_day_snack: number } | null;
+        setStation(s);
+        setMilkInput(s?.milk_bottles != null ? String(s.milk_bottles) : "");
+      });
   }, [selectedOffice, businessDate, reloadToken]);
 
   const run = useCallback(
@@ -298,6 +308,36 @@ function ChildcareMealBoardContent() {
         <p className="text-xs text-slate-400">
           9:31に自動算出された暫定値です。各クラスが確認して「承認」で確定。変更期限=昼食10:00 / 午後おやつ14:00 / 朝おやつ9:30。
         </p>
+
+        {station?.is_station && (
+          <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-4 shadow-sm">
+            <div>
+              <div className="text-xs font-semibold text-slate-500">明日のおやつ(翌日の登園予定数)</div>
+              <div className="text-2xl font-bold text-slate-800 tabular-nums">{station.next_day_snack}<span className="ml-1 text-sm font-normal">名</span></div>
+            </div>
+            <div className="flex items-end gap-2">
+              <label className="text-xs font-semibold text-slate-500">
+                <span className="mb-1 block">今日の牛乳(本)</span>
+                <input
+                  type="number" min={0} value={milkInput}
+                  onChange={(e) => setMilkInput(e.target.value)}
+                  className="w-24 rounded-lg border border-slate-300 px-3 py-1.5 text-sm tabular-nums"
+                />
+              </label>
+              <button
+                disabled={busy}
+                onClick={() => run(async (s) => {
+                  const { error } = await s.rpc("set_milk_bottles", {
+                    p_office: selectedOffice, p_date: businessDate,
+                    p_count: milkInput === "" ? null : Number(milkInput),
+                  });
+                  return { error };
+                }, "牛乳本数を保存しました")}
+                className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+              >保存</button>
+            </div>
+          </div>
+        )}
 
         {err && <p className="text-sm font-medium text-red-500">{err}</p>}
 

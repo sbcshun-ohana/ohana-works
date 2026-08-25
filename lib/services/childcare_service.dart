@@ -1554,6 +1554,25 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// Mahalo Station固有欄(340): is_station・牛乳本数・明日のおやつ(翌日登園予定数)。
+  Future<({bool isStation, int? milkBottles, int nextDaySnack})> fetchMealStationExtras(
+      String officeId, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_station_extras',
+        params: {'p_office': officeId, 'p_date': dateOnly(businessDate)});
+    final r = (rows as List).cast<Map<String, dynamic>>().firstOrNull;
+    return (
+      isStation: (r?['is_station'] as bool?) ?? false,
+      milkBottles: r?['milk_bottles'] as int?,
+      nextDaySnack: (r?['next_day_snack'] as int?) ?? 0,
+    );
+  }
+
+  /// 今日の牛乳本数を保存(Station固有・340)。
+  Future<void> setMilkBottles(String officeId, DateTime businessDate, int? count) async {
+    await _client.rpc('set_milk_bottles',
+        params: {'p_office': officeId, 'p_date': dateOnly(businessDate), 'p_count': count});
+  }
+
   // ===== 指導計画・保育安全計画(287-297)=====
   Future<bool> isGuidancePlansEnabledForOffice(String officeId) async {
     try {
