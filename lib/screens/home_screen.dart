@@ -6,6 +6,7 @@ import '../services/push_service.dart';
 import '../theme/app_theme.dart';
 import 'notices/notice_list_screen.dart';
 import 'qr_attendance_screen.dart';
+import 'requests/meal_order_screen.dart';
 import 'requests/my_attendance_screen.dart';
 import 'requests/my_payslip_list_screen.dart';
 import 'requests/my_shift_screen.dart';
@@ -164,6 +165,22 @@ class HomeScreen extends StatelessWidget {
                           },
                           icon: const Icon(Icons.event_note_outlined),
                           label: const Text('自分のシフト'),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => MealOrderScreen(
+                                  service: MyDataService(
+                                    Supabase.instance.client,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.restaurant_outlined),
+                          label: const Text('給食の発注'),
                         ),
                       ],
                     ),

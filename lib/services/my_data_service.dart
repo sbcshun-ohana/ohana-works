@@ -70,4 +70,34 @@ class MyDataService {
 
   String _formatDate(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  // ===== 給食の発注(給食管理 Phase3・336) =====
+  /// 期間内の各日の発注状態(自動対象/当日エントリ/実効/締め)。
+  Future<List<Map<String, dynamic>>> fetchStaffMealOrderDays(DateTime from, DateTime to) async {
+    final rows = await _client.rpc('fetch_staff_meal_order_days',
+        params: {'p_from': _formatDate(from), 'p_to': _formatDate(to)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 自己発注(食べる/食べない)。当日は9:00締め。
+  Future<void> setStaffMealEntry(DateTime date, bool willEat) async {
+    await _client.rpc('set_staff_meal_entry', params: {'p_date': _formatDate(date), 'p_will_eat': willEat});
+  }
+
+  /// 当日分の自己発注を取り消して既定に戻す。
+  Future<void> clearStaffMealEntry(DateTime date) async {
+    await _client.rpc('clear_staff_meal_entry', params: {'p_date': _formatDate(date)});
+  }
+
+  /// 恒常的な喫食既定(普段給食を食べないOFF設定)。
+  Future<void> setStaffMealDefault(bool eats) async {
+    await _client.rpc('set_staff_meal_default', params: {'p_eats': eats});
+  }
+
+  /// 賃金明細添付用: 当月の食事日一覧(日付・種別・単価)。
+  Future<List<Map<String, dynamic>>> fetchMyMealDays(DateTime month) async {
+    final rows = await _client.rpc('fetch_my_meal_days',
+        params: {'p_month': _formatDate(DateTime(month.year, month.month, 1))});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
 }

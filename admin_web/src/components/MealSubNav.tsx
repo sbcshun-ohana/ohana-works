@@ -7,6 +7,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 const SUB_ITEMS = [
   { href: "/childcare/meal-board", label: "食数ボード" },
   { href: "/childcare/meal-summary", label: "食数集計" },
+  { href: "/childcare/staff-meals", label: "職員食事表" },
   { href: "/childcare/meal-photos", label: "給食写真" },
   { href: "/childcare/menus", label: "献立" },
   { href: "/childcare/menus/day", label: "日別ビュー" },
