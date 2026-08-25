@@ -89,7 +89,20 @@ class _FamilyCheckinScreenState extends State<FamilyCheckinScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
                     const SizedBox(height: 20),
-                    ...widget.resolution.candidates.map(_buildCandidateTile),
+                    // 縦一列の羅列ではなく2列のボタン状グリッドで表示(タッチ操作で押しやすく・兄弟を見分けやすい)。
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        const gap = 14.0;
+                        final tileWidth = (constraints.maxWidth - gap) / 2;
+                        return Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: widget.resolution.candidates
+                              .map((c) => SizedBox(width: tileWidth, child: _buildCandidateTile(c)))
+                              .toList(),
+                        );
+                      },
+                    ),
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 12),
                       Text(_errorMessage!,
@@ -136,67 +149,63 @@ class _FamilyCheckinScreenState extends State<FamilyCheckinScreen> {
         : (c.todayStatus != 'present');
     final selected = !disabled && (_selected[c.childId] ?? false);
     const blue = Color(0xFF1E88E5);
-    // タッチパネルでの押し間違いを防ぐため、カード全体を大きなタップ領域にし、
-    // 兄弟ごとに十分な間隔と大きなチェック表示で独立して見せる。
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: disabled ? null : () => setState(() => _selected[c.childId] = !selected),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-            decoration: BoxDecoration(
-              color: disabled ? Colors.grey.shade100 : (selected ? const Color(0xFFE3F2FD) : Colors.white),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: disabled ? Colors.grey.shade300 : (selected ? blue : Colors.grey.shade300),
-                width: selected ? 3 : 2,
-              ),
+    // タッチパネルでの押し間違いを防ぐため、2列グリッドの大きな「ボタン」として表示。
+    // チェックを上・氏名(クラス)を中央下に配置し、カード全体をタップ領域にする。
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: disabled ? null : () => setState(() => _selected[c.childId] = !selected),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 128),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          decoration: BoxDecoration(
+            color: disabled ? Colors.grey.shade100 : (selected ? const Color(0xFFE3F2FD) : Colors.white),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: disabled ? Colors.grey.shade300 : (selected ? blue : Colors.grey.shade300),
+              width: selected ? 3 : 2,
             ),
-            child: Row(
-              children: [
-                // 大きめのチェックボックス(視認性・タップ精度向上)
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: selected ? blue : Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: disabled ? Colors.grey.shade400 : (selected ? blue : Colors.grey.shade500), width: 2),
-                  ),
-                  child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 30) : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 大きめのチェック(視認性・タップ精度向上)
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: selected ? blue : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: disabled ? Colors.grey.shade400 : (selected ? blue : Colors.grey.shade500), width: 2),
                 ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${c.childName}${c.className != null ? '(${c.className})' : ''}',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: disabled ? Colors.grey : Colors.black87,
-                        ),
-                      ),
-                      if (c.note != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          c.note!,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: c.isAbsentToday ? Colors.orange.shade800 : Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ],
+                child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 30) : null,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${c.childName}${c.className != null ? '\n(${c.className})' : ''}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  height: 1.25,
+                  fontWeight: FontWeight.w800,
+                  color: disabled ? Colors.grey : Colors.black87,
+                ),
+              ),
+              if (c.note != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  c.note!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: c.isAbsentToday ? Colors.orange.shade800 : Colors.grey.shade600,
                   ),
                 ),
               ],
-            ),
+            ],
           ),
         ),
       ),
