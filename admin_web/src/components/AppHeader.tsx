@@ -19,6 +19,8 @@ const NAV_ITEMS = [
   { href: "/infection-masters", label: "感染症マスター" },
   { href: "/food-checks", label: "食材チェック" },
   { href: "/development-masters", label: "発達記録マスター" },
+  // 俊指示(2026-08-25): 重要事項説明書は保育業務ではなく管理者業務としてトップレベルへ。
+  { href: "/childcare/important-matters", label: "重要事項説明書" },
   { href: "/notices", label: "お知らせ(職員向け)" },
   { href: "/payroll", label: "給与確定" },
   { href: "/settings", label: "設定" },
@@ -114,8 +116,9 @@ function AppHeaderInner() {
       </div>
       <nav className="mt-2 flex flex-wrap gap-1">
         {navItems.map((item) => {
+          // 「保育業務」タブは /childcare 配下でアクティブ。ただし重要事項説明書はトップレベル扱いのため除外。
           const isActive = item.href === "/childcare/attendance"
-            ? pathname.startsWith("/childcare")
+            ? pathname.startsWith("/childcare") && !pathname.startsWith("/childcare/important-matters")
             : pathname === item.href;
           return (
             <Link

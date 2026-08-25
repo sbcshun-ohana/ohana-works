@@ -31,8 +31,8 @@ const CHILDCARE_NAV_ITEMS = [
   { href: INCIDENT_HREF, label: "ヒヤリハット・事故報告" },
   { href: MEAL_HREF, label: "給食管理" },
   { href: GUIDANCE_HREF, label: "指導計画" },
-  { href: "/childcare/important-matters", label: "重要事項説明書" },
   // 保護者管理・入園手続き・感染症マスターは管理業務としてトップレベルへ移設(俊指示 2026-08-17)。
+  // 重要事項説明書も管理者業務としてトップレベル(AppHeader)へ移設(俊指示 2026-08-25)。
 ];
 
 export function ChildcareNav() {

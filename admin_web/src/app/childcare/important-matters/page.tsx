@@ -3,7 +3,6 @@
 import { Fragment, Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
-import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 type Doc = {
@@ -102,7 +101,6 @@ function ImportantMattersContent() {
   return (
     <div className="flex flex-1 flex-col">
       <AppHeader />
-      <ChildcareNav />
       <main className="flex-1 space-y-5 p-6">
         <h2 className="text-lg font-bold text-slate-800">重要事項説明書</h2>
         {err && <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{err}</div>}
