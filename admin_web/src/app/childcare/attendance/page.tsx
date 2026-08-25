@@ -52,7 +52,7 @@ function kindValue(r: Row | undefined): string {
   if (r.absence_kind === "sick_absence" || r.absence_kind === "personal_absence") return r.absence_kind;
   return "";
 }
-const MONTH_COL_WIDTH = 48; // 月間の日カラム幅(出欠/時刻で揃える)。
+const MONTH_COL_WIDTH = 34; // 月間の日カラム最小幅(出欠/時刻で揃える。全幅テーブルで31日+集計が横スクロールなしで収まる目安)。
 
 function AttendanceContent() {
   const { officesError, selectedOffice } = useChildcareOffices();
@@ -295,12 +295,12 @@ function AttendanceContent() {
     };
     return (
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
-        <table className="text-xs">
+        <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-slate-200">
-              <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-slate-500">園児</th>
+              <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-slate-500">園児</th>
               {days.map((d) => (
-                <th key={d} className={`px-1.5 py-2 text-center font-semibold ${dowColor(d)}`} style={{ minWidth: MONTH_COL_WIDTH }}>
+                <th key={d} className={`px-0.5 py-2 text-center font-semibold ${dowColor(d)}`} style={{ minWidth: MONTH_COL_WIDTH }}>
                   <div>{d}</div>
                   <div className="text-[10px] font-normal">{WEEKDAYS[new Date(year, month - 1, d).getDay()]}</div>
                 </th>
@@ -321,22 +321,22 @@ function AttendanceContent() {
               });
               return (
               <tr key={cid} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="sticky left-0 z-10 bg-white px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">
+                <td className="sticky left-0 z-10 bg-white px-2 py-1.5 font-medium text-slate-700 whitespace-nowrap">
                   {c.name}<span className="ml-1 text-slate-400">{c.cls ?? ""}</span>
                 </td>
                 {days.map((d) => {
                   const r = c.days.get(d);
-                  if (!r) return <td key={d} className="px-1 py-1.5 text-center text-slate-200">·</td>;
+                  if (!r) return <td key={d} className="px-0.5 py-1.5 text-center text-slate-200">·</td>;
                   const anoms = anomByKey.get(anomKey(r.child_id, r.business_date)) ?? [];
                   const miss = anoms.length > 0;
                   if (r.is_absent) {
                     const sym = registerSymbol(r);
-                    return <td key={d} className="px-1 py-1.5 text-center font-bold text-slate-400" title={r.absence_reason ?? "欠席"}>{sym}</td>;
+                    return <td key={d} className="px-0.5 py-1.5 text-center font-bold text-slate-400" title={r.absence_reason ?? "欠席"}>{sym}</td>;
                   }
                   if (withTime) {
                     return (
                       <td key={d} onClick={miss ? () => jumpToDayEdit(r.business_date) : undefined}
-                        className={`px-1 py-1 text-center tabular-nums leading-tight ${miss ? "cursor-pointer bg-red-50 hover:bg-red-100" : ""}`}
+                        className={`px-0.5 py-1 text-center tabular-nums leading-tight ${miss ? "cursor-pointer bg-red-50 hover:bg-red-100" : ""}`}
                         title={miss ? `要確認: ${anoms.join(" / ")}(クリックで修正)` : undefined}>
                         <div className={miss && !r.in_time ? "text-red-600 font-bold" : "text-slate-700"}>{hhmm(r.in_time) || "—"}</div>
                         <div className={miss && !r.depart_time ? "text-red-600 font-bold" : "text-slate-400"}>{hhmm(r.depart_time) || "—"}</div>
@@ -345,7 +345,7 @@ function AttendanceContent() {
                   }
                   return (
                     <td key={d} onClick={miss ? () => jumpToDayEdit(r.business_date) : undefined}
-                      className={`px-1 py-1.5 text-center ${miss ? "cursor-pointer bg-red-100 font-bold text-red-600 hover:bg-red-200" : "text-emerald-600"}`}
+                      className={`px-0.5 py-1.5 text-center ${miss ? "cursor-pointer bg-red-100 font-bold text-red-600 hover:bg-red-200" : "text-emerald-600"}`}
                       title={miss ? `要確認: ${anoms.join(" / ")}(クリックで修正)` : `${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
                       {miss ? "!" : "◯"}
                     </td>
