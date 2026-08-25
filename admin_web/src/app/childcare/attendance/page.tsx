@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
-// 登降園管理 Phase A(314)。日別=登降園時刻の行内修正+打刻漏れ強調、月間=俯瞰。主任以上。
+// 登降園管理(314/317/318/323/324)。日別=時刻の行内修正+備考、月間=出欠/時刻/園児別の3ビュー。主任以上。
 type Row = {
   child_id: string;
   child_name: string;
@@ -19,6 +19,7 @@ type Row = {
   is_absent: boolean;
   absence_reason: string | null;
   absence_kind: string | null;
+  note: string | null;
 };
 // 出席簿の記号: 病=病欠 / 都=都合欠 / 欠=種別不明の欠席 / ◯=出席 / 空=記録なし。
 function registerSymbol(r: Row): string {
@@ -26,7 +27,7 @@ function registerSymbol(r: Row): string {
   if (r.in_time || r.depart_time) return "◯";
   return "";
 }
-type Edit = { in: string; out: string; ret: string; depart: string };
+type Edit = { in: string; out: string; ret: string; depart: string; note: string };
 // Phase B(317): 要確認(anomaly)。severity=action は補正必須(確認済み不可)。
 type Anomaly = { child_id: string; business_date: string; anomaly_type: string; label: string; severity: string };
 const anomKey = (childId: string, date: string) => `${childId}__${date.slice(0, 10)}`;
@@ -37,17 +38,20 @@ function todayStr(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 function AttendanceContent() {
   const { officesError, selectedOffice } = useChildcareOffices();
   const now = new Date();
   const [mode, setMode] = useState<"day" | "month">("day");
+  const [monthSub, setMonthSub] = useState<"attendance" | "time" | "child">("attendance");
   const [date, setDate] = useState(todayStr());
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<Row[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
+  const [selectedChild, setSelectedChild] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -67,7 +71,7 @@ function AttendanceContent() {
         setRows(rs);
         if (mode === "day") {
           const e: Record<string, Edit> = {};
-          for (const r of rs) e[r.child_id] = { in: hhmm(r.in_time), out: hhmm(r.out_time), ret: hhmm(r.return_time), depart: hhmm(r.depart_time) };
+          for (const r of rs) e[r.child_id] = { in: hhmm(r.in_time), out: hhmm(r.out_time), ret: hhmm(r.return_time), depart: hhmm(r.depart_time), note: r.note ?? "" };
           setEdits(e);
         }
       });
@@ -89,14 +93,24 @@ function AttendanceContent() {
     const e = edits[childId];
     if (!e) return;
     setBusy(true);
-    const { error } = await createClient().rpc("set_child_attendance_actuals", {
+    const s = createClient();
+    const { error } = await s.rpc("set_child_attendance_actuals", {
       p_child_id: childId, p_business_date: date,
       p_in: e.in || null, p_out: e.out || null, p_return: e.ret || null, p_depart: e.depart || null,
     });
+    // 備考も同時に保存(324)。
+    const { error: noteErr } = await s.rpc("set_child_attendance_note", { p_child_id: childId, p_business_date: date, p_note: e.note || null });
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (error || noteErr) return setErr((error ?? noteErr)!.message);
     setErr(null);
     setReloadToken((t) => t + 1);
+  }
+
+  // 備考のみ保存(欠席児は時刻の保存ボタンが無効なため、備考はフォーカスアウトで即保存)。
+  async function saveNote(childId: string, note: string) {
+    const { error } = await createClient().rpc("set_child_attendance_note", { p_child_id: childId, p_business_date: date, p_note: note || null });
+    if (error) { setErr(error.message); return; }
+    setErr(null);
   }
 
   async function toggleAbsent(childId: string, absent: boolean) {
@@ -172,6 +186,12 @@ function AttendanceContent() {
               <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}月</option>)}
               </select>
+              {/* 月間の表示種類: 出欠(◯/欠) / 時刻(登降園時刻) / 園児別(1名の1ヶ月) */}
+              <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+                <button onClick={() => setMonthSub("attendance")} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${monthSub === "attendance" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>出欠</button>
+                <button onClick={() => setMonthSub("time")} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${monthSub === "time" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>時刻</button>
+                <button onClick={() => setMonthSub("child")} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${monthSub === "child" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>園児別</button>
+              </div>
               <button
                 onClick={downloadRegisterCsv}
                 disabled={rows.length === 0}
@@ -191,7 +211,7 @@ function AttendanceContent() {
         )}
         {err && <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{err}</div>}
 
-        {mode === "day" ? <DayView /> : <MonthView />}
+        {mode === "day" ? <DayView /> : monthSub === "child" ? <ChildMonthView /> : <MonthGridView withTime={monthSub === "time"} />}
       </main>
     </div>
   );
@@ -203,13 +223,14 @@ function AttendanceContent() {
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">クラス</th><th className="px-3 py-2">園児</th><th className="px-3 py-2">欠席</th>
-              <th className="px-3 py-2">登園</th><th className="px-3 py-2">外出</th><th className="px-3 py-2">戻り</th><th className="px-3 py-2">降園</th><th className="px-3 py-2"></th>
+              <th className="px-3 py-2">登園</th><th className="px-3 py-2">外出</th><th className="px-3 py-2">戻り</th><th className="px-3 py-2">降園</th>
+              <th className="px-3 py-2"></th><th className="px-3 py-2">備考</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">在籍児がいません</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">在籍児がいません</td></tr>}
             {rows.map((r) => {
-              const e = edits[r.child_id] ?? { in: "", out: "", ret: "", depart: "" };
+              const e = edits[r.child_id] ?? { in: "", out: "", ret: "", depart: "", note: "" };
               const set = (k: keyof Edit, v: string) => setEdits((prev) => ({ ...prev, [r.child_id]: { ...e, [k]: v } }));
               const anoms = anomByKey.get(anomKey(r.child_id, date)) ?? [];
               const miss = anoms.length > 0;
@@ -235,6 +256,12 @@ function AttendanceContent() {
                     <button disabled={busy || r.is_absent} onClick={() => void saveActuals(r.child_id)}
                       className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">保存</button>
                   </td>
+                  <td className="px-2 py-2">
+                    {/* 備考(小さめ・主任以上)。フォーカスアウトで自動保存。 */}
+                    <input type="text" value={e.note} placeholder="備考" onChange={(ev) => set("note", ev.target.value)}
+                      onBlur={() => void saveNote(r.child_id, e.note)}
+                      className="w-36 rounded border border-slate-300 px-2 py-1 text-xs" />
+                  </td>
                 </tr>
               );
             })}
@@ -244,10 +271,10 @@ function AttendanceContent() {
     );
   }
 
-  function MonthView() {
+  // 月間グリッド(出欠 ◯/欠 または 時刻 登降園)。園児×日。
+  function MonthGridView({ withTime }: { withTime: boolean }) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    // 園児ごとに日→row をまとめる。
     const byChild = new Map<string, { name: string; cls: string | null; days: Map<number, Row> }>();
     for (const r of rows) {
       const d = new Date(r.business_date).getDate();
@@ -255,28 +282,51 @@ function AttendanceContent() {
       byChild.get(r.child_id)!.days.set(d, r);
     }
     const children = [...byChild.entries()];
+    const dowColor = (d: number) => {
+      const g = new Date(year, month - 1, d).getDay();
+      return g === 0 ? "text-red-500" : g === 6 ? "text-sky-500" : "text-slate-400";
+    };
     return (
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
-              <th className="sticky left-0 bg-white px-2 py-2 text-left">園児</th>
-              {days.map((d) => <th key={d} className="px-1 py-2 text-center">{d}</th>)}
+            <tr className="border-b border-slate-200">
+              <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-slate-500">園児</th>
+              {days.map((d) => (
+                <th key={d} className={`px-1.5 py-2 text-center font-semibold ${dowColor(d)}`} style={{ minWidth: withTime ? 52 : 26 }}>
+                  <div>{d}</div>
+                  <div className="text-[10px] font-normal">{WEEKDAYS[new Date(year, month - 1, d).getDay()]}</div>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {children.length === 0 && <tr><td colSpan={daysInMonth + 1} className="px-3 py-6 text-center text-slate-400">この月の記録はありません</td></tr>}
             {children.map(([cid, c]) => (
-              <tr key={cid} className="border-b border-slate-100">
-                <td className="sticky left-0 bg-white px-2 py-1 font-medium text-slate-700 whitespace-nowrap">{c.name}<span className="ml-1 text-slate-400">{c.cls ?? ""}</span></td>
+              <tr key={cid} className="border-b border-slate-100 hover:bg-slate-50">
+                <td className="sticky left-0 z-10 bg-white px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">
+                  {c.name}<span className="ml-1 text-slate-400">{c.cls ?? ""}</span>
+                </td>
                 {days.map((d) => {
                   const r = c.days.get(d);
-                  if (!r) return <td key={d} className="px-1 py-1 text-center text-slate-300">·</td>;
-                  if (r.is_absent) return <td key={d} className="px-1 py-1 text-center font-bold text-slate-400" title={r.absence_reason ?? "欠席"}>欠</td>;
+                  if (!r) return <td key={d} className="px-1 py-1.5 text-center text-slate-200">·</td>;
                   const anoms = anomByKey.get(anomKey(r.child_id, r.business_date)) ?? [];
                   const miss = anoms.length > 0;
+                  if (r.is_absent) {
+                    const sym = registerSymbol(r);
+                    return <td key={d} className="px-1 py-1.5 text-center font-bold text-slate-400" title={r.absence_reason ?? "欠席"}>{sym}</td>;
+                  }
+                  if (withTime) {
+                    return (
+                      <td key={d} className={`px-1 py-1 text-center tabular-nums leading-tight ${miss ? "bg-red-50" : ""}`}
+                        title={miss ? `要確認: ${anoms.join(" / ")}` : undefined}>
+                        <div className={miss && !r.in_time ? "text-red-600 font-bold" : "text-slate-700"}>{hhmm(r.in_time) || "—"}</div>
+                        <div className={miss && !r.depart_time ? "text-red-600 font-bold" : "text-slate-400"}>{hhmm(r.depart_time) || "—"}</div>
+                      </td>
+                    );
+                  }
                   return (
-                    <td key={d} className={`px-1 py-1 text-center ${miss ? "bg-red-100 font-bold text-red-600" : "text-slate-600"}`}
+                    <td key={d} className={`px-1 py-1.5 text-center ${miss ? "bg-red-100 font-bold text-red-600" : "text-emerald-600"}`}
                       title={miss ? `要確認: ${anoms.join(" / ")}` : `${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
                       {miss ? "!" : "◯"}
                     </td>
@@ -286,6 +336,70 @@ function AttendanceContent() {
             ))}
           </tbody>
         </table>
+      </div>
+    );
+  }
+
+  // 園児単位の1ヶ月一覧(1名を選び、日ごとに 出欠・登降園時刻・備考を縦に表示)。
+  function ChildMonthView() {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    // 園児一覧(RPCの年齢/氏名順を保持)。
+    const seen = new Set<string>();
+    const children: { id: string; name: string; cls: string | null }[] = [];
+    for (const r of rows) {
+      if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
+    }
+    const cid = selectedChild && children.some((c) => c.id === selectedChild) ? selectedChild : children[0]?.id ?? "";
+    const byDay = new Map<number, Row>();
+    for (const r of rows) if (r.child_id === cid) byDay.set(new Date(r.business_date).getDate(), r);
+    const dateStr = (d: number) => `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-600">園児:</span>
+          <select value={cid} onChange={(e) => setSelectedChild(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+            {children.length === 0 && <option value="">(在籍児なし)</option>}
+            {children.map((c) => <option key={c.id} value={c.id}>{c.name}（{c.cls ?? "—"}）</option>)}
+          </select>
+        </div>
+        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                <th className="px-3 py-2">日</th><th className="px-3 py-2">曜</th><th className="px-3 py-2">状態</th>
+                <th className="px-3 py-2">登園</th><th className="px-3 py-2">外出</th><th className="px-3 py-2">戻り</th><th className="px-3 py-2">降園</th>
+                <th className="px-3 py-2">備考</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                const r = byDay.get(d);
+                const g = new Date(year, month - 1, d).getDay();
+                const anoms = anomByKey.get(anomKey(cid, dateStr(d))) ?? [];
+                const miss = anoms.length > 0;
+                return (
+                  <tr key={d} className={`border-b border-slate-100 ${miss ? "bg-red-50" : g === 0 ? "bg-red-50/30" : g === 6 ? "bg-sky-50/40" : ""}`}>
+                    <td className="px-3 py-1.5 tabular-nums text-slate-700">{d}</td>
+                    <td className={`px-3 py-1.5 ${g === 0 ? "text-red-500" : g === 6 ? "text-sky-500" : "text-slate-400"}`}>{WEEKDAYS[g]}</td>
+                    <td className="px-3 py-1.5">
+                      {!r ? <span className="text-slate-300">·</span>
+                        : r.is_absent ? <span className="font-bold text-slate-500">{registerSymbol(r)}</span>
+                        : (r.in_time || r.depart_time) ? <span className="font-bold text-emerald-600">◯</span>
+                        : miss ? <span className="font-bold text-red-600">要確認</span>
+                        : <span className="text-slate-300">·</span>}
+                    </td>
+                    <td className="px-3 py-1.5 tabular-nums">{r ? (hhmm(r.in_time) || "") : ""}</td>
+                    <td className="px-3 py-1.5 tabular-nums text-slate-500">{r ? (hhmm(r.out_time) || "") : ""}</td>
+                    <td className="px-3 py-1.5 tabular-nums text-slate-500">{r ? (hhmm(r.return_time) || "") : ""}</td>
+                    <td className="px-3 py-1.5 tabular-nums">{r ? (hhmm(r.depart_time) || "") : ""}</td>
+                    <td className="px-3 py-1.5 text-xs text-slate-600">{r?.note ?? ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
