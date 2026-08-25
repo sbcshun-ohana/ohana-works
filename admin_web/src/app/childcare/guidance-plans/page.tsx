@@ -20,6 +20,7 @@ type PlanDetail = {
     id: string; office_id: string; class_id: string | null; plan_type: string; fiscal_year: number;
     month: number | null; week_start_date: string | null; content: Record<string, string>;
     evaluation: Record<string, string>; status: string; rejected_reason: string | null;
+    office_category?: string; can_approve?: boolean; // 332: ボタン出し分け用
   };
   template: { title: string; sections: TemplateSection[] };
   individual: { child_id: string; child_name: string; content: Record<string, string> }[];
@@ -50,6 +51,7 @@ function GuidancePlansContent() {
   const { offices, officesError, selectedOffice } = useChildcareOffices();
   const isManager = offices?.find((o) => o.office_id === selectedOffice)?.is_manager ?? false;
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canApproveOffice, setCanApproveOffice] = useState(false); // 承認可(統括園長・園長)。一括承認ボタン用(332/333)
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const nowYear = new Date().getFullYear();
   const [fiscalYear, setFiscalYear] = useState(nowYear);
@@ -66,6 +68,7 @@ function GuidancePlansContent() {
   const [reloadToken, setReloadToken] = useState(0);
   const [listTab, setListTab] = useState<string>("__none__"); // 一覧のクラス別タブ(classId or '__none__'=園全体)
   const [tasks, setTasks] = useState<{ message: string; level: string }[]>([]); // 未完了タスク(主任以上・306)
+  const [tasksOpen, setTasksOpen] = useState(false); // 未完了タスクの開閉(既定=閉。大量時に下を隠さない)
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -76,13 +79,15 @@ function GuidancePlansContent() {
     let cancelled = false;
     void (async () => {
       const supabase = createClient();
-      const [{ data: adminData }, { data: cls }, { data: pl }] = await Promise.all([
+      const [{ data: adminData }, { data: cls }, { data: pl }, { data: canApp }] = await Promise.all([
         supabase.rpc("is_childcare_admin", { target_office_id: selectedOffice }),
         supabase.rpc("fetch_childcare_classes", { p_office_id: selectedOffice }),
         supabase.rpc("fetch_guidance_plans_for_office", { p_office_id: selectedOffice, p_fiscal_year: fiscalYear, p_plan_type: null }),
+        supabase.rpc("can_approve_guidance_plan", { target_office_id: selectedOffice }),
       ]);
       if (cancelled) return;
       setIsAdmin(adminData === true);
+      setCanApproveOffice(canApp === true);
       setClasses((cls ?? []) as ClassRow[]);
       setPlans((pl ?? []) as PlanListRow[]);
       if (adminData === true) {
@@ -176,6 +181,20 @@ function GuidancePlansContent() {
     setReloadToken((t) => t + 1);
   }
 
+  // 一括承認(333): その年度の承認待ち(認可=主任確認済 / 企業主導型=申請済)をまとめて承認。
+  async function bulkApprove() {
+    const pending = plans.filter((p) => p.status === "submitted" || p.status === "chief_checked").length;
+    if (pending === 0) { alert("承認待ちの指導計画はありません。"); return; }
+    if (!window.confirm(`${fiscalYear}年度の承認待ちの指導計画をまとめて承認します。よろしいですか?`)) return;
+    setBusy(true);
+    const { data, error: e } = await createClient().rpc("bulk_approve_guidance_plans", { p_office_id: selectedOffice, p_fiscal_year: fiscalYear });
+    setBusy(false);
+    if (e) { alert(`操作できません: ${e.message}`); return; }
+    alert(`${(data as number | null) ?? 0}件を承認しました。`);
+    if (detail) await loadDetail(detail.plan.id);
+    setReloadToken((t) => t + 1);
+  }
+
   async function saveIndividual(childId: string, content: Record<string, string>) {
     if (!detail) return;
     const supabase = createClient();
@@ -248,18 +267,31 @@ function GuidancePlansContent() {
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">開く / 作成</button>
         </section>
 
-        {/* 未完了タスク(主任以上・306): 未提出=赤/承認待ち=青 */}
+        {/* 未完了タスク(主任以上・306): 未提出=赤/承認待ち=青。件数が多いと下が見えなくなるため
+            既定は折りたたみ、＋/−で開閉(俊指示 2026-08-25)。開いても max-h でスクロール内に収める。 */}
         {isManager && tasks.length > 0 && (
           <section className={`rounded-2xl border p-4 shadow-sm ${tasks.some((t) => t.level === "action") ? "border-red-200 bg-red-50/40" : "border-sky-200 bg-sky-50/40"}`}>
-            <div className="mb-2 text-sm font-bold text-slate-800">未完了タスク({tasks.length}件)</div>
-            <div className="space-y-1">
-              {tasks.filter((t) => t.level === "action").map((t, i) => (
-                <div key={`a${i}`} className="text-sm font-semibold text-red-600">● {t.message}</div>
-              ))}
-              {tasks.filter((t) => t.level === "info").map((t, i) => (
-                <div key={`i${i}`} className="text-sm font-semibold text-sky-700">● {t.message}</div>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => setTasksOpen((o) => !o)}
+              className="flex w-full items-center justify-between text-left text-sm font-bold text-slate-800"
+              aria-expanded={tasksOpen}
+            >
+              <span>未完了タスク({tasks.length}件)</span>
+              <span className="ml-2 flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-base leading-none text-slate-600">
+                {tasksOpen ? "−" : "＋"}
+              </span>
+            </button>
+            {tasksOpen && (
+              <div className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
+                {tasks.filter((t) => t.level === "action").map((t, i) => (
+                  <div key={`a${i}`} className="text-sm font-semibold text-red-600">● {t.message}</div>
+                ))}
+                {tasks.filter((t) => t.level === "info").map((t, i) => (
+                  <div key={`i${i}`} className="text-sm font-semibold text-sky-700">● {t.message}</div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -271,8 +303,20 @@ function GuidancePlansContent() {
           ];
           const activeTab = tabs.some((t) => t.id === listTab) ? listTab : (tabs[0]?.id ?? "__none__");
           const inTab = plans.filter((p) => (p.class_id ?? "__none__") === activeTab);
+          const pendingCount = plans.filter((p) => p.status === "submitted" || p.status === "chief_checked").length;
           return (
             <section className="space-y-3">
+              {/* 一括承認(333): 承認可(統括園長・園長)で、この年度に承認待ちがあるとき表示 */}
+              {canApproveOffice && pendingCount > 0 && (
+                <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+                  <span className="text-sm font-semibold text-emerald-800">承認待ちの指導計画が {pendingCount} 件あります</span>
+                  <button
+                    onClick={() => { void bulkApprove(); }}
+                    disabled={busy}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >一括承認</button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 {tabs.map((t) => (
                   <button
@@ -315,7 +359,7 @@ function GuidancePlansContent() {
         })()}
 
         {/* エディタ */}
-        {detail && <PlanEditor detail={detail} isManager={isManager} isAdmin={isAdmin} individualTargets={individualTargets}
+        {detail && <PlanEditor detail={detail} isManager={isManager} individualTargets={individualTargets}
           savedAt={savedAt} onField={setField} onInsert={insertExample} onSaveIndividual={saveIndividual}
           onClose={() => setDetail(null)}
           onSubmit={() => runAction(async (s) => await s.rpc("submit_guidance_plan", { p_id: detail.plan.id }), "申請しました")}
@@ -397,16 +441,18 @@ function exportSafetyExcel(XLSX: typeof import("xlsx"), p: { content: Record<str
 }
 
 function PlanEditor(props: {
-  detail: PlanDetail; isManager: boolean; isAdmin: boolean; busy: boolean; savedAt: string | null;
+  detail: PlanDetail; isManager: boolean; busy: boolean; savedAt: string | null;
   individualTargets: { child_id: string; display_name: string; is_kahai: boolean }[];
   onField: (s: string, k: string, v: string) => void;
   onInsert: (s: string, k: string, v: string) => void;
   onSaveIndividual: (childId: string, content: Record<string, string>) => void;
   onClose: () => void; onSubmit: () => void; onChiefCheck: () => void; onApprove: () => void; onReject: () => void; onCancel: () => void; onCopyPrevious: () => void;
 }) {
-  const { detail, isManager, isAdmin } = props;
+  const { detail, isManager } = props;
   const p = detail.plan;
   const st = p.status;
+  const isCorporate = p.office_category === "corporate_led"; // 企業主導型(MAHALO/Station/Halelea)
+  const canApprove = p.can_approve === true; // 統括園長/園長/統括管理者(332)
   const targetChildren = props.individualTargets;
 
   // AI下書き(月案・週案・未承認時)。連絡帳等を素材に各欄の下書きを生成→チェックで一括採用/追記。
@@ -631,19 +677,25 @@ function PlanEditor(props: {
         </div>
       )}
 
-      {/* ワークフロー */}
+      {/* ワークフロー(332): 承認=統括園長/園長/統括管理者(can_approve)。企業主導型は主任確認なし・申請は管理者以上。 */}
       <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
-        {st === "draft" && <button disabled={props.busy} onClick={props.onSubmit} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">申請する</button>}
-        {st === "submitted" && isManager && <>
-          <button disabled={props.busy} onClick={props.onReject} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">差し戻し</button>
-          <button disabled={props.busy} onClick={props.onChiefCheck} className="rounded-lg border border-sky-400 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50">主任確認(大和)</button>
-          {isAdmin && <button disabled={props.busy} onClick={props.onApprove} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">承認(企業主導型)</button>}
+        {/* 申請: 認可・企業主導型とも全職員 */}
+        {st === "draft" &&
+          <button disabled={props.busy} onClick={props.onSubmit} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">申請する</button>}
+        {st === "submitted" && <>
+          {isManager && <button disabled={props.busy} onClick={props.onReject} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">差し戻し</button>}
+          {/* 認可のみ主任確認 */}
+          {!isCorporate && isManager &&
+            <button disabled={props.busy} onClick={props.onChiefCheck} className="rounded-lg border border-sky-400 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50">主任確認</button>}
+          {/* 企業主導型は申請→承認(統括園長/園長/統括管理者) */}
+          {isCorporate && canApprove &&
+            <button disabled={props.busy} onClick={props.onApprove} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">承認</button>}
         </>}
-        {st === "chief_checked" && isAdmin && <>
+        {st === "chief_checked" && canApprove && <>
           <button disabled={props.busy} onClick={props.onReject} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">差し戻し</button>
-          <button disabled={props.busy} onClick={props.onApprove} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">承認する</button>
+          <button disabled={props.busy} onClick={props.onApprove} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">承認</button>
         </>}
-        {st === "approved" && isAdmin && <button disabled={props.busy} onClick={props.onCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">承認取消</button>}
+        {st === "approved" && canApprove && <button disabled={props.busy} onClick={props.onCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">承認取消</button>}
       </div>
     </section>
   );

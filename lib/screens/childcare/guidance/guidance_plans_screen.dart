@@ -46,6 +46,7 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
   String? _listTab; // 一覧のクラス別タブ選択(classId、または '__none__'=園全体)
   bool _showDashboard = true; // 管理者向け提出状況パネルの開閉
   List<Map<String, dynamic>> _tasks = const []; // 未完了タスク(主任以上・306)
+  bool _canApproveOffice = false; // 承認可(統括園長・園長)。一括承認ボタン用(332/333)
   Map<String, dynamic>? _detail; // {plan, template, individual}
   List<Map<String, dynamic>> _targets = const [];
   bool _loading = true;
@@ -78,11 +79,16 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
           tasks = await widget.service.fetchGuidancePlanTasks(widget.officeId);
         } catch (_) {}
       }
+      bool canApprove = false;
+      try {
+        canApprove = await widget.service.canApproveGuidancePlan(widget.officeId);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _classes = classes;
         _plans = plans;
         _tasks = tasks;
+        _canApproveOffice = canApprove;
         _loading = false;
       });
     } catch (_) {
@@ -228,6 +234,10 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
           const SizedBox(height: 16),
           _dashboardPanel(),
         ],
+        if (_canApproveOffice && _pendingApprovalCount > 0) ...[
+          const SizedBox(height: 16),
+          _bulkApproveBar(),
+        ],
         const SizedBox(height: 16),
         const Text('作成済みの計画', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
         const SizedBox(height: 8),
@@ -247,6 +257,57 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
             ],
       ],
     );
+  }
+
+  // 承認待ち件数(認可=主任確認済 / 企業主導型=申請済 の両方を「承認待ち」として数える)。
+  int get _pendingApprovalCount =>
+      _plans.where((p) => p['status'] == 'submitted' || p['status'] == 'chief_checked').length;
+
+  // 一括承認バー(333)。承認可(統括園長・園長)で承認待ちがあるとき表示。
+  Widget _bulkApproveBar() => Card(
+        color: AppColors.leafGreen.withValues(alpha: 0.10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text('承認待ちの指導計画が $_pendingApprovalCount 件あります',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              ),
+              FilledButton(
+                onPressed: _busy ? null : _bulkApprove,
+                style: FilledButton.styleFrom(backgroundColor: AppColors.leafGreen),
+                child: const Text('一括承認'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Future<void> _bulkApprove() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('一括承認'),
+        content: Text('$_fiscalYear年度の承認待ちの指導計画をまとめて承認します。よろしいですか?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('承認する')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final n = await widget.service.bulkApproveGuidancePlans(widget.officeId, _fiscalYear);
+      if (!mounted) return;
+      _snack('$n件を承認しました');
+      await _load();
+    } catch (e) {
+      if (mounted) _snack('承認できませんでした: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   // ===== 提出状況ダッシュボード(管理者向け) =====
@@ -533,6 +594,24 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
     );
   }
 
+  // エディタの題名。テンプレ名(「年間指導計画(1〜4歳児)」等の年齢表記)ではなく、
+  // クラス名+種別で表示する(俊指示 2026-08-25・iPadで見やすく)。園全体の種別(全体的な計画/
+  // 保育安全計画)はクラスが無いので種別名のみ。月案/週案は期間も付す。
+  String _planTitle() {
+    final planType = _plan['plan_type'] as String?;
+    final typeLabel = _planTypes.where((x) => x.value == planType).map((x) => x.label).firstOrNull ?? (planType ?? '');
+    final classId = _plan['class_id'] as String?;
+    final className = classId == null
+        ? null
+        : _classes.where((c) => c.classId == classId).map((c) => c.className).firstOrNull;
+    final month = _plan['month'];
+    final weekStart = _plan['week_start_date'] as String?;
+    if (className == null) return typeLabel; // 全体的な計画 / 保育安全計画
+    if (planType == 'monthly' && month != null) return '$className $month月の$typeLabel';
+    if (planType == 'weekly' && weekStart != null) return '$className $typeLabel($weekStart〜)';
+    return '$className $typeLabel'; // 例: つき組 年間指導計画
+  }
+
   // ===== エディタ =====
   Widget _editor() {
     final t = (_detail!['template'] as Map).cast<String, dynamic>();
@@ -541,7 +620,7 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
     final approved = status == 'approved';
     return Column(
       children: [
-        _editorBar(t['title'] as String? ?? '', status),
+        _editorBar(_planTitle(), status),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -727,17 +806,26 @@ class _GuidancePlansScreenState extends State<GuidancePlansScreen> {
     );
   }
 
+  // ワークフロー(332): 申請=全職員 / 主任確認=認可のみ主任以上 / 承認=統括園長・園長(can_approve)。
   Widget _workflowButtons(String status) {
     final btns = <Widget>[];
+    final isCorporate = _plan['office_category'] == 'corporate_led';
+    final canApprove = _plan['can_approve'] == true;
+    OutlinedButton reject() => OutlinedButton(onPressed: _busy ? null : _reject, style: OutlinedButton.styleFrom(foregroundColor: AppColors.punchClockOut), child: const Text('差し戻し'));
+    FilledButton approve() => FilledButton(onPressed: _busy ? null : () => _runAction(() => widget.service.approveGuidancePlan(_plan['id'] as String), '承認しました'), child: const Text('承認'));
     if (status == 'draft') {
       btns.add(FilledButton(onPressed: _busy ? null : () => _runAction(() => widget.service.submitGuidancePlan(_plan['id'] as String), '申請しました'), child: const Text('申請する')));
-    } else if (status == 'submitted' && widget.isManager) {
-      btns.add(OutlinedButton(onPressed: _busy ? null : _reject, style: OutlinedButton.styleFrom(foregroundColor: AppColors.punchClockOut), child: const Text('差し戻し')));
-      btns.add(OutlinedButton(onPressed: _busy ? null : () => _runAction(() => widget.service.chiefCheckGuidancePlan(_plan['id'] as String), '主任確認しました'), child: const Text('主任確認(大和)')));
-      btns.add(FilledButton(onPressed: _busy ? null : () => _runAction(() => widget.service.approveGuidancePlan(_plan['id'] as String), '承認しました'), child: const Text('承認(企業主導型)')));
-    } else if (status == 'chief_checked' && widget.isManager) {
-      btns.add(OutlinedButton(onPressed: _busy ? null : _reject, style: OutlinedButton.styleFrom(foregroundColor: AppColors.punchClockOut), child: const Text('差し戻し')));
-      btns.add(FilledButton(onPressed: _busy ? null : () => _runAction(() => widget.service.approveGuidancePlan(_plan['id'] as String), '承認しました'), child: const Text('承認する')));
+    } else if (status == 'submitted') {
+      if (widget.isManager) btns.add(reject());
+      // 認可のみ主任確認
+      if (!isCorporate && widget.isManager) {
+        btns.add(OutlinedButton(onPressed: _busy ? null : () => _runAction(() => widget.service.chiefCheckGuidancePlan(_plan['id'] as String), '主任確認しました'), child: const Text('主任確認')));
+      }
+      // 企業主導型は申請→承認
+      if (isCorporate && canApprove) btns.add(approve());
+    } else if (status == 'chief_checked' && canApprove) {
+      btns.add(reject());
+      btns.add(approve());
     }
     if (btns.isEmpty) return const SizedBox.shrink();
     return Wrap(alignment: WrapAlignment.end, spacing: 10, runSpacing: 10, children: btns);
