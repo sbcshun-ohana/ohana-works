@@ -145,25 +145,36 @@ export async function exportTimeXlsx(rows: AttendanceExportRow[], year: number, 
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(`${year}年${month}月`);
-  const lastCol = 2 + days.length;
+  const cCount1 = 2 + days.length + 1; // 集計列(出席/病欠/都合欠)の先頭列
+  const lastCol = 2 + days.length + 3;
   ws.mergeCells(1, 1, 1, lastCol);
   const title = ws.getCell(1, 1);
   title.value = `${year}年${month}月 登降園時刻`;
   title.font = { bold: true, size: 14 };
   title.alignment = { horizontal: "center", vertical: "middle" };
 
-  ws.addRow(["氏名", "区分", ...days.map((d) => `${month}/${d}`)]);
-  ws.addRow(["", "", ...days.map((d) => WEEKDAYS[new Date(year, month - 1, d).getDay()])]);
+  ws.addRow(["氏名", "区分", ...days.map((d) => `${month}/${d}`), "出席", "病欠", "都合欠"]);
+  ws.addRow(["", "", ...days.map((d) => WEEKDAYS[new Date(year, month - 1, d).getDay()]), "", "", ""]);
   for (const id of sortedIds) {
     const c = map.get(id)!;
     const arrival = days.map((d) => { const r = c.days.get(d); return r && !r.is_absent ? hhmm(r.in_time) : ""; });
     const departure = days.map((d) => { const r = c.days.get(d); return r && !r.is_absent ? hhmm(r.depart_time) : ""; });
     const absence = days.map((d) => { const r = c.days.get(d); return r && r.is_absent ? kindLabel(r) : ""; });
+    // 集計(出席=登園or降園あり / 病欠 / 都合欠)。
+    let present = 0, sick = 0, personal = 0;
+    days.forEach((d) => {
+      const r = c.days.get(d);
+      if (!r) return;
+      if (r.is_absent) { if (r.absence_kind === "sick_absence") sick++; else if (r.absence_kind === "personal_absence") personal++; }
+      else if (r.in_time || r.depart_time) present++;
+    });
     const nameCell = `${c.name}${c.cls ? `（${c.cls}）` : ""}`;
-    const r1 = ws.addRow([nameCell, "登園", ...arrival]);
+    const r1 = ws.addRow([nameCell, "登園", ...arrival, present, sick, personal]);
     ws.addRow(["", "降園", ...departure]);
     const r3 = ws.addRow(["", "欠席", ...absence]);
     ws.mergeCells(r1.number, 1, r3.number, 1); // 氏名を3行で結合
+    // 集計セルも園児の3行で結合。
+    for (let k = 0; k < 3; k++) ws.mergeCells(r1.number, cCount1 + k, r3.number, cCount1 + k);
   }
   ws.getRow(2).font = { bold: true };
   ws.getRow(3).font = { size: 9, color: { argb: "FF94A3B8" } };
@@ -175,6 +186,7 @@ export async function exportTimeXlsx(rows: AttendanceExportRow[], year: number, 
   });
   ws.getColumn(1).width = 16; ws.getColumn(2).width = 6;
   days.forEach((_, i) => (ws.getColumn(3 + i).width = 6));
+  for (let k = 0; k < 3; k++) ws.getColumn(cCount1 + k).width = 6;
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: 3 }];
   await download(wb, `登降園時刻_${year}-${String(month).padStart(2, "0")}.xlsx`);
 }
@@ -194,12 +206,18 @@ export async function exportChildXlsx(rows: AttendanceExportRow[], year: number,
   title.alignment = { horizontal: "center", vertical: "middle" };
 
   ws.addRow(["日", "曜", "出欠", "登園", "外出", "戻り", "降園", "備考"]);
+  let present = 0, sick = 0, personal = 0;
   for (let d = 1; d <= daysInMonth; d++) {
     const r = byDay.get(d);
     const g = new Date(year, month - 1, d).getDay();
     const state = !r ? "" : r.is_absent ? kindLabel(r) : (r.in_time || r.depart_time) ? "出席" : "";
+    if (state === "出席") present++; else if (state === "病欠") sick++; else if (state === "都合欠") personal++;
     ws.addRow([d, WEEKDAYS[g], state, r ? hhmm(r.in_time) : "", r ? hhmm(r.out_time) : "", r ? hhmm(r.return_time) : "", r ? hhmm(r.depart_time) : "", r?.note ?? ""]);
   }
+  // 月合計(出席/病欠/都合欠の日数)。
+  const totalRow = ws.addRow(["合計", "", `出席 ${present} / 病欠 ${sick} / 都合欠 ${personal}`, "", "", "", "", ""]);
+  ws.mergeCells(totalRow.number, 3, totalRow.number, 8);
+  totalRow.font = { bold: true };
   ws.getRow(2).font = { bold: true };
   centerAll(ws);
   stripe(ws, 3, 1); // 園児別は1日ごとに縞
