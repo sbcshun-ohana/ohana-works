@@ -445,7 +445,10 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
                 if (_importantMatters != null && !_importantMatters!.consented) _importantMattersCard(),
                 if (_enrollmentFormStatus != null && _enrollmentFormStatus != 'approved')
                   _enrollmentFormCard(),
-                for (final c in _infectionCases) _infectionCaseCard(c),
+                // 登園届/許可書が提出済みになったら、保護者の対応は完了なのでカード(アラート)を消す(俊指示 2026-08-25)。
+                for (final c in _infectionCases)
+                  if (c.documentState != 'submitted_electronically' && c.documentState != 'received_on_paper')
+                    _infectionCaseCard(c),
                 if (_pendingMealConsents > 0) _mealConsentCard(),
                 Expanded(child: _buildGrid()),
               ],
