@@ -442,7 +442,13 @@ function ChildcareMealBoardContent() {
 
         {/* 本日の献立(公開済み・267)。厨房・発注の参考に併記。 */}
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-sm font-bold text-slate-700">本日の献立</h3>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-700">本日の献立</h3>
+            <a
+              href={`/childcare/menus/day?office=${selectedOffice}&date=${businessDate}`}
+              className="text-xs font-semibold text-sky-600 hover:underline"
+            >日別ビューで見る →</a>
+          </div>
           {menuDay.filter((m) => !m.removal_kind).length === 0 ? (
             <p className="text-sm text-slate-400">この日の公開済み献立はありません(献立→編集→公開で表示)。</p>
           ) : (

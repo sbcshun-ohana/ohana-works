@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
@@ -35,7 +36,9 @@ type Row = {
 
 function MenuDayViewContent() {
   const { offices, officesError, selectedOffice } = useChildcareOffices();
-  const [date, setDate] = useState(currentDate());
+  const searchParams = useSearchParams();
+  // 食数ボード/デイリーボードから ?date= で当日を引き継いで開ける(AC-05)。
+  const [date, setDate] = useState(searchParams.get("date") || currentDate());
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
