@@ -58,17 +58,26 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   }
 
   // 状態別の見分け色(俊指示 2026-08-21): 登園中=緑 / 未登園(登園予定)=オレンジ / 降園済=グレー / 欠席=赤。
-  ({Color bg, Color accent}) _statusColors(String status) {
-    switch (status) {
-      case 'present':
-        return (bg: AppColors.leafGreen.withValues(alpha: 0.10), accent: AppColors.leafGreen);
-      case 'picked_up':
-        return (bg: AppColors.textSecondary.withValues(alpha: 0.08), accent: AppColors.textSecondary);
-      case 'absent':
-        return (bg: AppColors.punchClockOut.withValues(alpha: 0.08), accent: AppColors.punchClockOut);
-      default: // not_arrived(未登園=登園予定)
-        return (bg: AppColors.warmOrange.withValues(alpha: 0.10), accent: AppColors.warmOrange);
-    }
+  // クラス(年齢)ごとの統一配色(俊指示 2026-08-25)。状態で色が混在して見づらかったため、
+  // 行の配色はクラス単位に統一し、状態は右側のバッジで示す。0歳→5歳を暖色→寒色の虹色にして
+  // 一貫性を持たせる(最年長「にじ組」=虹にちなむ)。年齢はクラスの age_group から取得。
+  static const List<Color> _classPalette = <Color>[
+    Color(0xFFEC7FA9), // 0歳: 桃
+    Color(0xFFF3A64B), // 1歳: 橙
+    Color(0xFFE3C13F), // 2歳: 黄
+    Color(0xFF6FBF73), // 3歳: 緑
+    Color(0xFF4FAEDD), // 4歳: 水
+    Color(0xFF9B7EDE), // 5歳: 紫
+  ];
+  ({Color bg, Color accent}) _classColors(DailyBoardRow row) {
+    final ageGroup = _classes
+        .firstWhere((k) => k.className == row.className,
+            orElse: () => const ChildcareClass(classId: '', className: '', ageGroup: '', schoolYear: 0))
+        .ageGroup;
+    final m = RegExp(r'(\d)').firstMatch(ageGroup);
+    final age = m != null ? int.parse(m.group(1)!) : -1;
+    final c = (age >= 0 && age <= 5) ? _classPalette[age] : AppColors.textSecondary;
+    return (bg: c.withValues(alpha: 0.10), accent: c);
   }
   DailyBoardSummary? _summary;
   WeatherRecord? _weather;
@@ -1350,7 +1359,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                     itemBuilder: (context, index) {
                       if (index == present.length) return _absentSection(absent);
                       final row = present[index];
-                      final colors = _statusColors(effectiveBoardStatus(row));
+                      // 行の配色はクラス(年齢)単位で統一。状態(未登園/在園/降園済み)は右側のバッジで表示する。
+                      final colors = _classColors(row);
                       // 60/40レイアウト: 左=氏名/クラス+登降園タイムバー(約60%)、右=状態/操作/バッジ(約40%)。
                       // 状態別に背景の淡い色 + 左端の色アクセントで見分けやすくする(俊指示 2026-08-21)。
                       // カード全体はタップ無効。連絡帳へは右側の「日誌・連絡帳」アイコンからのみ遷移する
