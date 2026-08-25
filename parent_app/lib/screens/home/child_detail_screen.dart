@@ -458,13 +458,6 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
 
   Widget _buildGrid() {
     final items = <Widget>[
-      if (_importantMatters != null)
-        _GridMenuItem(
-          icon: Icons.description_rounded,
-          color: _importantMatters!.consented ? AppColors.leafGreen : AppColors.danger,
-          label: '重要事項説明書',
-          onTap: _openImportantMatters,
-        ),
       if (_enabledFeatures.contains('attendance_qr'))
         _GridMenuItem(
           icon: Icons.qr_code_2_rounded,
@@ -584,6 +577,14 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
               builder: (_) => ClassPhotosScreen(guardianService: widget.guardianService, child: widget.child),
             ),
           ),
+        ),
+      // 重要事項説明書は日常使いでないため最後尾に配置(俊指示 2026-08-25)。未同意時は上部の赤カードで別途強調。
+      if (_importantMatters != null)
+        _GridMenuItem(
+          icon: Icons.description_rounded,
+          color: _importantMatters!.consented ? AppColors.leafGreen : AppColors.danger,
+          label: '重要事項説明書',
+          onTap: _openImportantMatters,
         ),
     ];
 
