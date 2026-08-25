@@ -56,6 +56,8 @@ export function ChildcareNav() {
   const [alerts, setAlerts] = useState<
     { alert_type: string; label: string; cnt: number; href: string; level: string }[]
   >([]);
+  // アラート取得エラーを可視化(従来は握りつぶしでバー非表示=不具合の切り分け不能だった)。
+  const [alertsError, setAlertsError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,9 +118,15 @@ export function ChildcareNav() {
     let cancelled = false;
     const supabase = createClient();
     async function fetchAlerts() {
-      const { data } = await supabase.rpc("fetch_childcare_alerts_for_office", { p_office_id: effectiveOffice });
-      if (!cancelled)
-        setAlerts((data ?? []) as { alert_type: string; label: string; cnt: number; href: string; level: string }[]);
+      const { data, error } = await supabase.rpc("fetch_childcare_alerts_for_office", { p_office_id: effectiveOffice });
+      if (cancelled) return;
+      if (error) {
+        setAlertsError(`${error.message}${error.code ? ` (${error.code})` : ""}`);
+        setAlerts([]);
+        return;
+      }
+      setAlertsError(null);
+      setAlerts((data ?? []) as { alert_type: string; label: string; cnt: number; href: string; level: string }[]);
     }
     void fetchAlerts();
     const timer = setInterval(fetchAlerts, 60000);
@@ -184,6 +192,11 @@ export function ChildcareNav() {
           })}
         </nav>
       </div>
+      {alertsError && (
+        <div className="border-b border-amber-300 bg-amber-50 px-6 py-2 text-xs text-amber-800">
+          ⚠ アラートの取得に失敗しました: {alertsError}
+        </div>
+      )}
       {alerts.filter((a) => a.level === "action").length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2">
           <span className="text-sm font-bold text-red-700">⚠ 対応が必要:</span>

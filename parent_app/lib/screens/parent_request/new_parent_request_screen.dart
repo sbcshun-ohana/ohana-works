@@ -9,6 +9,7 @@ import '../../models/pickup_person.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/child_context_app_bar_title.dart';
+import '../../widgets/time_dropdown_picker.dart';
 
 /// 保護者からの申請・連絡の新規作成(欠席/遅刻/早退/お迎えの方の変更/その他連絡)。
 /// detailsのキーはadmin_web側の汎用表示(key: value)にそのまま表示されるため日本語で統一する。
@@ -133,7 +134,7 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.now());
+    final picked = await showTimeDropdownPicker(context: context, initialTime: _time ?? TimeOfDay.now());
     if (picked != null) setState(() => _time = picked);
   }
 
@@ -221,7 +222,7 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
 
   Future<void> _pickPickupTime({required bool isArrive}) async {
     final current = isArrive ? _pickupArriveTime : _pickupLeaveTime;
-    final picked = await showTimePicker(
+    final picked = await showTimeDropdownPicker(
       context: context,
       initialTime: current ?? (isArrive ? const TimeOfDay(hour: 9, minute: 0) : const TimeOfDay(hour: 17, minute: 0)),
     );

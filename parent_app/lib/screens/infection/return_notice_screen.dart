@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/time_dropdown_picker.dart';
 
 /// 電子登園届(211・設計書§3.5)。
 /// 確認項目はマスターの宣言的ルールから動的生成。全条件充足時のみ提出可能(未達理由を表示)。
@@ -142,7 +143,7 @@ class _ReturnNoticeScreenState extends State<ReturnNoticeScreen> {
       lastDate: DateTime.now(),
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(
+    final time = await showTimeDropdownPicker(
         context: context, initialTime: TimeOfDay.fromDateTime(_baseAt ?? DateTime.now()));
     if (time == null) return;
     setState(() => _baseAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));

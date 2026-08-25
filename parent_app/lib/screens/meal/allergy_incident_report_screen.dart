@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/time_dropdown_picker.dart';
 
 /// アレルギー発症報告(271・保護者)。ご家庭で食べたものでアレルギー反応が出た場合に園へ報告する。
 /// 送信すると園の主任以上へ重要通知が届き、園が給食停止(弁当持参)の要否を判断する。
@@ -64,7 +65,7 @@ class _AllergyIncidentReportScreenState extends State<AllergyIncidentReportScree
       lastDate: now,
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_occurredAt));
+    final time = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.fromDateTime(_occurredAt));
     if (!mounted) return;
     setState(() {
       _occurredAt = DateTime(date.year, date.month, date.day, time?.hour ?? _occurredAt.hour, time?.minute ?? _occurredAt.minute);

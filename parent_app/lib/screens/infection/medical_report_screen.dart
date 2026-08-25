@@ -4,6 +4,7 @@ import '../../models/linked_child.dart';
 import '../../models/parent_request.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/time_dropdown_picker.dart';
 
 /// 受診結果の入力(209・設計書§3.4)。
 /// 感染症を選択→確定・必要書類の案内へ / 「感染症ではない」→案件終了 / 未受診→待ち継続。
@@ -94,7 +95,7 @@ class _MedicalReportScreenState extends State<MedicalReportScreen> {
       lastDate: DateTime.now(),
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_visitedAt));
+    final time = await showTimeDropdownPicker(context: context, initialTime: TimeOfDay.fromDateTime(_visitedAt));
     if (time == null) return;
     setState(() => _visitedAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
