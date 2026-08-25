@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
+import { exportRegisterXlsx, exportTimeXlsx, exportChildXlsx } from "@/lib/export/attendanceExports";
 
 // 登降園管理(314/317/318/323/324)。日別=時刻の行内修正+備考、月間=出欠/時刻/園児別の3ビュー。主任以上。
 type Row = {
@@ -138,88 +139,23 @@ function AttendanceContent() {
     setReloadToken((t) => t + 1);
   }
 
-  // 月間出席簿CSV(◯/病/都・園児×日+集計)。選択中の月の rows から生成。UTF-8 BOM。
-  function downloadRegisterCsv() {
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const byChild = new Map<string, { name: string; cls: string | null; days: Map<number, Row> }>();
-    for (const r of rows) {
-      const d = new Date(r.business_date).getDate();
-      if (!byChild.has(r.child_id)) byChild.set(r.child_id, { name: r.child_name, cls: r.class_name, days: new Map() });
-      byChild.get(r.child_id)!.days.set(d, r);
-    }
-    const lines: string[][] = [["クラス", "園児", ...days.map(String), "出席", "病欠", "都合欠"]];
-    for (const [, c] of byChild) {
-      let present = 0, sick = 0, personal = 0;
-      const cells = days.map((d) => {
-        const r = c.days.get(d);
-        const s = r ? registerSymbol(r) : "";
-        if (s === "◯") present++;
-        else if (s === "病") sick++;
-        else if (s === "都") personal++;
-        return s;
-      });
-      lines.push([c.cls ?? "", c.name, ...cells, String(present), String(sick), String(personal)]);
-    }
-    downloadCsv(lines, `出席簿_${year}-${String(month).padStart(2, "0")}.csv`);
+  // 要確認セルをクリック→その日の日別(修正)へ移動し、登降園時刻をその場で登録/修正できる(俊指示 2026-08-25)。
+  function jumpToDayEdit(businessDate: string) {
+    setDate(businessDate.slice(0, 10));
+    setMode("day");
   }
 
-  // 時刻CSV(登降園簿レイアウト)。園児ごとに「登園/降園/欠席」の3行 × 日付列。俊指示 2026-08-25。
-  function downloadTimeCsv() {
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const byChild = new Map<string, { name: string; cls: string | null; days: Map<number, Row> }>();
-    for (const r of rows) {
-      const d = new Date(r.business_date).getDate();
-      if (!byChild.has(r.child_id)) byChild.set(r.child_id, { name: r.child_name, cls: r.class_name, days: new Map() });
-      byChild.get(r.child_id)!.days.set(d, r);
-    }
-    const lines: string[][] = [["氏名", "区分", ...days.map((d) => `${month}月${d}日`)]];
-    for (const [, c] of byChild) {
-      const arrival = days.map((d) => { const r = c.days.get(d); return r && !r.is_absent ? hhmm(r.in_time) : ""; });
-      const departure = days.map((d) => { const r = c.days.get(d); return r && !r.is_absent ? hhmm(r.depart_time) : ""; });
-      const absence = days.map((d) => {
-        const r = c.days.get(d);
-        if (!r || !r.is_absent) return "";
-        return r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席";
-      });
-      lines.push([`${c.name}${c.cls ? `（${c.cls}）` : ""}`, "登園", ...arrival]);
-      lines.push(["", "降園", ...departure]);
-      lines.push(["", "欠席", ...absence]);
-    }
-    downloadCsv(lines, `登降園時刻_${year}-${String(month).padStart(2, "0")}.csv`);
-  }
-
-  // 園児別CSV(選択中の園児の1ヶ月: 日/曜/出欠/登園/外出/戻り/降園/備考)。
-  function downloadChildCsv() {
+  // Excel出力(俊指示 2026-08-25: CSV→Excel・月付き日付・中央寄せ・罫線・縞模様・欠席児下部・集計)。
+  // 出欠→出席簿(◯/病欠/都合欠+集計) / 時刻→登降園時刻(登園/降園/欠席の3行) / 園児別→選択児の1ヶ月。
+  function onExport() {
+    if (monthSub === "attendance") { void exportRegisterXlsx(rows, year, month); return; }
+    if (monthSub === "time") { void exportTimeXlsx(rows, year, month); return; }
     const seen = new Set<string>();
     const children: { id: string; name: string; cls: string | null }[] = [];
     for (const r of rows) if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
     const cid = selectedChild && children.some((c) => c.id === selectedChild) ? selectedChild : children[0]?.id ?? "";
     const c = children.find((x) => x.id === cid);
-    if (!c) return;
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const byDay = new Map<number, Row>();
-    for (const r of rows) if (r.child_id === cid) byDay.set(new Date(r.business_date).getDate(), r);
-    const lines: string[][] = [["日", "曜", "出欠", "登園", "外出", "戻り", "降園", "備考"]];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const r = byDay.get(d);
-      const g = new Date(year, month - 1, d).getDay();
-      const state = !r ? "" : r.is_absent ? (r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席") : (r.in_time || r.depart_time) ? "出席" : "";
-      lines.push([String(d), WEEKDAYS[g], state, r ? hhmm(r.in_time) : "", r ? hhmm(r.out_time) : "", r ? hhmm(r.return_time) : "", r ? hhmm(r.depart_time) : "", r?.note ?? ""]);
-    }
-    downloadCsv(lines, `登降園_${c.name}_${year}-${String(month).padStart(2, "0")}.csv`);
-  }
-
-  function downloadCsv(lines: string[][], filename: string) {
-    const csv = lines.map((row) => row.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\r\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (c) void exportChildXlsx(rows, year, month, c.id, c.name, c.cls);
   }
 
   if (officesError) {
@@ -259,11 +195,11 @@ function AttendanceContent() {
                 <button onClick={() => setMonthSub("child")} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${monthSub === "child" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>園児別</button>
               </div>
               <button
-                onClick={monthSub === "attendance" ? downloadRegisterCsv : monthSub === "child" ? downloadChildCsv : downloadTimeCsv}
+                onClick={onExport}
                 disabled={rows.length === 0}
                 className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
               >
-                {monthSub === "attendance" ? "出席簿CSV" : monthSub === "child" ? "園児別CSV" : "時刻CSV"}
+                {monthSub === "attendance" ? "出席簿Excel" : monthSub === "child" ? "園児別Excel" : "時刻Excel"}
               </button>
             </>
           )}
@@ -389,16 +325,18 @@ function AttendanceContent() {
                   }
                   if (withTime) {
                     return (
-                      <td key={d} className={`px-1 py-1 text-center tabular-nums leading-tight ${miss ? "bg-red-50" : ""}`}
-                        title={miss ? `要確認: ${anoms.join(" / ")}` : undefined}>
+                      <td key={d} onClick={miss ? () => jumpToDayEdit(r.business_date) : undefined}
+                        className={`px-1 py-1 text-center tabular-nums leading-tight ${miss ? "cursor-pointer bg-red-50 hover:bg-red-100" : ""}`}
+                        title={miss ? `要確認: ${anoms.join(" / ")}(クリックで修正)` : undefined}>
                         <div className={miss && !r.in_time ? "text-red-600 font-bold" : "text-slate-700"}>{hhmm(r.in_time) || "—"}</div>
                         <div className={miss && !r.depart_time ? "text-red-600 font-bold" : "text-slate-400"}>{hhmm(r.depart_time) || "—"}</div>
                       </td>
                     );
                   }
                   return (
-                    <td key={d} className={`px-1 py-1.5 text-center ${miss ? "bg-red-100 font-bold text-red-600" : "text-emerald-600"}`}
-                      title={miss ? `要確認: ${anoms.join(" / ")}` : `${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
+                    <td key={d} onClick={miss ? () => jumpToDayEdit(r.business_date) : undefined}
+                      className={`px-1 py-1.5 text-center ${miss ? "cursor-pointer bg-red-100 font-bold text-red-600 hover:bg-red-200" : "text-emerald-600"}`}
+                      title={miss ? `要確認: ${anoms.join(" / ")}(クリックで修正)` : `${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
                       {miss ? "!" : "◯"}
                     </td>
                   );
@@ -464,10 +402,19 @@ function AttendanceContent() {
                         {ABSENCE_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums">{r ? (hhmm(r.in_time) || "") : ""}</td>
+                    {/* 要確認の日は時刻セルをクリックすると日別(修正)へ移動して登降園時刻を登録/修正できる。 */}
+                    <td onClick={miss ? () => jumpToDayEdit(dateStr(d)) : undefined}
+                      className={`px-3 py-1.5 tabular-nums ${miss ? "cursor-pointer text-red-600 font-semibold hover:underline" : ""}`}
+                      title={miss ? "クリックで修正" : undefined}>
+                      {r ? (hhmm(r.in_time) || (miss ? "要修正" : "")) : ""}
+                    </td>
                     <td className="px-3 py-1.5 tabular-nums text-slate-500">{r ? (hhmm(r.out_time) || "") : ""}</td>
                     <td className="px-3 py-1.5 tabular-nums text-slate-500">{r ? (hhmm(r.return_time) || "") : ""}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{r ? (hhmm(r.depart_time) || "") : ""}</td>
+                    <td onClick={miss ? () => jumpToDayEdit(dateStr(d)) : undefined}
+                      className={`px-3 py-1.5 tabular-nums ${miss ? "cursor-pointer text-red-600 font-semibold hover:underline" : ""}`}
+                      title={miss ? "クリックで修正" : undefined}>
+                      {r ? (hhmm(r.depart_time) || (miss ? "要修正" : "")) : ""}
+                    </td>
                     <td className="px-3 py-1.5 text-xs text-slate-600">{r?.note ?? ""}</td>
                   </tr>
                 );
