@@ -305,11 +305,21 @@ function AttendanceContent() {
                   <div className="text-[10px] font-normal">{WEEKDAYS[new Date(year, month - 1, d).getDay()]}</div>
                 </th>
               ))}
+              <th className="border-l border-slate-200 bg-slate-50 px-2 py-2 text-center font-semibold text-slate-500">出席</th>
+              <th className="bg-slate-50 px-2 py-2 text-center font-semibold text-slate-500">病欠</th>
+              <th className="bg-slate-50 px-2 py-2 text-center font-semibold text-slate-500">都合欠</th>
             </tr>
           </thead>
           <tbody>
-            {children.length === 0 && <tr><td colSpan={daysInMonth + 1} className="px-3 py-6 text-center text-slate-400">この月の記録はありません</td></tr>}
-            {children.map(([cid, c]) => (
+            {children.length === 0 && <tr><td colSpan={daysInMonth + 4} className="px-3 py-6 text-center text-slate-400">この月の記録はありません</td></tr>}
+            {children.map(([cid, c]) => {
+              // 右端の集計(出席=登降園あり / 病欠 / 都合欠)。
+              let cP = 0, cS = 0, cPe = 0;
+              c.days.forEach((r) => {
+                if (r.is_absent) { if (r.absence_kind === "sick_absence") cS++; else if (r.absence_kind === "personal_absence") cPe++; }
+                else if (r.in_time || r.depart_time) cP++;
+              });
+              return (
               <tr key={cid} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="sticky left-0 z-10 bg-white px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">
                   {c.name}<span className="ml-1 text-slate-400">{c.cls ?? ""}</span>
@@ -341,8 +351,12 @@ function AttendanceContent() {
                     </td>
                   );
                 })}
+                <td className="border-l border-slate-200 bg-slate-50/60 px-2 py-1.5 text-center font-semibold tabular-nums text-emerald-700">{cP}</td>
+                <td className="bg-slate-50/60 px-2 py-1.5 text-center font-semibold tabular-nums text-slate-600">{cS}</td>
+                <td className="bg-slate-50/60 px-2 py-1.5 text-center font-semibold tabular-nums text-slate-600">{cPe}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
