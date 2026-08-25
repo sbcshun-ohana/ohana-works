@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/attendance_record_day.dart';
 import '../models/class_photo.dart';
 import '../models/communication_book_entry.dart';
 import '../models/enrollment_form.dart';
@@ -1075,6 +1076,13 @@ class GuardianService {
       }
       throw GuardianServiceException('登録に失敗しました: ${e.message}');
     }
+  }
+
+  /// 登降園実績(保護者向け・326)。自分の子の月間 出欠+登降園時刻。
+  Future<List<AttendanceRecordDay>> fetchChildAttendanceMonth(String childId, int year, int month) async {
+    final rows = await _client.rpc('fetch_child_attendance_month_for_guardian',
+        params: {'p_child_id': childId, 'p_year': year, 'p_month': month});
+    return [for (final r in (rows as List)) AttendanceRecordDay.fromMap(r as Map<String, dynamic>)];
   }
 
   String _translateEnrollmentError(String message) {

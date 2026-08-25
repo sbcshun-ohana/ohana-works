@@ -4,6 +4,7 @@ import '../../models/linked_child.dart';
 import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/child_context_app_bar_title.dart';
+import '../attendance/attendance_record_screen.dart';
 import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
@@ -472,6 +473,17 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
             ),
           ),
         ),
+      // 登降園実績(326・Phase G): お子さまの月間 出欠+登降園時刻を閲覧。
+      _GridMenuItem(
+        icon: Icons.event_available_rounded,
+        color: AppColors.skyBlue,
+        label: '登園実績',
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => AttendanceRecordScreen(guardianService: widget.guardianService, child: widget.child),
+          ),
+        ),
+      ),
       if (_enabledFeatures.contains('guardian_requests'))
         _GridMenuItem(
           icon: Icons.assignment_rounded,
