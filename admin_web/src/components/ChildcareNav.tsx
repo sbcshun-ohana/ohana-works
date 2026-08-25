@@ -108,7 +108,9 @@ export function ChildcareNav() {
   const supportVisible =
     supportOffices === null ? true : effectiveOffice ? supportOffices.some((o) => o.office_id === effectiveOffice) : true;
 
-  // 重要事項アラートを実効施設で取得。60秒ごとに自動更新し、対応済みで消える。
+  // アラートを実効施設で取得。対応済みで消える。
+  // 更新契機: ①初回 ②60秒ポーリング(フォールバック) ③parent_requests のリアルタイム購読
+  //   (保護者からの連絡は、承認までが短くても見落とさないよう即時反映) ④タブ復帰時。
   useEffect(() => {
     if (!effectiveOffice) return;
     let cancelled = false;
@@ -120,9 +122,21 @@ export function ChildcareNav() {
     }
     void fetchAlerts();
     const timer = setInterval(fetchAlerts, 60000);
+    // 保護者からの連絡(parent_requests)はリアルタイム購読で即時にアラートへ反映する。
+    const channel = supabase
+      .channel(`childcare_alerts_${effectiveOffice}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "parent_requests" }, () => void fetchAlerts())
+      .subscribe();
+    // 別タブ/アプリで申請→戻ってきたケースに備え、タブ復帰時にも再取得。
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void fetchAlerts();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [effectiveOffice]);
 
