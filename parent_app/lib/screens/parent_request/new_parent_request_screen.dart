@@ -41,6 +41,7 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   final _reasonController = TextEditingController();
   final _otherMessageController = TextEditingController();
   TimeOfDay? _time;
+  bool _mealNeeded = true; // 遅刻時の給食の要否(要/不要)。不要は9:31食数から除外される(給食管理337)
   final _pickupNameController = TextEditingController();
   final _pickupRelationController = TextEditingController();
   final _pickupPhoneController = TextEditingController();
@@ -244,6 +245,7 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
       case 'tardiness':
         return {
           if (_time != null) '到着予定時刻': _formatTimeOfDay(_time!),
+          '給食': _mealNeeded ? '要' : '不要',
           if (_reasonController.text.trim().isNotEmpty) '理由': _reasonController.text.trim(),
         };
       case 'early_leave':
@@ -414,6 +416,26 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
             onPressed: _pickTime,
             icon: const Icon(Icons.access_time_rounded),
             label: Text(_time == null ? '時刻を選択' : _formatTimeOfDay(_time!)),
+          ),
+          const SizedBox(height: 20),
+          const Text('給食の要否', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 4),
+          const Text('※ 当日9:30までに承認された分が給食数に反映されます', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              ChoiceChip(
+                label: const Text('給食 要'),
+                selected: _mealNeeded,
+                onSelected: (_) => setState(() => _mealNeeded = true),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('給食 不要'),
+                selected: !_mealNeeded,
+                onSelected: (_) => setState(() => _mealNeeded = false),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           _reasonField('理由(任意)'),
