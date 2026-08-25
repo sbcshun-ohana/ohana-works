@@ -7,8 +7,8 @@ import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 
 /// 園連絡帳の詳細。開いた時点で閲覧履歴を記録する(v0.4 §5.3 変更4)。
-/// 「重要事項として確認しました」ボタンは、園から重要事項確認を依頼された内容向けに
-/// 常時表示する(該当連絡帳を限定するフラグは現時点でスキーマに無いため)。
+/// 「重要事項として確認しました」ボタンは、園が requires_confirmation=true(328)で
+/// 送った連絡帳のみ表示する。通常の連絡帳は開封(既読)を自動記録するだけ(俊指示 2026-08-25)。
 class CommunicationBookDetailScreen extends StatefulWidget {
   const CommunicationBookDetailScreen({
     super.key,
@@ -193,27 +193,31 @@ class _CommunicationBookDetailScreenState extends State<CommunicationBookDetailS
                   title: '入浴',
                   child: Text(entry.bathTaken == null ? '未入力' : (entry.bathTaken! ? 'あり' : 'なし')),
                 ),
-                const SizedBox(height: 12),
-                if (_isConfirmed)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.leafGreen.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16),
+                // 「重要事項として確認」ボタンは、園が重要事項として送った連絡帳のみ表示(328・俊指示 2026-08-25)。
+                // 通常の連絡帳は開封(既読)を自動記録するだけで、保護者に確認ボタンを押させない。
+                if (entry.requiresConfirmation) ...[
+                  const SizedBox(height: 12),
+                  if (_isConfirmed)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.leafGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: AppColors.leafGreen),
+                          SizedBox(width: 8),
+                          Text('重要事項として確認済みです', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    )
+                  else
+                    OutlinedButton(
+                      onPressed: _isConfirming ? null : _confirmImportantMatter,
+                      child: const Text('重要事項として確認しました'),
                     ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.check_circle_rounded, color: AppColors.leafGreen),
-                        SizedBox(width: 8),
-                        Text('重要事項として確認済みです', style: TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  )
-                else
-                  OutlinedButton(
-                    onPressed: _isConfirming ? null : _confirmImportantMatter,
-                    child: const Text('重要事項として確認しました'),
-                  ),
+                ],
               ],
             ),
     );

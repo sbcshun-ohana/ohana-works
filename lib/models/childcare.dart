@@ -161,6 +161,7 @@ class DailyContact {
     this.approvedAt,
     this.copiedAt,
     required this.isAbsent,
+    this.requiresConfirmation = false,
   });
 
   factory DailyContact.fromJson(Map<String, dynamic> json) => DailyContact(
@@ -186,6 +187,7 @@ class DailyContact {
         approvedAt: json['approved_at'] != null ? DateTime.parse(json['approved_at'] as String) : null,
         copiedAt: json['copied_at'] != null ? DateTime.parse(json['copied_at'] as String) : null,
         isAbsent: json['is_absent'] as bool? ?? false,
+        requiresConfirmation: json['requires_confirmation'] as bool? ?? false,
       );
 
   final String? contactId;
@@ -209,6 +211,7 @@ class DailyContact {
   final DateTime? approvedAt;
   final DateTime? copiedAt;
   final bool isAbsent;
+  final bool requiresConfirmation; // 重要事項として保護者の開封確認を求める(328)
 
   String get nameLabel => '$childDisplayName${childHonorificSuffix ?? ''}';
 }

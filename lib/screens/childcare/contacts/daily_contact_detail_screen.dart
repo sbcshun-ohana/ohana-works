@@ -62,6 +62,8 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
   List<NoticeMaster> _noticeMasters = const [];
   Set<String> _checkedNoticeIds = {};
   List<({String itemName, int quantity})> _supplyItems = const [];
+  // 重要事項として保護者の開封確認を求めるか(328)。true のときのみ保護者アプリに確認ボタンが出る。
+  bool _requiresConfirmation = false;
 
   final _guardianController = TextEditingController();
   final _todayNotesController = TextEditingController();
@@ -184,6 +186,7 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
         _checkedNoticeIds = results[1] as Set<String>;
         _supplyItems = results[2] as List<({String itemName, int quantity})>;
         _familyDailyReport = results[3] as FamilyDailyReportSummary?;
+        _requiresConfirmation = contact?.requiresConfirmation ?? false;
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -281,6 +284,10 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
       freeNotes: _freeNotesController.text.trim().isEmpty ? null : _freeNotesController.text.trim(),
     );
     await widget.service.saveCurrentText(_contact!.contactId!, _currentTextController.text, isInitial: false);
+  }
+
+  Future<void> _setRequiresConfirmation(bool value) async {
+    await widget.service.setDailyContactRequiresConfirmation(_contact!.contactId!, value);
   }
 
   Future<void> _toggleNotice(NoticeMaster notice) => _run(() async {
@@ -526,6 +533,23 @@ class _DailyContactDetailScreenState extends State<DailyContactDetailScreen> {
                           ),
                         )
                         .toList(),
+                  ),
+                  // 重要事項として送るとき(328)。ONの連絡帳のみ、保護者アプリに
+                  // 「重要事項として確認しました」ボタンが表示される。通常はOFFのまま
+                  // (開封=既読は保護者が開いた時点で自動記録される)。
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: _requiresConfirmation,
+                    onChanged: (_canEditInput && !_isBusy && _contact?.contactId != null)
+                        ? (v) => _run(() => _setRequiresConfirmation(v ?? false))
+                        : null,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('重要事項として開封確認を求める',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    subtitle: const Text('ONにすると保護者に「重要事項として確認しました」ボタンが表示されます',
+                        style: TextStyle(fontSize: 11)),
                   ),
                   if (widget.isManager && _contact?.status == 'submitted') ...[
                     const SizedBox(height: 20),

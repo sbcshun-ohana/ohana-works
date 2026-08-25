@@ -16,6 +16,7 @@ class CommunicationBookEntry {
     this.bathTaken,
     this.noticeLabels = const [],
     this.supplyItems = const [],
+    this.requiresConfirmation = false,
   });
 
   factory CommunicationBookEntry.fromJson(Map<String, dynamic> json) => CommunicationBookEntry(
@@ -23,6 +24,7 @@ class CommunicationBookEntry {
         childId: json['child_id'] as String,
         businessDate: DateTime.parse(json['business_date'] as String),
         currentText: json['current_text'] as String?,
+        requiresConfirmation: json['requires_confirmation'] as bool? ?? false,
         napPeriods: (json['nap_periods'] as List? ?? const [])
             .cast<Map<String, dynamic>>()
             .map((e) => NapPeriod(start: e['start'] as String? ?? '', end: e['end'] as String? ?? ''))
@@ -51,9 +53,11 @@ class CommunicationBookEntry {
   final bool? bathTaken;
   final List<String> noticeLabels;
   final List<SupplyItem> supplyItems;
+  final bool requiresConfirmation; // 重要事項として開封確認を求める(328)
 
   CommunicationBookEntry copyWith({List<String>? noticeLabels, List<SupplyItem>? supplyItems}) =>
       CommunicationBookEntry(
+        requiresConfirmation: requiresConfirmation,
         id: id,
         childId: childId,
         businessDate: businessDate,

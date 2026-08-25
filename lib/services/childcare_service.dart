@@ -255,6 +255,7 @@ class ChildcareService {
       'approved_at': row['approved_at'],
       'copied_at': row['copied_at'],
       'is_absent': false,
+      'requires_confirmation': row['requires_confirmation'],
     });
   }
 
@@ -371,6 +372,14 @@ class ChildcareService {
       'child_today_notes': childTodayNotes,
       'free_notes': freeNotes,
     }).eq('id', contactId);
+  }
+
+  /// 重要事項として保護者の開封確認を求めるか(328)。true のときのみ保護者アプリに
+  /// 「重要事項として確認しました」ボタンが表示される。
+  Future<void> setDailyContactRequiresConfirmation(String contactId, bool value) async {
+    await _client
+        .from('child_daily_contacts')
+        .update({'requires_confirmation': value}).eq('id', contactId);
   }
 
   Future<void> saveCurrentText(String contactId, String text, {required bool isInitial}) async {
@@ -1603,6 +1612,19 @@ class ChildcareService {
   Future<void> rejectGuidancePlan(String id, String reason) async =>
       _client.rpc('reject_guidance_plan', params: {'p_id': id, 'p_reason': reason});
   Future<void> copyPreviousGuidancePlan(String id) async => _client.rpc('copy_previous_guidance_plan', params: {'p_id': id});
+
+  /// 承認可(統括園長・園長)の判定。一括承認ボタンの表示制御に使う(332/333)。
+  Future<bool> canApproveGuidancePlan(String officeId) async {
+    final r = await _client.rpc('can_approve_guidance_plan', params: {'target_office_id': officeId});
+    return r == true;
+  }
+
+  /// 一括承認(333)。その年度の承認待ちをまとめて承認し、承認件数を返す。
+  Future<int> bulkApproveGuidancePlans(String officeId, int fiscalYear) async {
+    final r = await _client.rpc('bulk_approve_guidance_plans',
+        params: {'p_office_id': officeId, 'p_fiscal_year': fiscalYear});
+    return (r as int?) ?? 0;
+  }
 
   /// 指導計画の未完了タスク(306・主任以上)。未提出=action/承認待ち=info。
   Future<List<Map<String, dynamic>>> fetchGuidancePlanTasks(String officeId) async {
