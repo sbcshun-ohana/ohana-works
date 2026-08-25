@@ -634,7 +634,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
   // 201: 服薬バッジ(タップで種類・様子のダイアログ)。解熱剤を含む日は赤の警告(登園不可の園ルール周知)。
   Widget _medicationBadge(DailyBoardRow row, ({List<String> kinds, bool hasAntipyretic, String? symptom}) med) {
     final color = med.hasAntipyretic ? AppColors.punchClockOut : AppColors.skyBlue;
-    final label = med.hasAntipyretic ? '解熱剤服用: ${med.kinds.join('、')}' : '服薬: ${med.kinds.join('、')}';
+    // 氏名横の短いピル(アレルギー対応マークと同じ形式)。詳細(薬の種類・様子)はタップで表示。
+    final label = med.hasAntipyretic ? '解熱剤服用' : '服薬';
     return InkWell(
       onTap: () => showDialog<void>(
         context: context,
@@ -659,7 +660,22 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
         ),
       ),
-      child: _miniBadge(Icons.medication_rounded, label, color),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.medication_rounded, size: 12, color: color),
+            const SizedBox(width: 3),
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1397,6 +1413,11 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                             const SizedBox(width: 8),
                                             _allergyMark(),
                                           ],
+                                          // 服薬は氏名横の短いピルで表示(アレルギーと並べる。俊指示 2026-08-25)。
+                                          if (_medicationByChild[row.childId] != null) ...[
+                                            const SizedBox(width: 8),
+                                            _medicationBadge(row, _medicationByChild[row.childId]!),
+                                          ],
                                         ],
                                       ),
                                       const SizedBox(height: 4),
@@ -1521,9 +1542,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                                   ? AppColors.punchClockOut
                                                   : AppColors.leafGreen),
                                         ),
-                                      // 201: 服薬バッジ。解熱剤を含む場合は赤警告。タップで種類と様子を表示。
-                                      if (_medicationByChild[row.childId] != null)
-                                        _medicationBadge(row, _medicationByChild[row.childId]!),
+                                      // 服薬は氏名横の短いピルへ移設(俊指示 2026-08-25)。下部フル幅バッジは廃止。
                                       _ContactPublishRow(
                                         row: row,
                                         onSchedule17: () => _scheduleContacts([row.contactId!], hour: 17, minute: 0),
