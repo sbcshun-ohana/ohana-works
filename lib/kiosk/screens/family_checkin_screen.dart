@@ -134,28 +134,71 @@ class _FamilyCheckinScreenState extends State<FamilyCheckinScreen> {
     final disabled = _isArrival
         ? (c.todayStatus == 'present' || c.todayStatus == 'picked_up')
         : (c.todayStatus != 'present');
-    final selected = _selected[c.childId] ?? false;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: disabled ? Colors.grey.shade100 : (selected ? const Color(0xFFE3F2FD) : Colors.white),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: selected && !disabled ? const Color(0xFF1E88E5) : Colors.grey.shade300, width: 2),
-      ),
-      child: CheckboxListTile(
-        value: disabled ? false : selected,
-        onChanged: disabled ? null : (v) => setState(() => _selected[c.childId] = v ?? false),
-        title: Row(
-          children: [
-            Text('${c.childName}${c.className != null ? '(${c.className})' : ''}',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: disabled ? Colors.grey : Colors.black87)),
-          ],
+    final selected = !disabled && (_selected[c.childId] ?? false);
+    const blue = Color(0xFF1E88E5);
+    // タッチパネルでの押し間違いを防ぐため、カード全体を大きなタップ領域にし、
+    // 兄弟ごとに十分な間隔と大きなチェック表示で独立して見せる。
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: disabled ? null : () => setState(() => _selected[c.childId] = !selected),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+            decoration: BoxDecoration(
+              color: disabled ? Colors.grey.shade100 : (selected ? const Color(0xFFE3F2FD) : Colors.white),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: disabled ? Colors.grey.shade300 : (selected ? blue : Colors.grey.shade300),
+                width: selected ? 3 : 2,
+              ),
+            ),
+            child: Row(
+              children: [
+                // 大きめのチェックボックス(視認性・タップ精度向上)
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: selected ? blue : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: disabled ? Colors.grey.shade400 : (selected ? blue : Colors.grey.shade500), width: 2),
+                  ),
+                  child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 30) : null,
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${c.childName}${c.className != null ? '(${c.className})' : ''}',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: disabled ? Colors.grey : Colors.black87,
+                        ),
+                      ),
+                      if (c.note != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          c.note!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: c.isAbsentToday ? Colors.orange.shade800 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        subtitle: c.note != null
-            ? Text(c.note!, style: TextStyle(fontSize: 13, color: c.isAbsentToday ? Colors.orange.shade800 : Colors.grey.shade600))
-            : null,
-        controlAffinity: ListTileControlAffinity.leading,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       ),
     );
   }
