@@ -164,26 +164,51 @@ function AttendanceContent() {
     downloadCsv(lines, `出席簿_${year}-${String(month).padStart(2, "0")}.csv`);
   }
 
-  // 時刻CSV(登降園データ)。ロング形式=1行=園児×日(クラス/園児/日付/曜日/状態/登園/外出/戻り/降園/備考)。
+  // 時刻CSV(登降園簿レイアウト)。園児ごとに「登園/降園/欠席」の3行 × 日付列。俊指示 2026-08-25。
   function downloadTimeCsv() {
-    const sorted = [...rows].sort((a, b) => a.business_date.localeCompare(b.business_date));
-    const byChild = new Map<string, Row[]>();
-    for (const r of sorted) (byChild.get(r.child_id) ?? byChild.set(r.child_id, []).get(r.child_id)!).push(r);
-    const lines: string[][] = [["クラス", "園児", "日付", "曜日", "状態", "登園", "外出", "戻り", "降園", "備考"]];
-    // rows は年齢/氏名順。園児ごとに日付順で出力。
-    const order: string[] = [];
-    for (const r of rows) if (!order.includes(r.child_id)) order.push(r.child_id);
-    for (const cidOrder of order) {
-      for (const r of (byChild.get(cidOrder) ?? [])) {
-        const d = new Date(r.business_date);
-        const state = r.is_absent ? (r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席") : (r.in_time || r.depart_time) ? "出席" : "";
-        lines.push([
-          r.class_name ?? "", r.child_name, r.business_date.slice(0, 10), WEEKDAYS[d.getDay()], state,
-          hhmm(r.in_time), hhmm(r.out_time), hhmm(r.return_time), hhmm(r.depart_time), r.note ?? "",
-        ]);
-      }
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const byChild = new Map<string, { name: string; cls: string | null; days: Map<number, Row> }>();
+    for (const r of rows) {
+      const d = new Date(r.business_date).getDate();
+      if (!byChild.has(r.child_id)) byChild.set(r.child_id, { name: r.child_name, cls: r.class_name, days: new Map() });
+      byChild.get(r.child_id)!.days.set(d, r);
+    }
+    const lines: string[][] = [["氏名", "区分", ...days.map((d) => `${month}月${d}日`)]];
+    for (const [, c] of byChild) {
+      const arrival = days.map((d) => { const r = c.days.get(d); return r && !r.is_absent ? hhmm(r.in_time) : ""; });
+      const departure = days.map((d) => { const r = c.days.get(d); return r && !r.is_absent ? hhmm(r.depart_time) : ""; });
+      const absence = days.map((d) => {
+        const r = c.days.get(d);
+        if (!r || !r.is_absent) return "";
+        return r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席";
+      });
+      lines.push([`${c.name}${c.cls ? `（${c.cls}）` : ""}`, "登園", ...arrival]);
+      lines.push(["", "降園", ...departure]);
+      lines.push(["", "欠席", ...absence]);
     }
     downloadCsv(lines, `登降園時刻_${year}-${String(month).padStart(2, "0")}.csv`);
+  }
+
+  // 園児別CSV(選択中の園児の1ヶ月: 日/曜/出欠/登園/外出/戻り/降園/備考)。
+  function downloadChildCsv() {
+    const seen = new Set<string>();
+    const children: { id: string; name: string; cls: string | null }[] = [];
+    for (const r of rows) if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
+    const cid = selectedChild && children.some((c) => c.id === selectedChild) ? selectedChild : children[0]?.id ?? "";
+    const c = children.find((x) => x.id === cid);
+    if (!c) return;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const byDay = new Map<number, Row>();
+    for (const r of rows) if (r.child_id === cid) byDay.set(new Date(r.business_date).getDate(), r);
+    const lines: string[][] = [["日", "曜", "出欠", "登園", "外出", "戻り", "降園", "備考"]];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const r = byDay.get(d);
+      const g = new Date(year, month - 1, d).getDay();
+      const state = !r ? "" : r.is_absent ? (r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席") : (r.in_time || r.depart_time) ? "出席" : "";
+      lines.push([String(d), WEEKDAYS[g], state, r ? hhmm(r.in_time) : "", r ? hhmm(r.out_time) : "", r ? hhmm(r.return_time) : "", r ? hhmm(r.depart_time) : "", r?.note ?? ""]);
+    }
+    downloadCsv(lines, `登降園_${c.name}_${year}-${String(month).padStart(2, "0")}.csv`);
   }
 
   function downloadCsv(lines: string[][], filename: string) {
@@ -234,11 +259,11 @@ function AttendanceContent() {
                 <button onClick={() => setMonthSub("child")} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${monthSub === "child" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>園児別</button>
               </div>
               <button
-                onClick={monthSub === "attendance" ? downloadRegisterCsv : downloadTimeCsv}
+                onClick={monthSub === "attendance" ? downloadRegisterCsv : monthSub === "child" ? downloadChildCsv : downloadTimeCsv}
                 disabled={rows.length === 0}
                 className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
               >
-                {monthSub === "attendance" ? "出席簿CSV" : "時刻CSV"}
+                {monthSub === "attendance" ? "出席簿CSV" : monthSub === "child" ? "園児別CSV" : "時刻CSV"}
               </button>
             </>
           )}
