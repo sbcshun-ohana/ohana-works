@@ -143,6 +143,18 @@ Deno.serve(async (req) => {
       if (!upErr) saved++;
     }
 
+    // AI実行を ai_runs に記録(AC-08)。失敗しても解析結果は返す。
+    try {
+      await client.rpc("record_menu_ai_run", {
+        p_import_id: importId,
+        p_provider: mock ? "mock" : "anthropic",
+        p_model: mock ? "sample" : "claude-haiku-4-5-20251001",
+        p_prompt_version: "menu-v1",
+        p_output: JSON.stringify(drafts).slice(0, 20000),
+        p_input: { format_kind: String(imp.format_kind ?? "other"), target_month: targetMonth, mock },
+      });
+    } catch (_) { /* 記録失敗は無視 */ }
+
     return new Response(
       JSON.stringify({ mock, saved, total: drafts.length }),
       { headers: { ...headers, "Content-Type": "application/json" } },
