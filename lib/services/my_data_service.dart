@@ -94,6 +94,12 @@ class MyDataService {
     await _client.rpc('set_staff_meal_default', params: {'p_eats': eats});
   }
 
+  /// 自己発注画面用: 自分の所属施設の公開済み献立(当日/翌日の昼食メニュー等)。
+  Future<List<Map<String, dynamic>>> fetchMyOfficeMenuDay(DateTime date) async {
+    final rows = await _client.rpc('fetch_my_office_menu_day', params: {'p_date': _formatDate(date)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 賃金明細添付用: 当月の食事日一覧(日付・種別・単価)。
   Future<List<Map<String, dynamic>>> fetchMyMealDays(DateTime month) async {
     final rows = await _client.rpc('fetch_my_meal_days',

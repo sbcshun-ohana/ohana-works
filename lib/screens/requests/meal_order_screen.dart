@@ -20,8 +20,24 @@ class _MealOrderScreenState extends State<MealOrderScreen> {
   bool _busy = false;
   bool _defaultEats = true;
   String? _error;
+  String? _todayLunch; // 当日の昼食メニュー(見て発注できるよう表示・献立管理AC-06)
+  String? _tomorrowLunch;
 
   static const _weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+
+  // 公開献立の行から昼食メニューを取り出す(以上児→未満児→最初の昼食の順)。
+  String? _lunchOf(List<Map<String, dynamic>> rows) {
+    String? pick(String ft) => rows
+        .where((r) => r['meal_slot'] == 'lunch' && r['food_type'] == ft && (r['menu_text'] as String?)?.trim().isNotEmpty == true)
+        .map((r) => (r['menu_text'] as String).trim())
+        .firstOrNull;
+    return pick('regular_over3') ??
+        pick('regular_under3') ??
+        rows
+            .where((r) => r['meal_slot'] == 'lunch' && (r['menu_text'] as String?)?.trim().isNotEmpty == true)
+            .map((r) => (r['menu_text'] as String).trim())
+            .firstOrNull;
+  }
 
   @override
   void initState() {
@@ -35,10 +51,18 @@ class _MealOrderScreenState extends State<MealOrderScreen> {
       final from = DateTime.now();
       final to = from.add(const Duration(days: 13));
       final rows = await widget.service.fetchStaffMealOrderDays(from, to);
+      String? todayLunch, tomorrowLunch;
+      try {
+        final today = DateTime(from.year, from.month, from.day);
+        todayLunch = _lunchOf(await widget.service.fetchMyOfficeMenuDay(today));
+        tomorrowLunch = _lunchOf(await widget.service.fetchMyOfficeMenuDay(today.add(const Duration(days: 1))));
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _days = rows;
         _defaultEats = rows.isNotEmpty ? (rows.first['default_eats'] as bool? ?? true) : true;
+        _todayLunch = todayLunch;
+        _tomorrowLunch = tomorrowLunch;
         _loading = false;
         _error = null;
       });
@@ -79,6 +103,27 @@ class _MealOrderScreenState extends State<MealOrderScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(_error!, style: const TextStyle(color: AppColors.punchClockOut)),
                     ),
+                  if (_todayLunch != null || _tomorrowLunch != null)
+                    Card(
+                      color: AppColors.leafGreen.withValues(alpha: 0.10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('昼食メニュー', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                            const SizedBox(height: 6),
+                            if (_todayLunch != null) Text('本日: $_todayLunch', style: const TextStyle(fontSize: 13)),
+                            if (_tomorrowLunch != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text('明日: $_tomorrowLunch', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (_todayLunch != null || _tomorrowLunch != null) const SizedBox(height: 8),
                   Card(
                     child: SwitchListTile(
                       value: !_defaultEats,

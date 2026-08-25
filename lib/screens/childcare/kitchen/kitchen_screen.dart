@@ -41,6 +41,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
   List<Map<String, dynamic>> _suspended = const [];
   int? _leftover; // その日の残量(g)
   ({bool isStation, int? milkBottles, int nextDaySnack})? _station; // Station固有(340)
+  List<Map<String, dynamic>> _menu = const []; // 本日の献立(342・献立管理AC-06)
   late final AnimationController _flash;
 
   @override
@@ -81,6 +82,10 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
       try {
         station = await widget.service.fetchMealStationExtras(widget.officeId, _date);
       } catch (_) {}
+      List<Map<String, dynamic>> menu = const [];
+      try {
+        menu = await widget.service.fetchPublishedMenuDay(widget.officeId, _date);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
@@ -89,6 +94,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         _suspended = suspended;
         _leftover = leftover;
         _station = station;
+        _menu = menu;
         _loading = false;
       });
     } catch (_) {
@@ -348,6 +354,10 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         _sectionTitle('給食開始保留', AppColors.warmOrange, hold.length),
         if (hold.isEmpty) _emptyLine('対象児はいません') else _chips(hold),
         const SizedBox(height: 16),
+        if (_menu.isNotEmpty) ...[
+          _menuCard(),
+          const SizedBox(height: 16),
+        ],
         if (_station?.isStation ?? false) ...[
           _stationCard(),
           const SizedBox(height: 16),
@@ -355,6 +365,45 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         _leftoverCard(),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  /// 本日の献立(342・献立管理AC-06)。公開済みの通常食種を食種×区分で表示。
+  Widget _menuCard() {
+    const foodLabels = {
+      'regular_over3': '以上児', 'regular_under3': '未満児',
+      'weaning_late': '離乳食後期', 'weaning_final': '完了期',
+    };
+    const slotLabels = {'am_snack': '午前おやつ', 'lunch': '昼食', 'pm_snack': '午後おやつ'};
+    final rows = _menu.where((m) => m['removal_kind'] == null).toList();
+    final foodTypes = <String>[];
+    for (final r in rows) {
+      final ft = r['food_type'] as String? ?? '';
+      if (ft.isNotEmpty && !foodTypes.contains(ft)) foodTypes.add(ft);
+    }
+    return Card(
+      color: AppColors.leafGreen.withValues(alpha: 0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('本日の献立', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 8),
+            for (final ft in foodTypes) ...[
+              Text(foodLabels[ft] ?? ft, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.skyBlue)),
+              for (final slot in ['am_snack', 'lunch', 'pm_snack'])
+                ...rows
+                    .where((m) => m['food_type'] == ft && m['meal_slot'] == slot && (m['menu_text'] as String?)?.trim().isNotEmpty == true)
+                    .map((m) => Padding(
+                          padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
+                          child: Text('${slotLabels[slot] ?? slot}: ${(m['menu_text'] as String).trim()}', style: const TextStyle(fontSize: 13)),
+                        )),
+              const SizedBox(height: 6),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
