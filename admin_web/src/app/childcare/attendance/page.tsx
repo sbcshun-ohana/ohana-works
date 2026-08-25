@@ -39,6 +39,19 @@ function todayStr(): string {
 }
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+// 欠席理由プルダウン: 出席(none)/病欠/都合欠。set_child_absence_kind(325)へ渡す。
+const ABSENCE_OPTIONS: { v: string; l: string }[] = [
+  { v: "none", l: "出席" },
+  { v: "sick_absence", l: "病欠" },
+  { v: "personal_absence", l: "都合欠" },
+];
+// 現在の状態→プルダウン値。種別不明の欠席は "" (未選択)にして再選択を促す。
+function kindValue(r: Row | undefined): string {
+  if (!r || !r.is_absent) return "none";
+  if (r.absence_kind === "sick_absence" || r.absence_kind === "personal_absence") return r.absence_kind;
+  return "";
+}
+const MONTH_COL_WIDTH = 48; // 月間の日カラム幅(出欠/時刻で揃える)。
 
 function AttendanceContent() {
   const { officesError, selectedOffice } = useChildcareOffices();
@@ -113,13 +126,15 @@ function AttendanceContent() {
     setErr(null);
   }
 
-  async function toggleAbsent(childId: string, absent: boolean) {
+  // 欠席理由(出席/病欠/都合欠)の保存(325)。日別・園児別のプルダウンから。
+  async function saveAbsenceKind(childId: string, businessDate: string, kind: string) {
     setBusy(true);
-    const { error } = await createClient().rpc("set_child_daily_attendance", {
-      p_child_id: childId, p_business_date: date, p_is_absent: absent, p_absence_reason: null,
+    const { error } = await createClient().rpc("set_child_absence_kind", {
+      p_child_id: childId, p_business_date: businessDate, p_kind: kind,
     });
     setBusy(false);
     if (error) return setErr(error.message);
+    setErr(null);
     setReloadToken((t) => t + 1);
   }
 
@@ -146,12 +161,38 @@ function AttendanceContent() {
       });
       lines.push([c.cls ?? "", c.name, ...cells, String(present), String(sick), String(personal)]);
     }
+    downloadCsv(lines, `出席簿_${year}-${String(month).padStart(2, "0")}.csv`);
+  }
+
+  // 時刻CSV(登降園データ)。ロング形式=1行=園児×日(クラス/園児/日付/曜日/状態/登園/外出/戻り/降園/備考)。
+  function downloadTimeCsv() {
+    const sorted = [...rows].sort((a, b) => a.business_date.localeCompare(b.business_date));
+    const byChild = new Map<string, Row[]>();
+    for (const r of sorted) (byChild.get(r.child_id) ?? byChild.set(r.child_id, []).get(r.child_id)!).push(r);
+    const lines: string[][] = [["クラス", "園児", "日付", "曜日", "状態", "登園", "外出", "戻り", "降園", "備考"]];
+    // rows は年齢/氏名順。園児ごとに日付順で出力。
+    const order: string[] = [];
+    for (const r of rows) if (!order.includes(r.child_id)) order.push(r.child_id);
+    for (const cidOrder of order) {
+      for (const r of (byChild.get(cidOrder) ?? [])) {
+        const d = new Date(r.business_date);
+        const state = r.is_absent ? (r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席") : (r.in_time || r.depart_time) ? "出席" : "";
+        lines.push([
+          r.class_name ?? "", r.child_name, r.business_date.slice(0, 10), WEEKDAYS[d.getDay()], state,
+          hhmm(r.in_time), hhmm(r.out_time), hhmm(r.return_time), hhmm(r.depart_time), r.note ?? "",
+        ]);
+      }
+    }
+    downloadCsv(lines, `登降園時刻_${year}-${String(month).padStart(2, "0")}.csv`);
+  }
+
+  function downloadCsv(lines: string[][], filename: string) {
     const csv = lines.map((row) => row.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\r\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `出席簿_${year}-${String(month).padStart(2, "0")}.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -173,8 +214,8 @@ function AttendanceContent() {
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-lg font-bold text-slate-800">登降園管理</h2>
           <div className="ml-2 flex gap-1 rounded-lg bg-slate-100 p-1">
-            <button onClick={() => setMode("day")} className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "day" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>日別(修正)</button>
-            <button onClick={() => setMode("month")} className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "month" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>月間(俯瞰)</button>
+            <button onClick={() => setMode("day")} className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "day" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>日別</button>
+            <button onClick={() => setMode("month")} className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "month" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>月間</button>
           </div>
           {mode === "day" ? (
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
@@ -193,11 +234,11 @@ function AttendanceContent() {
                 <button onClick={() => setMonthSub("child")} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${monthSub === "child" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>園児別</button>
               </div>
               <button
-                onClick={downloadRegisterCsv}
+                onClick={monthSub === "attendance" ? downloadRegisterCsv : downloadTimeCsv}
                 disabled={rows.length === 0}
                 className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
               >
-                出席簿CSV
+                {monthSub === "attendance" ? "出席簿CSV" : "時刻CSV"}
               </button>
             </>
           )}
@@ -244,7 +285,12 @@ function AttendanceContent() {
                     ))}
                   </td>
                   <td className="px-3 py-2">
-                    <input type="checkbox" checked={r.is_absent} onChange={(ev) => void toggleAbsent(r.child_id, ev.target.checked)} />
+                    {/* 欠席理由プルダウン(出席/病欠/都合欠)。選択で set_child_absence_kind に保存。 */}
+                    <select value={kindValue(r)} onChange={(ev) => void saveAbsenceKind(r.child_id, date, ev.target.value)}
+                      className={`rounded border px-1.5 py-1 text-xs ${r.is_absent ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300"}`}>
+                      {kindValue(r) === "" && <option value="">欠席(種別未設定)</option>}
+                      {ABSENCE_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+                    </select>
                   </td>
                   {(["in", "out", "ret", "depart"] as (keyof Edit)[]).map((k) => (
                     <td key={k} className="px-2 py-2">
@@ -293,7 +339,7 @@ function AttendanceContent() {
             <tr className="border-b border-slate-200">
               <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-slate-500">園児</th>
               {days.map((d) => (
-                <th key={d} className={`px-1.5 py-2 text-center font-semibold ${dowColor(d)}`} style={{ minWidth: withTime ? 52 : 26 }}>
+                <th key={d} className={`px-1.5 py-2 text-center font-semibold ${dowColor(d)}`} style={{ minWidth: MONTH_COL_WIDTH }}>
                   <div>{d}</div>
                   <div className="text-[10px] font-normal">{WEEKDAYS[new Date(year, month - 1, d).getDay()]}</div>
                 </th>
@@ -367,7 +413,7 @@ function AttendanceContent() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
-                <th className="px-3 py-2">日</th><th className="px-3 py-2">曜</th><th className="px-3 py-2">状態</th>
+                <th className="px-3 py-2">日</th><th className="px-3 py-2">曜</th><th className="px-3 py-2">出欠</th>
                 <th className="px-3 py-2">登園</th><th className="px-3 py-2">外出</th><th className="px-3 py-2">戻り</th><th className="px-3 py-2">降園</th>
                 <th className="px-3 py-2">備考</th>
               </tr>
@@ -383,11 +429,15 @@ function AttendanceContent() {
                     <td className="px-3 py-1.5 tabular-nums text-slate-700">{d}</td>
                     <td className={`px-3 py-1.5 ${g === 0 ? "text-red-500" : g === 6 ? "text-sky-500" : "text-slate-400"}`}>{WEEKDAYS[g]}</td>
                     <td className="px-3 py-1.5">
-                      {!r ? <span className="text-slate-300">·</span>
-                        : r.is_absent ? <span className="font-bold text-slate-500">{registerSymbol(r)}</span>
-                        : (r.in_time || r.depart_time) ? <span className="font-bold text-emerald-600">◯</span>
-                        : miss ? <span className="font-bold text-red-600">要確認</span>
-                        : <span className="text-slate-300">·</span>}
+                      {/* 出欠プルダウン(出席/病欠/都合欠)。過去日・未来日とも編集可(欠席理由の登録・修正)。 */}
+                      <select value={kindValue(r)} onChange={(ev) => void saveAbsenceKind(cid, dateStr(d), ev.target.value)}
+                        className={`rounded border px-1.5 py-0.5 text-xs ${
+                          r?.is_absent ? "border-red-300 bg-red-50 text-red-700"
+                            : r && (r.in_time || r.depart_time) ? "border-emerald-200 text-emerald-700"
+                            : "border-slate-200 text-slate-400"}`}>
+                        {kindValue(r) === "" && <option value="">欠席</option>}
+                        {ABSENCE_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+                      </select>
                     </td>
                     <td className="px-3 py-1.5 tabular-nums">{r ? (hhmm(r.in_time) || "") : ""}</td>
                     <td className="px-3 py-1.5 tabular-nums text-slate-500">{r ? (hhmm(r.out_time) || "") : ""}</td>
