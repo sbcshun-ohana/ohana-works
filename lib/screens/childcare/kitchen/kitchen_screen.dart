@@ -25,7 +25,7 @@ class KitchenScreen extends StatefulWidget {
 }
 
 const _slots = [
-  (key: 'am_snack', label: '朝おやつ'),
+  (key: 'am_snack', label: '午前おやつ'),
   (key: 'lunch', label: '昼食'),
   (key: 'pm_snack', label: '午後おやつ'),
 ];
@@ -371,7 +371,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
   /// 本日の献立(342・献立管理AC-06)。公開済みの通常食種を食種×区分で表示。
   Widget _menuCard() {
     const foodLabels = {
-      'regular_over3': '以上児', 'regular_under3': '未満児',
+      'regular_over3': '幼児食(以上児)', 'regular_under3': '幼児食(未満児)',
       'weaning_late': '離乳食後期', 'weaning_final': '完了期',
     };
     const slotLabels = {'am_snack': '午前おやつ', 'lunch': '昼食', 'pm_snack': '午後おやつ'};

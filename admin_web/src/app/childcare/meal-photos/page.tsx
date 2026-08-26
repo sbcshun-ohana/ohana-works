@@ -39,6 +39,7 @@ function MealPhotosContent() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [caption, setCaption] = useState("");
 
   // データ取得は meal-board と同じ inline .then パターン(effect内の同期setStateを避ける)。
   useEffect(() => {
@@ -88,6 +89,25 @@ function MealPhotosContent() {
     if (error) return setErr(error.message);
     setReloadToken((t) => t + 1);
   }
+  // 撮影/選択した画像を meal-photos バケットへアップロード → 承認待ちで登録(submit_meal_photo)。
+  async function upload(file: File) {
+    if (!selectedOffice) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const s = createClient();
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${selectedOffice}/${businessDate}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+      const { error: upErr } = await s.storage.from("meal-photos").upload(path, file, { contentType: file.type || "image/jpeg", upsert: false });
+      if (upErr) { setErr(upErr.message); return; }
+      const { error } = await s.rpc("submit_meal_photo", { p_office_id: selectedOffice, p_business_date: businessDate, p_storage_path: path, p_caption: caption.trim() || null });
+      if (error) { setErr(error.message); return; }
+      setCaption("");
+      setReloadToken((t) => t + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (officesError) {
     return (
@@ -124,6 +144,26 @@ function MealPhotosContent() {
         <p className="text-sm text-slate-500">
           厨房から送られた「本日の給食」写真を確認し、承認で保護者アプリに公開します。承認・差し戻しは管理者以上のみ可能です。
         </p>
+
+        {/* 写真の追加(iPadで撮影 or 保存済み画像をアップロード)。送信すると承認待ちになる。 */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-2 text-sm font-bold text-slate-700">写真を追加(対象日: {businessDate})</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="一言メモ(任意)"
+              className="min-w-[200px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label className={`cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 ${busy ? "opacity-50" : ""}`}>
+              📷 写真を撮る
+              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={busy}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+            </label>
+            <label className={`cursor-pointer rounded-lg border border-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 ${busy ? "opacity-50" : ""}`}>
+              ⬆️ アップロードする
+              <input type="file" accept="image/*" className="hidden" disabled={busy}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">「写真を撮る」はiPadのカメラを起動、「アップロードする」は保存済みの画像を選べます。複数枚・過去日(日付を変更)も追加でき、下に履歴として並びます。</p>
+        </div>
         {err && <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{err}</div>}
         {photos.length === 0 ? (
           <div className="rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-400">

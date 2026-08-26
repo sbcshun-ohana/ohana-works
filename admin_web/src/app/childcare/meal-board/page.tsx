@@ -8,7 +8,7 @@ import { MealSubNav } from "@/components/MealSubNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 const SLOTS: { key: string; label: string }[] = [
-  { key: "am_snack", label: "朝おやつ" },
+  { key: "am_snack", label: "午前おやつ" },
   { key: "lunch", label: "昼食" },
   { key: "pm_snack", label: "午後おやつ" },
 ];
@@ -306,7 +306,7 @@ function ChildcareMealBoardContent() {
           </div>
         </div>
         <p className="text-xs text-slate-400">
-          9:31に自動算出された暫定値です。各クラスが確認して「承認」で確定。変更期限=昼食10:00 / 午後おやつ14:00 / 朝おやつ9:30。
+          9:31に自動算出された暫定値です。各クラスが確認して「承認」で確定。変更期限=昼食10:00 / 午後おやつ14:00 / 午前おやつ9:30。
         </p>
 
         {station?.is_station && (

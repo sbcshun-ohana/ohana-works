@@ -7,6 +7,7 @@ import 'kitchen_screen.dart';
 import 'meal_photo_screen.dart';
 import 'meal_monthly_summary_screen.dart';
 import 'meal_slot_cross_screen.dart';
+import 'meal_kitchen_board_screen.dart';
 import 'meal_conference_view_screen.dart';
 
 /// 厨房専用ホーム(304)。厨房アカウント(is_kitchen_only)でログインした時の初期画面。
@@ -97,6 +98,8 @@ class _KitchenHomeScreenState extends State<KitchenHomeScreen> {
                           crossAxisSpacing: 16,
                           childAspectRatio: 1.6,
                           children: [
+                            _tile(Icons.dashboard_rounded, AppColors.warmOrange, '厨房ボード(区分別・全施設)',
+                                () => _push(MealKitchenBoardScreen(service: widget.service, offices: _offices))),
                             _tile(Icons.restaurant_rounded, AppColors.warmOrange, '食数ボード(厨房)',
                                 () => _push(KitchenScreen(service: widget.service, officeId: _officeId!, businessDate: today))),
                             _tile(Icons.photo_camera_rounded, AppColors.leafGreen, '給食写真',

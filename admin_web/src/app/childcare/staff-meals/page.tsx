@@ -9,6 +9,8 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 // 職員の食事管理表(月次)。給食管理 Phase3(336)。fetch_staff_meal_ledger を職員×日でピボット。
 type LedgerRow = { employee_id: string; employee_name: string; business_date: string; source: string };
+// 別施設で同日に給食が付いた重複(入力ミス兆候)。migration 350。
+type ConflictRow = { employee_id: string; employee_name: string; business_date: string; office_names: string[] };
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -19,6 +21,7 @@ function StaffMealsContent() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<LedgerRow[]>([]);
+  const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,6 +41,13 @@ function StaffMealsContent() {
       });
   }, [effOffice, monthParam, reload]);
 
+  // 別施設で同日重複(入力ミス兆候)を月内で検知(全施設横断)。施設に依存しないので月だけで再取得。
+  useEffect(() => {
+    createClient()
+      .rpc("fetch_staff_meal_conflicts", { p_month: monthParam })
+      .then(({ data }) => setConflicts((data ?? []) as ConflictRow[]));
+  }, [monthParam, reload]);
+
   // 職員ごとに 日→source のマップへ集約
   const byEmployee = new Map<string, { name: string; days: Map<number, string> }>();
   for (const r of rows) {
@@ -46,6 +56,9 @@ function StaffMealsContent() {
     byEmployee.get(r.employee_id)!.days.set(day, r.source);
   }
   const employees = [...byEmployee.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, "ja"));
+
+  // 重複(職員×日)のセル強調用キー: `${employee_id}|${day}`
+  const conflictCells = new Set(conflicts.map((c) => `${c.employee_id}|${Number(c.business_date.slice(8, 10))}`));
 
   async function reflectToPayroll() {
     if (!window.confirm(`${year}年${month}月の給食控除を給与へ反映します(全施設分を職員ごとに集計)。よろしいですか?`)) return;
@@ -100,32 +113,56 @@ function StaffMealsContent() {
           </button>
         </div>
 
-        <p className="text-xs text-slate-400">● = シフトから自動 / ○ = 自己発注 / 空欄 = 対象外。「給与控除へ反映」は当月の全施設分を職員ごとに集計し、単価(O/M/S=300円・H=250円)で控除額を給与へ転記します。</p>
+        <p className="text-xs text-slate-400">
+          <span className="font-bold text-emerald-600">●</span> = シフトから自動 /
+          <span className="font-bold text-amber-500"> ●</span> = 自己発注 / 空欄 = 対象外。「給与控除へ反映」は当月の全施設分を職員ごとに集計し、単価(O/M/S=300円・H=250円)で控除額を給与へ転記します。
+        </p>
 
-        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+        {/* 別施設で同日に給食が付いた重複(入力ミス兆候)のアラート。正データはunique制約で1件のため給与は正しいが、シフト重複の是正を促す。 */}
+        {conflicts.length > 0 && (
+          <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm">
+            <div className="font-bold text-red-700">⚠ 別施設で同じ職員に同日の給食が付いています({conflicts.length}件)</div>
+            <p className="mt-0.5 text-xs text-red-600">同一職員が同じ日に複数施設でフルカバー確定シフト/自己発注を持つと、食数ボードで二重計上され得ます。シフトを確認してください(給与控除は正データで1件のため二重にはなりません)。</p>
+            <ul className="mt-2 space-y-0.5 text-xs text-red-700">
+              {conflicts.map((c) => (
+                <li key={`${c.employee_id}-${c.business_date}`}>
+                  {(() => { const d = new Date(c.business_date); return `${d.getMonth() + 1}/${d.getDate()}`; })()}・<span className="font-semibold">{c.employee_name}</span>：{c.office_names.join(" / ")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           {employees.length === 0 ? (
             <div className="p-6 text-center text-sm text-slate-400">この月の食事記録はありません(9:31の食数算出で記録されます)</div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left">職員</th>
-                  <th className="px-2 py-2">食数</th>
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
-                    <th key={d} className="px-1 py-2 text-center font-medium tabular-nums">{d}</th>
-                  ))}
+                <tr className="bg-slate-100 text-slate-600">
+                  <th className="sticky left-0 z-10 border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left">職員</th>
+                  <th className="border-b border-r border-slate-200 px-2 py-2">食数</th>
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                    const wd = new Date(year, month - 1, d).getDay(); // 0=日,6=土
+                    return (
+                      <th key={d} className={`border-b border-l border-slate-200 px-1 py-2 text-center font-medium tabular-nums ${wd === 0 ? "text-red-400" : wd === 6 ? "text-sky-400" : ""}`}>{d}</th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {employees.map(([id, emp]) => (
-                  <tr key={id} className="border-b border-slate-100 last:border-0">
-                    <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-slate-800 whitespace-nowrap">{emp.name}</td>
-                    <td className="px-2 py-2 text-center font-bold tabular-nums">{emp.days.size}</td>
+                {employees.map(([id, emp], ri) => (
+                  <tr key={id} className={ri % 2 === 1 ? "bg-slate-50" : "bg-white"}>
+                    <td className={`sticky left-0 z-10 border-b border-r border-slate-200 px-3 py-2 font-medium text-slate-800 whitespace-nowrap ${ri % 2 === 1 ? "bg-slate-50" : "bg-white"}`}>{emp.name}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-2 text-center font-bold tabular-nums">{emp.days.size}</td>
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                       const src = emp.days.get(d);
+                      const dup = conflictCells.has(`${id}|${d}`);
+                      // 丸は全て塗りつぶし(●)に統一。色でシフト自動(緑)/自己発注(橙)を区別。
+                      const color = src === "auto" ? "text-emerald-600" : src ? "text-amber-500" : "";
                       return (
-                        <td key={d} className="px-1 py-2 text-center text-emerald-600">
-                          {src === "auto" ? "●" : src ? "○" : ""}
+                        <td key={d} className={`border-b border-l border-slate-200 px-1 py-2 text-center ${color} ${dup ? "bg-red-100 ring-1 ring-inset ring-red-400" : ""}`}>
+                          {src ? "●" : ""}
                         </td>
                       );
                     })}

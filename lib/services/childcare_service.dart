@@ -1721,6 +1721,20 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 厨房ビュー用・複数施設の行区分(クラス/給食段階)×食事区分(345)。
+  Future<List<Map<String, dynamic>>> fetchMealBoardCrossoffice(List<String> officeIds, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_board_crossoffice',
+        params: {'p_office_ids': officeIds, 'p_business_date': businessDate.toIso8601String().substring(0, 10)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 厨房ビュー用・複数施設のアレルギー対応者リスト(344)。除去食(作る)+弁当持参(作らない)。
+  Future<List<Map<String, dynamic>>> fetchMealAllergyCrossoffice(List<String> officeIds, DateTime businessDate) async {
+    final rows = await _client.rpc('fetch_meal_allergy_crossoffice',
+        params: {'p_office_ids': officeIds, 'p_business_date': businessDate.toIso8601String().substring(0, 10)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 厨房向け 給食会議の閲覧(305・対象児/除去提供方針/同意状況)。
   Future<List<Map<String, dynamic>>> fetchMealConferencesForKitchen(String officeId) async {
     final rows = await _client.rpc('fetch_meal_conferences_for_kitchen', params: {'p_office_id': officeId});

@@ -13,8 +13,8 @@ import { currentDate } from "@/lib/datetime";
 // デイリーボード・食数ボードから当日の献立へ遷移する導線としても使える。
 
 const FOOD_TYPES: { key: string; label: string }[] = [
-  { key: "regular_over3", label: "以上児(通常)" },
-  { key: "regular_under3", label: "未満児(通常)" },
+  { key: "regular_over3", label: "幼児食(以上児)" },
+  { key: "regular_under3", label: "幼児食(未満児)" },
   { key: "weaning_late", label: "離乳食 後期" },
   { key: "weaning_final", label: "完了期" },
   { key: "allergy_removed", label: "除去食" },

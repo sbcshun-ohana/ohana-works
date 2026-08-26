@@ -116,7 +116,7 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
                             headingRowColor: WidgetStateProperty.all(const Color(0xFFEEF2F0)),
                             columns: const [
                               DataColumn(label: Text('日')),
-                              DataColumn(label: Text('朝おやつ')),
+                              DataColumn(label: Text('午前おやつ')),
                               DataColumn(label: Text('昼食')),
                               DataColumn(label: Text('午後おやつ')),
                               DataColumn(label: Text('残量(g)')),

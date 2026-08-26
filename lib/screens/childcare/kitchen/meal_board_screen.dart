@@ -28,7 +28,7 @@ class MealBoardScreen extends StatefulWidget {
 }
 
 const _slots = [
-  (key: 'am_snack', label: '朝おやつ'),
+  (key: 'am_snack', label: '午前おやつ'),
   (key: 'lunch', label: '昼食'),
   (key: 'pm_snack', label: '午後おやつ'),
 ];
