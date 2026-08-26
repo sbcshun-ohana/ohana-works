@@ -1823,6 +1823,15 @@ class ChildcareService {
     });
   }
 
+  /// その日の給食発注数を一括承認/解除(362・クラスごとの承認は不要)。
+  Future<void> confirmMealDay(String officeId, DateTime businessDate) async {
+    await _client.rpc('confirm_meal_day', params: {'p_office_id': officeId, 'p_business_date': dateOnly(businessDate)});
+  }
+
+  Future<void> unconfirmMealDay(String officeId, DateTime businessDate) async {
+    await _client.rpc('unconfirm_meal_day', params: {'p_office_id': officeId, 'p_business_date': dateOnly(businessDate)});
+  }
+
   /// 期限内変更(当日・昼食10:00/午後14:00/朝9:30)。変更前後を履歴化。
   Future<void> changeMealRow(
     String officeId,

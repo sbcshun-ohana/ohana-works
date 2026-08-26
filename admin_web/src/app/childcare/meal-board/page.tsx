@@ -303,10 +303,19 @@ function ChildcareMealBoardContent() {
             >
               再算出
             </button>
+            {pivot.length > 0 && (pivot.every((p) => p.is_confirmed) ? (
+              <button disabled={busy}
+                onClick={() => run(async (s) => { const { error } = await s.rpc("unconfirm_meal_day", { p_office_id: selectedOffice, p_business_date: businessDate }); return { error }; }, "承認を解除しました")}
+                className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">✓ 承認済み(解除)</button>
+            ) : (
+              <button disabled={busy}
+                onClick={() => run(async (s) => { const { error } = await s.rpc("confirm_meal_day", { p_office_id: selectedOffice, p_business_date: businessDate }); return { error }; }, "承認しました")}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">この日を承認(一括)</button>
+            ))}
           </div>
         </div>
         <p className="text-xs text-slate-400">
-          9:31に自動算出された暫定値です。各クラスが確認して「承認」で確定。変更期限=昼食10:00 / 午後おやつ14:00 / 午前おやつ9:30。
+          9:31に自動算出された暫定値です。「この日を承認(一括)」で確定(クラスごとの承認は不要)。変更期限=昼食10:00 / 午後おやつ14:00 / 午前おやつ9:30。承認前でも厨房ビューには表示されます。
         </p>
 
         {station?.is_station && (
@@ -365,7 +374,6 @@ function ChildcareMealBoardContent() {
                   <th key={s.key} className="px-3 py-2 text-center">{s.label}</th>
                 ))}
                 <th className="px-3 py-2 text-center">確定</th>
-                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -373,7 +381,7 @@ function ChildcareMealBoardContent() {
                 <tr><td colSpan={SLOTS.length + 3} className="px-3 py-6 text-center text-slate-400">読み込み中…</td></tr>
               )}
               {!isLoading && pivot.length === 0 && (
-                <tr><td colSpan={SLOTS.length + 3} className="px-3 py-6 text-center text-slate-400">食数がありません。「再算出」を押してください。</td></tr>
+                <tr><td colSpan={SLOTS.length + 2} className="px-3 py-6 text-center text-slate-400">食数がありません。「再算出」を押してください。</td></tr>
               )}
               {pivot.map((p) => (
                 <tr key={p.row_key} className="border-b border-slate-100 odd:bg-slate-50/70">
@@ -402,26 +410,6 @@ function ChildcareMealBoardContent() {
                       <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-600">確認中</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    {!p.is_confirmed && (
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          run(async (s) => {
-                            const { error } = await s.rpc("confirm_meal_row", {
-                              p_office_id: selectedOffice,
-                              p_business_date: businessDate,
-                              p_row_key: p.row_key,
-                            });
-                            return { error };
-                          }, "")
-                        }
-                        className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        承認
-                      </button>
-                    )}
-                  </td>
                 </tr>
               ))}
               {pivot.length > 0 && (
@@ -433,7 +421,7 @@ function ChildcareMealBoardContent() {
                       {totals[s.key].staff > 0 ? ` / 職員${totals[s.key].staff}` : ""}
                     </td>
                   ))}
-                  <td colSpan={2} />
+                  <td />
                 </tr>
               )}
             </tbody>

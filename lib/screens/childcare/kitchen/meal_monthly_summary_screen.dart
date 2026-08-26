@@ -141,7 +141,7 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
   TableRow _headerRow() => TableRow(
         decoration: const BoxDecoration(color: Color(0xFFEEF2F0)),
         children: [
-          for (final t in ['日', '午前おやつ', '昼食(食種別)', '午後おやつ', '残量(g)'])
+          for (final t in ['日', '午前おやつ(食種別)', '昼食(食種別)', '午後おやつ(食種別)', '残量(g)'])
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               child: Text(t, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textSecondary)),
@@ -149,8 +149,8 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
         ],
       );
 
-  // 昼食セル: 後期食/完了食/幼児食(児童・段階別)+ 職。
-  Widget _lunchCell(int late, int complete, int toddler, int staff, {bool bold = false}) => Padding(
+  // 区分セル: 後期食/完了食/幼児食(児童・段階別)+ 職。全区分共通。
+  Widget _stageCell(int late, int complete, int toddler, int staff, {bool bold = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -166,25 +166,23 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
 
   TableRow _dataRow(Map<String, dynamic> r) {
     final d = DateTime.parse(r['business_date'] as String);
-    String cell(String c, String s) => '児${r[c] ?? 0} / 職${r[s] ?? 0}';
     return TableRow(children: [
       _cell('${d.month}/${d.day}'),
-      _cell(cell('am_child', 'am_staff')),
-      _lunchCell(_i(r, 'lunch_late'), _i(r, 'lunch_complete'), _i(r, 'lunch_toddler'), _i(r, 'lunch_staff')),
-      _cell(cell('pm_child', 'pm_staff')),
+      _stageCell(_i(r, 'am_late'), _i(r, 'am_complete'), _i(r, 'am_toddler'), _i(r, 'am_staff')),
+      _stageCell(_i(r, 'lunch_late'), _i(r, 'lunch_complete'), _i(r, 'lunch_toddler'), _i(r, 'lunch_staff')),
+      _stageCell(_i(r, 'pm_late'), _i(r, 'pm_complete'), _i(r, 'pm_toddler'), _i(r, 'pm_staff')),
       _cell(r['leftover_grams'] == null ? '—' : '${r['leftover_grams']}'),
     ]);
   }
 
   TableRow _totalRow() {
-    String tot(String c, String s) => '児${_sum(c)} / 職${_sum(s)}';
     return TableRow(
       decoration: const BoxDecoration(color: Color(0xFFF6F8F7)),
       children: [
         _cell('月合計', bold: true),
-        _cell(tot('am_child', 'am_staff'), bold: true),
-        _lunchCell(_sum('lunch_late'), _sum('lunch_complete'), _sum('lunch_toddler'), _sum('lunch_staff'), bold: true),
-        _cell(tot('pm_child', 'pm_staff'), bold: true),
+        _stageCell(_sum('am_late'), _sum('am_complete'), _sum('am_toddler'), _sum('am_staff'), bold: true),
+        _stageCell(_sum('lunch_late'), _sum('lunch_complete'), _sum('lunch_toddler'), _sum('lunch_staff'), bold: true),
+        _stageCell(_sum('pm_late'), _sum('pm_complete'), _sum('pm_toddler'), _sum('pm_staff'), bold: true),
         _cell('${_sum('leftover_grams')}', bold: true),
       ],
     );

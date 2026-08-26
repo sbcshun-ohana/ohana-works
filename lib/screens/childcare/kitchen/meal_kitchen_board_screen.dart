@@ -187,16 +187,32 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
     final child = rows.fold(0, (a, r) => a + _n(r, 'child_count'));
     final staff = rows.fold(0, (a, r) => a + _n(r, 'staff_count'));
     final allergy = rows.fold(0, (a, r) => a + _n(r, 'allergy_count'));
+    // 承認前でも数量は表示。承認前/後をバッジで判別(全行確定なら承認済み)。
+    final confirmed = rows.isNotEmpty && rows.every((r) => r['is_confirmed'] == true);
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 施設見出し
+          // 施設見出し + 承認状態
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(color: AppColors.skyBlue.withValues(alpha: 0.14), borderRadius: const BorderRadius.vertical(top: Radius.circular(14))),
-            child: Text(name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Column(
+              children: [
+                Text(name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: confirmed ? AppColors.leafGreen.withValues(alpha: 0.18) : AppColors.warmOrange.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(confirmed ? '✓ 承認済み' : '● 確認中(暫定)',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: confirmed ? AppColors.leafGreen : AppColors.warmOrange)),
+                ),
+              ],
+            ),
           ),
           // クラス別(列の高さで行を均等配分=スクロールなしで全行表示。施設ごとに行高さが変わってOK)。
           Expanded(

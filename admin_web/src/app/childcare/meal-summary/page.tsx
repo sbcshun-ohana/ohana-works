@@ -9,10 +9,9 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 type MonthlyRow = {
   business_date: string;
-  am_child: number; am_staff: number;
-  lunch_child: number; lunch_staff: number;
-  lunch_late: number; lunch_complete: number; lunch_toddler: number;
-  pm_child: number; pm_staff: number;
+  am_child: number; am_staff: number; am_late: number; am_complete: number; am_toddler: number;
+  lunch_child: number; lunch_staff: number; lunch_late: number; lunch_complete: number; lunch_toddler: number;
+  pm_child: number; pm_staff: number; pm_late: number; pm_complete: number; pm_toddler: number;
   leftover_grams: number | null;
 };
 type BoardCrossRow = {
@@ -90,15 +89,24 @@ function MealSummaryContent() {
     const aoa: (string | number)[][] = [
       [`月別食数集計  ${officeName}  ${year}年${month}月`],
       [],
-      ["日付", "午前おやつ(児)", "午前おやつ(職)", "昼食 後期", "昼食 完了", "昼食 幼児", "昼食(職)", "午後おやつ(児)", "午後おやつ(職)", "残量(g)"],
+      ["日付",
+        "午前 後期", "午前 完了", "午前 幼児", "午前(職)",
+        "昼食 後期", "昼食 完了", "昼食 幼児", "昼食(職)",
+        "午後 後期", "午後 完了", "午後 幼児", "午後(職)", "残量(g)"],
     ];
     for (const r of monthly) {
       const d = new Date(r.business_date);
-      aoa.push([`${d.getMonth() + 1}/${d.getDate()}`, r.am_child, r.am_staff, r.lunch_late, r.lunch_complete, r.lunch_toddler, r.lunch_staff, r.pm_child, r.pm_staff, r.leftover_grams ?? ""]);
+      aoa.push([`${d.getMonth() + 1}/${d.getDate()}`,
+        r.am_late, r.am_complete, r.am_toddler, r.am_staff,
+        r.lunch_late, r.lunch_complete, r.lunch_toddler, r.lunch_staff,
+        r.pm_late, r.pm_complete, r.pm_toddler, r.pm_staff, r.leftover_grams ?? ""]);
     }
-    aoa.push(["月合計", sum("am_child"), sum("am_staff"), sum("lunch_late"), sum("lunch_complete"), sum("lunch_toddler"), sum("lunch_staff"), sum("pm_child"), sum("pm_staff"), sum("leftover_grams")]);
+    aoa.push(["月合計",
+      sum("am_late"), sum("am_complete"), sum("am_toddler"), sum("am_staff"),
+      sum("lunch_late"), sum("lunch_complete"), sum("lunch_toddler"), sum("lunch_staff"),
+      sum("pm_late"), sum("pm_complete"), sum("pm_toddler"), sum("pm_staff"), sum("leftover_grams")]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 8 }, ...Array(9).fill({ wch: 12 })];
+    ws["!cols"] = [{ wch: 8 }, ...Array(13).fill({ wch: 10 })];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "月別集計");
     XLSX.writeFile(wb, `月別食数集計_${officeName}_${year}-${String(month).padStart(2, "0")}.xlsx`);
@@ -157,12 +165,18 @@ function MealSummaryContent() {
                     return (
                       <tr key={r.business_date} className="border-b border-slate-100 last:border-0">
                         <td className="px-3 py-2 font-medium text-slate-700">{d.getMonth() + 1}/{d.getDate()}</td>
-                        <td className="px-3 py-2">児{r.am_child} / 職{r.am_staff}</td>
+                        <td className="px-3 py-2">
+                          <div>後期{r.am_late} ・ 完了{r.am_complete} ・ 幼児{r.am_toddler}</div>
+                          <div className="text-xs text-slate-400">職{r.am_staff}</div>
+                        </td>
                         <td className="px-3 py-2">
                           <div>後期{r.lunch_late} ・ 完了{r.lunch_complete} ・ 幼児{r.lunch_toddler}</div>
                           <div className="text-xs text-slate-400">職{r.lunch_staff}</div>
                         </td>
-                        <td className="px-3 py-2">児{r.pm_child} / 職{r.pm_staff}</td>
+                        <td className="px-3 py-2">
+                          <div>後期{r.pm_late} ・ 完了{r.pm_complete} ・ 幼児{r.pm_toddler}</div>
+                          <div className="text-xs text-slate-400">職{r.pm_staff}</div>
+                        </td>
                         <td className="px-3 py-2">{r.leftover_grams ?? "—"}</td>
                       </tr>
                     );
@@ -170,12 +184,18 @@ function MealSummaryContent() {
                   {monthly.length > 0 && (
                     <tr className="bg-slate-50 font-bold">
                       <td className="px-3 py-2">月合計</td>
-                      <td className="px-3 py-2">児{sum("am_child")} / 職{sum("am_staff")}</td>
+                      <td className="px-3 py-2">
+                        <div>後期{sum("am_late")} ・ 完了{sum("am_complete")} ・ 幼児{sum("am_toddler")}</div>
+                        <div className="text-xs text-slate-400">職{sum("am_staff")}</div>
+                      </td>
                       <td className="px-3 py-2">
                         <div>後期{sum("lunch_late")} ・ 完了{sum("lunch_complete")} ・ 幼児{sum("lunch_toddler")}</div>
                         <div className="text-xs text-slate-400">職{sum("lunch_staff")}</div>
                       </td>
-                      <td className="px-3 py-2">児{sum("pm_child")} / 職{sum("pm_staff")}</td>
+                      <td className="px-3 py-2">
+                        <div>後期{sum("pm_late")} ・ 完了{sum("pm_complete")} ・ 幼児{sum("pm_toddler")}</div>
+                        <div className="text-xs text-slate-400">職{sum("pm_staff")}</div>
+                      </td>
                       <td className="px-3 py-2">{sum("leftover_grams")}</td>
                     </tr>
                   )}

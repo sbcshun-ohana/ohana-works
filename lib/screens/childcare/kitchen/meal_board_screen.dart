@@ -145,14 +145,41 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
     }
     final rows = map.values.toList()..sort((a, b) => (a['sort'] as int).compareTo(b['sort'] as int));
 
+    final allConfirmed = rows.isNotEmpty && rows.every((r) => r['confirmed'] == true);
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
         const Padding(
           padding: EdgeInsets.only(bottom: 8, left: 4),
-          child: Text('9:31に自動算出された暫定値です。数字をタップで期限内変更(昼食10:00/午後14:00/朝9:30)、「承認」で確定。',
+          child: Text('9:31に自動算出された暫定値です。数字をタップで期限内変更(昼食10:00/午後14:00/朝9:30)。「この日を承認」で一括確定。',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         ),
+        // その日の一括承認(クラスごとの承認は不要)。承認前でも厨房ボードには表示される。
+        Card(
+          color: allConfirmed ? AppColors.leafGreen.withValues(alpha: 0.1) : AppColors.warmOrange.withValues(alpha: 0.1),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            child: Row(
+              children: [
+                Icon(allConfirmed ? Icons.check_circle : Icons.pending_actions, color: allConfirmed ? AppColors.leafGreen : AppColors.warmOrange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(allConfirmed ? 'この日の発注数は承認済みです' : 'この日の発注数は未承認(確認中)です',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                ),
+                if (allConfirmed)
+                  OutlinedButton(onPressed: _busy ? null : () => _confirmDay(false), child: const Text('承認を解除'))
+                else
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.leafGreen),
+                    onPressed: _busy ? null : () => _confirmDay(true),
+                    child: const Text('この日を承認'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         if (_suspended.isNotEmpty) _suspendedBanner(),
         Card(
           child: Padding(
@@ -166,9 +193,56 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
             ),
           ),
         ),
+        // 職員の配分バランス(盛り付けクラスがある施設のみ)。発注予定(参加職員) vs クラス配分の合計。
+        if (rows.any((r) => r['plating'] == true)) _staffBalanceCard(rows),
         // Mahalo Station固有(340): 食数確認の流れの中で「明日のおやつ+今日の牛乳本数」を入力。
         if (_station?.isStation ?? false) _stationCard(),
       ],
+    );
+  }
+
+  int _cellStaff(Map<String, dynamic> r, String slot) =>
+      (r['cells'] as Map<String, ({int child, int staff})>?)?[slot]?.staff ?? 0;
+
+  // 職員給食の配分バランス。発注予定(職員)=事務室(職員)行の自動集計(参加職員)。クラス配分=各クラスの職員入力合計。
+  Widget _staffBalanceCard(List<Map<String, dynamic>> rows) {
+    final staffRow = rows.where((r) => r['type'] == 'staff').toList();
+    Widget line(String slot, String label) {
+      final planned = staffRow.isEmpty ? 0 : _cellStaff(staffRow.first, slot);
+      final allocated = rows.where((r) => r['type'] == 'children' && r['plating'] == true).fold<int>(0, (a, r) => a + _cellStaff(r, slot));
+      final rest = planned - allocated;
+      final over = allocated > planned;
+      if (planned == 0 && allocated == 0) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            SizedBox(width: 88, child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+            Text('発注予定 $planned', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            const Text(' ／ ', style: TextStyle(color: AppColors.textSecondary)),
+            Text('クラス配分 $allocated', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: over ? AppColors.punchClockOut : AppColors.textPrimary)),
+            const Text(' ／ ', style: TextStyle(color: AppColors.textSecondary)),
+            Text(over ? '超過 ${-rest}' : '未配分 $rest',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: over ? AppColors.punchClockOut : (rest > 0 ? AppColors.warmOrange : AppColors.leafGreen))),
+          ],
+        ),
+      );
+    }
+    return Card(
+      color: AppColors.skyBlue.withValues(alpha: 0.06),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('職員給食の配分(盛り付け)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            const Text('発注予定=参加職員(シフト自動)。各クラスへ配分し、超過しないように調整。残りは事務室で喫食。', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            const SizedBox(height: 6),
+            line('lunch', '昼食'),
+            line('pm_snack', '午後おやつ'),
+          ],
+        ),
+      ),
     );
   }
 
@@ -252,7 +326,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
           const SizedBox(width: 132, child: Text('区分', style: TextStyle(fontWeight: FontWeight.w800))),
           for (final s in _slots)
             Expanded(child: Center(child: Text(s.label, style: const TextStyle(fontWeight: FontWeight.w800)))),
-          const SizedBox(width: 96, child: Center(child: Text('確定', style: TextStyle(fontWeight: FontWeight.w800)))),
+          const SizedBox(width: 72, child: Center(child: Text('確定', style: TextStyle(fontWeight: FontWeight.w800)))),
         ],
       );
 
@@ -299,19 +373,11 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
           for (final s in _slots)
             Expanded(child: Center(child: _slotCell(r, s.key, isStaff))),
           SizedBox(
-            width: 96,
+            width: 72,
             child: Center(
               child: confirmed
-                  ? const Icon(Icons.check_circle, color: AppColors.leafGreen, size: 22)
-                  : FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.leafGreen,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: _busy ? null : () => _confirm(r['label'] as String, _rowKeyOf(r)),
-                      child: const Text('承認'),
-                    ),
+                  ? const Icon(Icons.check_circle, color: AppColors.leafGreen, size: 20)
+                  : const Text('確認中', style: TextStyle(fontSize: 12, color: AppColors.warmOrange)),
             ),
           ),
         ],
@@ -324,20 +390,24 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
     return _board.firstWhere((b) => b['row_label'] == r['label'])['row_key'] as String;
   }
 
-  Future<void> _confirm(String label, String rowKey) async {
+  // その日の発注数を一括承認/解除(クラスごとの承認は不要)。
+  Future<void> _confirmDay(bool confirm) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$label を承認'),
-        content: const Text('この区分の食数を確定します。よろしいですか?'),
+        title: Text(confirm ? 'この日の発注数を承認' : '承認を解除'),
+        content: Text(confirm ? 'この日の全区分の食数を一括で確定します。よろしいですか?' : 'この日の承認を解除して再修正できるようにします。よろしいですか?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('承認')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(confirm ? '承認' : '解除')),
         ],
       ),
     );
     if (ok != true) return;
-    await _run(() => widget.service.confirmMealRow(widget.officeId, _date, rowKey), '承認しました');
+    await _run(
+      () => confirm ? widget.service.confirmMealDay(widget.officeId, _date) : widget.service.unconfirmMealDay(widget.officeId, _date),
+      confirm ? '承認しました' : '承認を解除しました',
+    );
   }
 
   // 職員給食をクラスに入力できる区分か。盛り付け配膳クラス(大和はな/そら/かぜ)の昼食/午後おやつのみ。
