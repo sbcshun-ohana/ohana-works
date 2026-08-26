@@ -11,6 +11,7 @@ type MonthlyRow = {
   business_date: string;
   am_child: number; am_staff: number;
   lunch_child: number; lunch_staff: number;
+  lunch_late: number; lunch_complete: number; lunch_toddler: number;
   pm_child: number; pm_staff: number;
   leftover_grams: number | null;
 };
@@ -89,15 +90,15 @@ function MealSummaryContent() {
     const aoa: (string | number)[][] = [
       [`月別食数集計  ${officeName}  ${year}年${month}月`],
       [],
-      ["日付", "午前おやつ(児)", "午前おやつ(職)", "昼食(児)", "昼食(職)", "午後おやつ(児)", "午後おやつ(職)", "残量(g)"],
+      ["日付", "午前おやつ(児)", "午前おやつ(職)", "昼食 後期", "昼食 完了", "昼食 幼児", "昼食(職)", "午後おやつ(児)", "午後おやつ(職)", "残量(g)"],
     ];
     for (const r of monthly) {
       const d = new Date(r.business_date);
-      aoa.push([`${d.getMonth() + 1}/${d.getDate()}`, r.am_child, r.am_staff, r.lunch_child, r.lunch_staff, r.pm_child, r.pm_staff, r.leftover_grams ?? ""]);
+      aoa.push([`${d.getMonth() + 1}/${d.getDate()}`, r.am_child, r.am_staff, r.lunch_late, r.lunch_complete, r.lunch_toddler, r.lunch_staff, r.pm_child, r.pm_staff, r.leftover_grams ?? ""]);
     }
-    aoa.push(["月合計", sum("am_child"), sum("am_staff"), sum("lunch_child"), sum("lunch_staff"), sum("pm_child"), sum("pm_staff"), sum("leftover_grams")]);
+    aoa.push(["月合計", sum("am_child"), sum("am_staff"), sum("lunch_late"), sum("lunch_complete"), sum("lunch_toddler"), sum("lunch_staff"), sum("pm_child"), sum("pm_staff"), sum("leftover_grams")]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 8 }, ...Array(7).fill({ wch: 12 })];
+    ws["!cols"] = [{ wch: 8 }, ...Array(9).fill({ wch: 12 })];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "月別集計");
     XLSX.writeFile(wb, `月別食数集計_${officeName}_${year}-${String(month).padStart(2, "0")}.xlsx`);
@@ -157,7 +158,10 @@ function MealSummaryContent() {
                       <tr key={r.business_date} className="border-b border-slate-100 last:border-0">
                         <td className="px-3 py-2 font-medium text-slate-700">{d.getMonth() + 1}/{d.getDate()}</td>
                         <td className="px-3 py-2">児{r.am_child} / 職{r.am_staff}</td>
-                        <td className="px-3 py-2">児{r.lunch_child} / 職{r.lunch_staff}</td>
+                        <td className="px-3 py-2">
+                          <div>後期{r.lunch_late} ・ 完了{r.lunch_complete} ・ 幼児{r.lunch_toddler}</div>
+                          <div className="text-xs text-slate-400">職{r.lunch_staff}</div>
+                        </td>
                         <td className="px-3 py-2">児{r.pm_child} / 職{r.pm_staff}</td>
                         <td className="px-3 py-2">{r.leftover_grams ?? "—"}</td>
                       </tr>
@@ -167,7 +171,10 @@ function MealSummaryContent() {
                     <tr className="bg-slate-50 font-bold">
                       <td className="px-3 py-2">月合計</td>
                       <td className="px-3 py-2">児{sum("am_child")} / 職{sum("am_staff")}</td>
-                      <td className="px-3 py-2">児{sum("lunch_child")} / 職{sum("lunch_staff")}</td>
+                      <td className="px-3 py-2">
+                        <div>後期{sum("lunch_late")} ・ 完了{sum("lunch_complete")} ・ 幼児{sum("lunch_toddler")}</div>
+                        <div className="text-xs text-slate-400">職{sum("lunch_staff")}</div>
+                      </td>
                       <td className="px-3 py-2">児{sum("pm_child")} / 職{sum("pm_staff")}</td>
                       <td className="px-3 py-2">{sum("leftover_grams")}</td>
                     </tr>

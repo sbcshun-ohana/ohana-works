@@ -60,10 +60,11 @@ class _MealPhotoScreenState extends State<MealPhotoScreen> {
     }
   }
 
-  Future<void> _capture() async {
+  // source=camera: iPadで撮影 / source=gallery: 保存済み画像から選択。以降のプレビュー・送信は共通。
+  Future<void> _pick(ImageSource source) async {
     try {
       final picker = ImagePicker();
-      final shot = await picker.pickImage(source: ImageSource.camera, maxWidth: 2000, imageQuality: 85);
+      final shot = await picker.pickImage(source: source, maxWidth: 2000, imageQuality: 85);
       if (shot == null) return;
       final bytes = await shot.readAsBytes();
       if (!mounted) return;
@@ -139,15 +140,30 @@ class _MealPhotoScreenState extends State<MealPhotoScreen> {
     final d = widget.businessDate;
     return Scaffold(
       appBar: AppBar(title: Text('給食写真  ${d.month}/${d.day}')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _busy ? null : _capture,
-        icon: const Icon(Icons.photo_camera_rounded),
-        label: const Text('撮影して送信'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'meal_photo_upload',
+            onPressed: _busy ? null : () => _pick(ImageSource.gallery),
+            backgroundColor: AppColors.skyBlue,
+            icon: const Icon(Icons.photo_library_rounded),
+            label: const Text('アップロード'),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'meal_photo_camera',
+            onPressed: _busy ? null : () => _pick(ImageSource.camera),
+            icon: const Icon(Icons.photo_camera_rounded),
+            label: const Text('撮影して送信'),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _photos.isEmpty
-              ? const Center(child: Text('本日の給食写真はまだありません。右下から撮影してください。', style: TextStyle(color: AppColors.textSecondary)))
+              ? const Center(child: Text('本日の給食写真はまだありません。右下から撮影またはアップロードしてください。', style: TextStyle(color: AppColors.textSecondary)))
               : GridView.count(
                   padding: const EdgeInsets.all(16),
                   crossAxisCount: 3,

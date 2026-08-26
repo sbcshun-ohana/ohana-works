@@ -91,25 +91,41 @@ class _KitchenHomeScreenState extends State<KitchenHomeScreen> {
                       else
                         Text('施設: $_officeName', style: const TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 16),
+                      // 6機能をスクロールなしで1画面に収める(3列×2行・iPad固定)。
                       Expanded(
-                        child: GridView.count(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 1.6,
+                        child: Column(
                           children: [
-                            _tile(Icons.dashboard_rounded, AppColors.warmOrange, '厨房ボード(区分別・全施設)',
-                                () => _push(MealKitchenBoardScreen(service: widget.service, offices: _offices))),
-                            _tile(Icons.restaurant_rounded, AppColors.warmOrange, '食数ボード(厨房)',
-                                () => _push(KitchenScreen(service: widget.service, officeId: _officeId!, businessDate: today))),
-                            _tile(Icons.photo_camera_rounded, AppColors.leafGreen, '給食写真',
-                                () => _push(MealPhotoScreen(service: widget.service, officeId: _officeId!, businessDate: today, isManager: false))),
-                            _tile(Icons.calendar_month_rounded, AppColors.skyBlue, '月別集計',
-                                () => _push(MealMonthlySummaryScreen(service: widget.service, offices: _offices, initialOfficeId: _officeId!))),
-                            _tile(Icons.view_list_rounded, AppColors.skyBlue, '食事区分ごと(全施設)',
-                                () => _push(MealSlotCrossScreen(service: widget.service, offices: _offices))),
-                            _tile(Icons.groups_rounded, AppColors.punchClockOut, '給食会議(閲覧)',
-                                () => _push(MealConferenceViewScreen(service: widget.service, officeId: _officeId!, officeName: _officeName))),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(child: _tile(Icons.dashboard_rounded, AppColors.warmOrange, '厨房ボード(区分別・全施設)',
+                                      () => _push(MealKitchenBoardScreen(service: widget.service, offices: _offices)))),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: _tile(Icons.restaurant_rounded, AppColors.warmOrange, '食数ボード(厨房)',
+                                      () => _push(KitchenScreen(service: widget.service, officeId: _officeId!, businessDate: today)))),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: _tile(Icons.photo_camera_rounded, AppColors.leafGreen, '給食写真',
+                                      () => _push(MealPhotoScreen(service: widget.service, officeId: _officeId!, businessDate: today, isManager: false)))),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(child: _tile(Icons.calendar_month_rounded, AppColors.skyBlue, '月別集計',
+                                      () => _push(MealMonthlySummaryScreen(service: widget.service, offices: _offices, initialOfficeId: _officeId!)))),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: _tile(Icons.view_list_rounded, AppColors.skyBlue, '食事区分ごと(全施設)',
+                                      () => _push(MealSlotCrossScreen(service: widget.service, offices: _offices)))),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: _tile(Icons.groups_rounded, AppColors.punchClockOut, '給食会議(閲覧)',
+                                      () => _push(MealConferenceViewScreen(service: widget.service, officeId: _officeId!, officeName: _officeName)))),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),

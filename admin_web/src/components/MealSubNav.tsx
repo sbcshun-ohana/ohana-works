@@ -10,7 +10,7 @@ const SUB_ITEMS = [
   { href: "/childcare/staff-meals", label: "職員食事表" },
   { href: "/childcare/meal-photos", label: "給食写真" },
   { href: "/childcare/menus", label: "献立" },
-  { href: "/childcare/menus/day", label: "日別ビュー" },
+  { href: "/childcare/menus/month", label: "月間一覧" },
   { href: "/childcare/allergy-incidents", label: "アレルギー報告" },
   { href: "/childcare/meal-conferences", label: "給食会議" },
 ];

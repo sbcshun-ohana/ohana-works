@@ -109,23 +109,22 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
                 : _rows.isEmpty
                     ? const Center(child: Text('この月の食数データはありません', style: TextStyle(color: AppColors.textSecondary)))
                     : SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            headingRowColor: WidgetStateProperty.all(const Color(0xFFEEF2F0)),
-                            columns: const [
-                              DataColumn(label: Text('日')),
-                              DataColumn(label: Text('午前おやつ')),
-                              DataColumn(label: Text('昼食')),
-                              DataColumn(label: Text('午後おやつ')),
-                              DataColumn(label: Text('残量(g)')),
-                            ],
-                            rows: [
-                              for (final r in _rows) _dataRow(r),
-                              _totalRow(),
-                            ],
-                          ),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                        child: Table(
+                          border: TableBorder(horizontalInside: BorderSide(color: Colors.grey.shade200)),
+                          columnWidths: const {
+                            0: FlexColumnWidth(0.9),
+                            1: FlexColumnWidth(1.4),
+                            2: FlexColumnWidth(1.4),
+                            3: FlexColumnWidth(1.4),
+                            4: FlexColumnWidth(1.0),
+                          },
+                          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                          children: [
+                            _headerRow(),
+                            for (final r in _rows) _dataRow(r),
+                            _totalRow(),
+                          ],
                         ),
                       ),
           ),
@@ -134,29 +133,59 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
     );
   }
 
-  DataRow _dataRow(Map<String, dynamic> r) {
+  Widget _cell(String s, {bool bold = false, Color? color}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        child: Text(s, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: bold ? FontWeight.w800 : FontWeight.w400, color: color)),
+      );
+
+  TableRow _headerRow() => TableRow(
+        decoration: const BoxDecoration(color: Color(0xFFEEF2F0)),
+        children: [
+          for (final t in ['日', '午前おやつ', '昼食(食種別)', '午後おやつ', '残量(g)'])
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+              child: Text(t, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textSecondary)),
+            ),
+        ],
+      );
+
+  // 昼食セル: 後期食/完了食/幼児食(児童・段階別)+ 職。
+  Widget _lunchCell(int late, int complete, int toddler, int staff, {bool bold = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('後期$late ・ 完了$complete ・ 幼児$toddler',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
+            Text('職$staff', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          ],
+        ),
+      );
+
+  int _i(Map<String, dynamic> r, String k) => (r[k] as num?)?.toInt() ?? 0;
+
+  TableRow _dataRow(Map<String, dynamic> r) {
     final d = DateTime.parse(r['business_date'] as String);
     String cell(String c, String s) => '児${r[c] ?? 0} / 職${r[s] ?? 0}';
-    return DataRow(cells: [
-      DataCell(Text('${d.month}/${d.day}')),
-      DataCell(Text(cell('am_child', 'am_staff'))),
-      DataCell(Text(cell('lunch_child', 'lunch_staff'))),
-      DataCell(Text(cell('pm_child', 'pm_staff'))),
-      DataCell(Text(r['leftover_grams'] == null ? '—' : '${r['leftover_grams']}')),
+    return TableRow(children: [
+      _cell('${d.month}/${d.day}'),
+      _cell(cell('am_child', 'am_staff')),
+      _lunchCell(_i(r, 'lunch_late'), _i(r, 'lunch_complete'), _i(r, 'lunch_toddler'), _i(r, 'lunch_staff')),
+      _cell(cell('pm_child', 'pm_staff')),
+      _cell(r['leftover_grams'] == null ? '—' : '${r['leftover_grams']}'),
     ]);
   }
 
-  DataRow _totalRow() {
+  TableRow _totalRow() {
     String tot(String c, String s) => '児${_sum(c)} / 職${_sum(s)}';
-    const b = TextStyle(fontWeight: FontWeight.w800);
-    return DataRow(
-      color: WidgetStateProperty.all(const Color(0xFFF6F8F7)),
-      cells: [
-        const DataCell(Text('月合計', style: b)),
-        DataCell(Text(tot('am_child', 'am_staff'), style: b)),
-        DataCell(Text(tot('lunch_child', 'lunch_staff'), style: b)),
-        DataCell(Text(tot('pm_child', 'pm_staff'), style: b)),
-        DataCell(Text('${_sum('leftover_grams')}', style: b)),
+    return TableRow(
+      decoration: const BoxDecoration(color: Color(0xFFF6F8F7)),
+      children: [
+        _cell('月合計', bold: true),
+        _cell(tot('am_child', 'am_staff'), bold: true),
+        _lunchCell(_sum('lunch_late'), _sum('lunch_complete'), _sum('lunch_toddler'), _sum('lunch_staff'), bold: true),
+        _cell(tot('pm_child', 'pm_staff'), bold: true),
+        _cell('${_sum('leftover_grams')}', bold: true),
       ],
     );
   }
