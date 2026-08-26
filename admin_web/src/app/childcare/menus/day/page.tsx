@@ -12,12 +12,11 @@ import { currentDate } from "@/lib/datetime";
 // 献立管理 Phase 2: 園側の日別献立ビュー(公開済みの当日献立を1画面で確認)。migration 267 fetch_published_menu_day。
 // デイリーボード・食数ボードから当日の献立へ遷移する導線としても使える。
 
-const FOOD_TYPES: { key: string; label: string }[] = [
-  { key: "regular_over3", label: "幼児食(以上児)" },
-  { key: "regular_under3", label: "幼児食(未満児)" },
-  { key: "weaning_late", label: "離乳食 後期" },
-  { key: "weaning_final", label: "完了期" },
-  { key: "allergy_removed", label: "除去食" },
+// 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1種類(over3/under3統合)。
+const FOOD_TYPES: { key: string; label: string; srcs: string[] }[] = [
+  { key: "weaning_late", label: "後期", srcs: ["weaning_late"] },
+  { key: "weaning_final", label: "完了期", srcs: ["weaning_final"] },
+  { key: "regular", label: "幼児食", srcs: ["regular_over3", "regular_under3"] },
 ];
 const SLOTS: { key: string; label: string }[] = [
   { key: "am_snack", label: "午前おやつ" },
@@ -69,14 +68,20 @@ function MenuDayViewContent() {
   }, [selectedOffice, date]);
 
   // food_type×meal_slot -> menu_text(除去食以外)。除去食は removal_kind ごとに別扱い。
-  function cell(foodType: string, slot: string): string {
-    const r = rows.find((x) => x.food_type === foodType && x.meal_slot === slot && !x.removal_kind);
-    return r?.menu_text ?? "";
+  function cell(srcs: string[], slot: string): string {
+    for (const ft of srcs) {
+      const r = rows.find((x) => x.food_type === ft && x.meal_slot === slot && !x.removal_kind);
+      if (r?.menu_text) return r.menu_text;
+    }
+    return "";
   }
   // 材料(昼食行の ingredients.text)。
-  function lunchIngredients(foodType: string): string {
-    const r = rows.find((x) => x.food_type === foodType && x.meal_slot === "lunch" && !x.removal_kind);
-    return r?.ingredients?.text ?? "";
+  function lunchIngredients(srcs: string[]): string {
+    for (const ft of srcs) {
+      const r = rows.find((x) => x.food_type === ft && x.meal_slot === "lunch" && !x.removal_kind);
+      if (r?.ingredients?.text) return r.ingredients.text;
+    }
+    return "";
   }
   const removals = rows.filter((r) => r.food_type === "allergy_removed" && r.removal_kind);
 
@@ -126,15 +131,15 @@ function MenuDayViewContent() {
                 </tr>
               </thead>
               <tbody>
-                {FOOD_TYPES.filter((ft) => ft.key !== "allergy_removed").map((ft) => (
+                {FOOD_TYPES.map((ft) => (
                   <tr key={ft.key} className="border-t border-slate-100">
                     <td className="px-3 py-2 align-top font-medium text-slate-700">{ft.label}</td>
                     {SLOTS.map((s) => (
                       <td key={s.key} className="whitespace-pre-wrap px-3 py-2 align-top text-slate-600">
-                        {cell(ft.key, s.key) || <span className="text-slate-300">—</span>}
+                        {cell(ft.srcs, s.key) || <span className="text-slate-300">—</span>}
                         {/* 材料は昼食セルの下に表示。 */}
-                        {s.key === "lunch" && lunchIngredients(ft.key) && (
-                          <div className="mt-1 text-xs text-amber-700">材料: {lunchIngredients(ft.key)}</div>
+                        {s.key === "lunch" && lunchIngredients(ft.srcs) && (
+                          <div className="mt-1 text-xs text-amber-700">材料: {lunchIngredients(ft.srcs)}</div>
                         )}
                       </td>
                     ))}

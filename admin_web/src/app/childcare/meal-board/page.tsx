@@ -280,7 +280,7 @@ function ChildcareMealBoardContent() {
       <MealSubNav />
       <main className="flex-1 space-y-5 p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">食数ボード</h2>
+          <h2 className="text-lg font-bold text-slate-800">給食発注数</h2>
           <div className="flex items-center gap-3">
             <input
               type="date"
@@ -465,19 +465,19 @@ function ChildcareMealBoardContent() {
                 <tbody>
                   {(
                     [
-                      ["regular_over3", "以上児"],
-                      ["regular_under3", "未満児"],
-                      ["weaning_late", "後期"],
-                      ["weaning_final", "完了期"],
+                      // 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は over3/under3 を統合。
+                      ["後期", ["weaning_late"]],
+                      ["完了期", ["weaning_final"]],
+                      ["幼児食", ["regular_over3", "regular_under3"]],
                     ] as const
                   )
-                    .filter(([ft]) => menuDay.some((m) => m.food_type === ft && !m.removal_kind && m.menu_text))
-                    .map(([ft, label]) => (
-                      <tr key={ft} className="border-t border-slate-100">
+                    .filter(([, srcs]) => menuDay.some((m) => !m.removal_kind && m.menu_text && srcs.some((ft) => ft === m.food_type)))
+                    .map(([label, srcs]) => (
+                      <tr key={label} className="border-t border-slate-100">
                         <td className="px-2 py-1 font-medium text-slate-700">{label}</td>
                         {(["am_snack", "lunch", "pm_snack"] as const).map((slot) => (
                           <td key={slot} className="whitespace-pre-wrap px-2 py-1 text-slate-600">
-                            {menuDay.find((m) => m.food_type === ft && m.meal_slot === slot && !m.removal_kind)?.menu_text || "—"}
+                            {srcs.map((ft) => menuDay.find((m) => m.food_type === ft && m.meal_slot === slot && !m.removal_kind)?.menu_text).find(Boolean) || "—"}
                           </td>
                         ))}
                       </tr>

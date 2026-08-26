@@ -11,11 +11,11 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 // fetch_menu_days_for_import で1画面に一覧し、月単位で一括確認できる。日別ビュー(単独タブ)を置換。
 // DB変更なし(既存RPCの再利用)。食数ボードの「本日の献立」はそのまま残す。
 
-const FOOD_TYPES: { key: string; label: string }[] = [
-  { key: "regular_over3", label: "幼児食(以上児)" },
-  { key: "regular_under3", label: "幼児食(未満児)" },
-  { key: "weaning_late", label: "離乳食 後期" },
-  { key: "weaning_final", label: "完了期" },
+// 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1種類(over3/under3統合)。
+const FOOD_TYPES: { key: string; label: string; srcs: string[] }[] = [
+  { key: "weaning_late", label: "後期", srcs: ["weaning_late"] },
+  { key: "weaning_final", label: "完了期", srcs: ["weaning_final"] },
+  { key: "regular", label: "幼児食", srcs: ["regular_over3", "regular_under3"] },
 ];
 const SLOTS: { key: string; label: string }[] = [
   { key: "am_snack", label: "午前おやつ" },
@@ -24,10 +24,9 @@ const SLOTS: { key: string; label: string }[] = [
 ];
 // 食種ごとの色(食種セルの背景+文字色)。ひと目で種類を見分けやすく。
 const FT_STYLE: Record<string, string> = {
-  regular_over3: "bg-sky-100 text-sky-800",
-  regular_under3: "bg-emerald-100 text-emerald-800",
   weaning_late: "bg-violet-100 text-violet-800",
   weaning_final: "bg-indigo-100 text-indigo-800",
+  regular: "bg-sky-100 text-sky-800",
 };
 
 type MenuImport = { id: string; target_month: string; status: string; version: number; source_filename: string };
@@ -100,16 +99,23 @@ function MenuMonthContent() {
 
   // 日付ごとにグループ化。
   const dates = [...new Set(days.map((d) => d.menu_date))].sort();
-  function cell(date: string, foodType: string, slot: string): string {
-    const r = days.find((x) => x.menu_date === date && x.food_type === foodType && x.meal_slot === slot && !x.removal_kind);
-    return r?.menu_text ?? "";
+  function cell(date: string, srcs: string[], slot: string): string {
+    for (const ft of srcs) {
+      const r = days.find((x) => x.menu_date === date && x.food_type === ft && x.meal_slot === slot && !x.removal_kind);
+      if (r?.menu_text) return r.menu_text;
+    }
+    return "";
   }
-  function ingredientsOf(date: string, foodType: string, slot: string): string {
-    const r = days.find((x) => x.menu_date === date && x.food_type === foodType && x.meal_slot === slot && !x.removal_kind);
-    return r?.ingredients?.text ?? "";
+  // 材料(その食種の昼食行の ingredients.text)。
+  function ingredientsOf(date: string, srcs: string[]): string {
+    for (const ft of srcs) {
+      const r = days.find((x) => x.menu_date === date && x.food_type === ft && x.meal_slot === "lunch" && !x.removal_kind);
+      if (r?.ingredients?.text) return r.ingredients.text;
+    }
+    return "";
   }
-  function foodTypesWithData(date: string): { key: string; label: string }[] {
-    return FOOD_TYPES.filter((ft) => SLOTS.some((s) => cell(date, ft.key, s.key)));
+  function foodTypesWithData(date: string): { key: string; label: string; srcs: string[] }[] {
+    return FOOD_TYPES.filter((ft) => SLOTS.some((s) => cell(date, ft.srcs, s.key)));
   }
   function removalKinds(date: string): string[] {
     return [...new Set(days.filter((x) => x.menu_date === date && x.food_type === "allergy_removed" && x.removal_kind).map((x) => x.removal_kind as string))];
@@ -169,6 +175,7 @@ function MenuMonthContent() {
                   {SLOTS.map((s) => (
                     <th key={s.key} className="border border-slate-300 bg-slate-100 px-3 py-2">{s.label}</th>
                   ))}
+                  <th className="border border-slate-300 bg-slate-100 px-3 py-2">材料(昼食)</th>
                 </tr>
               </thead>
               <tbody>
@@ -195,19 +202,17 @@ function MenuMonthContent() {
                           {ft ? (
                             <>
                               <td className={`border border-slate-200 ${i === 0 ? dayTop : ""} whitespace-nowrap px-3 py-2 font-bold ${FT_STYLE[ft.key] ?? "text-slate-700"}`}>{ft.label}</td>
-                              {SLOTS.map((s) => {
-                                const text = cell(date, ft.key, s.key);
-                                const ing = ingredientsOf(date, ft.key, s.key);
-                                return (
-                                  <td key={s.key} className={`border border-slate-200 ${i === 0 ? dayTop : ""} whitespace-pre-wrap px-3 py-2 text-slate-600`}>
-                                    {text || <span className="text-slate-300">—</span>}
-                                    {ing && <div className="mt-1 text-xs text-amber-700">材料: {ing}</div>}
-                                  </td>
-                                );
-                              })}
+                              {SLOTS.map((s) => (
+                                <td key={s.key} className={`border border-slate-200 ${i === 0 ? dayTop : ""} whitespace-pre-wrap px-3 py-2 text-slate-600`}>
+                                  {cell(date, ft.srcs, s.key) || <span className="text-slate-300">—</span>}
+                                </td>
+                              ))}
+                              <td className={`border border-slate-200 ${i === 0 ? dayTop : ""} whitespace-pre-wrap px-3 py-2 text-xs text-amber-700`}>
+                                {ingredientsOf(date, ft.srcs) || <span className="text-slate-300">—</span>}
+                              </td>
                             </>
                           ) : (
-                            <td colSpan={SLOTS.length + 1} className={`border border-slate-200 ${dayTop} px-3 py-2 text-slate-300`}>献立なし</td>
+                            <td colSpan={SLOTS.length + 2} className={`border border-slate-200 ${dayTop} px-3 py-2 text-slate-300`}>献立なし</td>
                           )}
                         </tr>
                       ))}
@@ -219,6 +224,7 @@ function MenuMonthContent() {
                               {removalCell(date, kind, s.key) || <span className="text-amber-300">—</span>}
                             </td>
                           ))}
+                          <td className="border border-amber-200 px-3 py-2 text-amber-300">—</td>
                         </tr>
                       ))}
                     </Fragment>

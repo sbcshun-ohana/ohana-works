@@ -1791,6 +1791,21 @@ class ChildcareService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// 献立の取込一覧(施設×対象月)。月間一覧の版選択に使う(264)。
+  Future<List<Map<String, dynamic>>> fetchMenuImports(String officeId, DateTime targetMonth) async {
+    final rows = await _client.rpc('fetch_menu_imports', params: {
+      'p_office_id': officeId,
+      'p_target_month': dateOnly(DateTime(targetMonth.year, targetMonth.month, 1)),
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 取込1件の全日献立(月間一覧の中身・267)。
+  Future<List<Map<String, dynamic>>> fetchMenuDaysForImport(String importId) async {
+    final rows = await _client.rpc('fetch_menu_days_for_import', params: {'p_import_id': importId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 食数の手動再算出(職員以上・ON施設)。
   Future<void> computeMealCounts(String officeId, DateTime businessDate) async {
     await _client.rpc('compute_meal_counts', params: {

@@ -14,11 +14,14 @@ class KitchenScreen extends StatefulWidget {
     required this.service,
     required this.officeId,
     required this.businessDate,
+    this.offices = const [],
   });
 
   final ChildcareService service;
   final String officeId;
   final DateTime businessDate;
+  // 委託は複数施設。上部の施設切替タブ用(空/1件なら切替なし)。
+  final List<Map<String, dynamic>> offices;
 
   @override
   State<KitchenScreen> createState() => _KitchenScreenState();
@@ -31,6 +34,7 @@ const _slots = [
 ];
 
 class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProviderStateMixin {
+  late String _officeId = widget.officeId; // 施設切替タブで変わる
   late DateTime _date = widget.businessDate;
   bool _loading = true;
   String? _error;
@@ -64,27 +68,27 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
       _error = null;
     });
     try {
-      final board = await widget.service.fetchMealBoard(widget.officeId, _date);
-      final special = await widget.service.fetchDailyEliminationForOffice(widget.officeId, _date);
-      final changes = await widget.service.fetchMealChanges(widget.officeId, _date);
+      final board = await widget.service.fetchMealBoard(_officeId, _date);
+      final special = await widget.service.fetchDailyEliminationForOffice(_officeId, _date);
+      final changes = await widget.service.fetchMealChanges(_officeId, _date);
       List<Map<String, dynamic>> suspended = const [];
       try {
-        suspended = await widget.service.fetchMealSuspendedChildren(widget.officeId);
+        suspended = await widget.service.fetchMealSuspendedChildren(_officeId);
       } catch (_) {}
       int? leftover;
       try {
-        final sum = await widget.service.fetchMealMonthlySummary(widget.officeId, _date.year, _date.month);
+        final sum = await widget.service.fetchMealMonthlySummary(_officeId, _date.year, _date.month);
         final ds = _date.toIso8601String().substring(0, 10);
         final row = sum.where((r) => (r['business_date'] as String?) == ds).firstOrNull;
         leftover = (row?['leftover_grams'] as num?)?.toInt();
       } catch (_) {}
       ({bool isStation, int? milkBottles, int nextDaySnack})? station;
       try {
-        station = await widget.service.fetchMealStationExtras(widget.officeId, _date);
+        station = await widget.service.fetchMealStationExtras(_officeId, _date);
       } catch (_) {}
       List<Map<String, dynamic>> menu = const [];
       try {
-        menu = await widget.service.fetchPublishedMenuDay(widget.officeId, _date);
+        menu = await widget.service.fetchPublishedMenuDay(_officeId, _date);
       } catch (_) {}
       if (!mounted) return;
       setState(() {
@@ -143,7 +147,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
           FilledButton(
             onPressed: () async {
-              await widget.service.acknowledgeMealChanges(widget.officeId, _date);
+              await widget.service.acknowledgeMealChanges(_officeId, _date);
               if (ctx.mounted) Navigator.pop(ctx);
               await _load();
             },
@@ -170,7 +174,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => MealPhotoScreen(
                 service: widget.service,
-                officeId: widget.officeId,
+                officeId: _officeId,
                 businessDate: _date,
                 isManager: false, // 厨房は撮影・自分の未公開削除まで(承認は食数ボード/adminで)
               ),
@@ -233,6 +237,45 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
     );
   }
 
+  // 施設切替タブ(担当施設を1タップで切替→再取得)。並び=大和(O)→BABY MAHALO(M)→Mahalo Station(S)→ハレレア(H)。
+  Widget _officeTabs() {
+    int rank(String? c) => c == 'O' ? 1 : c == 'M' ? 2 : c == 'S' ? 3 : c == 'H' ? 4 : 9;
+    final ordered = [...widget.offices]..sort((a, b) => rank(a['office_code'] as String?).compareTo(rank(b['office_code'] as String?)));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final o in ordered)
+            Builder(builder: (_) {
+              final id = o['office_id'] as String? ?? '';
+              final sel = id == _officeId;
+              return GestureDetector(
+                onTap: () {
+                  if (sel) return;
+                  setState(() => _officeId = id);
+                  _load();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: sel ? AppColors.warmOrange : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: sel ? AppColors.warmOrange : Colors.grey.shade300, width: 1.5),
+                  ),
+                  child: Text(
+                    o['office_name'] as String? ?? '',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: sel ? Colors.white : AppColors.textSecondary),
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
   Widget _body() {
     // ピボット: row_key → {label, type, sort, slots}
     final map = <String, Map<String, dynamic>>{};
@@ -272,6 +315,8 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // 施設切替タブ(委託=複数施設。この画面で施設ごとに確認・変更確認・残量入力ができる)。
+        if (widget.offices.length > 1) _officeTabs(),
         // 給食停止中(弁当持参・アレルギー確認中)。誤提供防止のため最上部に大きく表示(271)。
         if (_suspended.isNotEmpty) ...[
           _sectionTitle('給食停止中(弁当持参・アレルギー確認中)', AppColors.punchClockOut, _suspended.length),
@@ -368,18 +413,22 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
     );
   }
 
-  /// 本日の献立(342・献立管理AC-06)。公開済みの通常食種を食種×区分で表示。
+  /// 本日の献立(342・献立管理AC-06)。公開済みの食種を区分で表示。幼児食は1種類(以上児/未満児で分けない)。
   Widget _menuCard() {
-    const foodLabels = {
-      'regular_over3': '幼児食(以上児)', 'regular_under3': '幼児食(未満児)',
-      'weaning_late': '離乳食後期', 'weaning_final': '完了期',
-    };
     const slotLabels = {'am_snack': '午前おやつ', 'lunch': '昼食', 'pm_snack': '午後おやつ'};
+    const groups = [
+      (label: '後期', srcs: ['weaning_late']),
+      (label: '完了期', srcs: ['weaning_final']),
+      (label: '幼児食', srcs: ['regular_over3', 'regular_under3']),
+    ];
     final rows = _menu.where((m) => m['removal_kind'] == null).toList();
-    final foodTypes = <String>[];
-    for (final r in rows) {
-      final ft = r['food_type'] as String? ?? '';
-      if (ft.isNotEmpty && !foodTypes.contains(ft)) foodTypes.add(ft);
+    String cell(List<String> srcs, String slot) {
+      for (final ft in srcs) {
+        final m = rows.where((x) => x['food_type'] == ft && x['meal_slot'] == slot).firstOrNull;
+        final t = (m?['menu_text'] as String?)?.trim();
+        if (t != null && t.isNotEmpty) return t;
+      }
+      return '';
     }
     return Card(
       color: AppColors.leafGreen.withValues(alpha: 0.08),
@@ -390,17 +439,17 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
           children: [
             const Text('本日の献立', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 8),
-            for (final ft in foodTypes) ...[
-              Text(foodLabels[ft] ?? ft, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.skyBlue)),
-              for (final slot in ['am_snack', 'lunch', 'pm_snack'])
-                ...rows
-                    .where((m) => m['food_type'] == ft && m['meal_slot'] == slot && (m['menu_text'] as String?)?.trim().isNotEmpty == true)
-                    .map((m) => Padding(
-                          padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
-                          child: Text('${slotLabels[slot] ?? slot}: ${(m['menu_text'] as String).trim()}', style: const TextStyle(fontSize: 13)),
-                        )),
-              const SizedBox(height: 6),
-            ],
+            for (final g in groups)
+              if (['am_snack', 'lunch', 'pm_snack'].any((s) => cell(g.srcs, s).isNotEmpty)) ...[
+                Text(g.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.skyBlue)),
+                for (final slot in ['am_snack', 'lunch', 'pm_snack'])
+                  if (cell(g.srcs, slot).isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
+                      child: Text('${slotLabels[slot] ?? slot}: ${cell(g.srcs, slot)}', style: const TextStyle(fontSize: 13)),
+                    ),
+                const SizedBox(height: 6),
+              ],
           ],
         ),
       ),
@@ -441,7 +490,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
               onPressed: () async {
                 final n = int.tryParse(ctrl.text.trim());
                 try {
-                  await widget.service.setMilkBottles(widget.officeId, _date, n);
+                  await widget.service.setMilkBottles(_officeId, _date, n);
                   if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('牛乳本数を保存しました')));
                   await _load();
                 } catch (e) {
@@ -480,7 +529,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
               onPressed: () async {
                 final g = int.tryParse(ctrl.text.trim());
                 try {
-                  await widget.service.setMealLeftover(widget.officeId, _date, g);
+                  await widget.service.setMealLeftover(_officeId, _date, g);
                   if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('残量を保存しました')));
                   await _load();
                 } catch (e) {

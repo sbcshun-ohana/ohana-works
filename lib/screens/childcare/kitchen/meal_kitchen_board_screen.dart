@@ -198,44 +198,42 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
             decoration: BoxDecoration(color: AppColors.skyBlue.withValues(alpha: 0.14), borderRadius: const BorderRadius.vertical(top: Radius.circular(14))),
             child: Text(name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
-          // クラス別(スクロール最小・多い場合のみ内部スクロール)
+          // クラス別(列の高さで行を均等配分=スクロールなしで全行表示。施設ごとに行高さが変わってOK)。
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: rows.length,
-              separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade100),
-              itemBuilder: (_, idx) {
-                final r = rows[idx];
-                final c = _n(r, 'child_count');
-                final s = _n(r, 'staff_count');
-                final al = _n(r, 'allergy_count');
-                final isStaff = (r['row_type'] as String?) == 'staff';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(r['row_label'] as String? ?? '', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                            if (al > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text('内アレ $al', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.punchClockOut)),
-                              ),
-                          ],
-                        ),
+            child: Column(
+              children: [
+                for (final r in rows)
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade100))),
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(r['row_label'] as String? ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                if (_n(r, 'allergy_count') > 0)
+                                  Text('内アレ ${_n(r, 'allergy_count')}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.punchClockOut)),
+                              ],
+                            ),
+                          ),
+                          // 食数(職員行は職、児行は児を大きく)。狭くても収まるようスケールダウン。
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${(r['row_type'] as String?) == 'staff' ? _n(r, 'staff_count') : _n(r, 'child_count')}',
+                              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: (r['row_type'] as String?) == 'staff' ? AppColors.textSecondary : AppColors.textPrimary),
+                            ),
+                          ),
+                        ],
                       ),
-                      // 食数(職員行は職、児行は児を大きく)
-                      Text(
-                        '${isStaff ? s : c}',
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isStaff ? AppColors.textSecondary : AppColors.textPrimary),
-                      ),
-                    ],
+                    ),
                   ),
-                );
-              },
+              ],
             ),
           ),
           // 施設小計

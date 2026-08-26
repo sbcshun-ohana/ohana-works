@@ -5,10 +5,11 @@ import '../../models/childcare.dart';
 import '../../services/childcare_active_office.dart';
 import '../../services/childcare_service.dart';
 import '../../services/pin_auth_service.dart';
+import '../../services/root_navigator.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ohana_logo_home_button.dart';
 import 'children/child_register_list_screen.dart';
-import 'kitchen/meal_board_screen.dart';
+import 'kitchen/meal_staff_hub_screen.dart';
 import 'class_activities/class_activity_list_screen.dart';
 import 'contacts/contact_copy_screen.dart';
 import 'contacts/daily_contact_list_screen.dart';
@@ -71,13 +72,19 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
             content: Text('あなた宛ての園内連絡が$n件あります'),
             action: SnackBarAction(
               label: '確認する',
-              onPressed: () => _push(StaffMessageListScreen(
-                service: widget.service,
-                officeId: office.officeId,
-                isManager: office.isManager,
-              )),
+              // rootNavigatorで確実に園内連絡一覧へ遷移(SnackBarのcontextに依存しない)。
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                rootNavigatorKey.currentState?.push(MaterialPageRoute(
+                  builder: (_) => StaffMessageListScreen(
+                    service: widget.service,
+                    officeId: office.officeId,
+                    isManager: office.isManager,
+                  ),
+                ));
+              },
             ),
-            duration: const Duration(seconds: 6),
+            duration: const Duration(seconds: 8),
           ),
         );
       }
@@ -253,7 +260,7 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               icon: Icons.restaurant_rounded,
               color: AppColors.warmOrange,
               label: '給食管理',
-              onTap: () => _push(MealBoardScreen(
+              onTap: () => _push(MealStaffHubScreen(
                 service: widget.service,
                 officeId: office.officeId,
                 businessDate: _businessDate,

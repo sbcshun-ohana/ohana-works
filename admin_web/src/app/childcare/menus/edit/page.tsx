@@ -12,11 +12,11 @@ import { MealSubNav } from "@/components/MealSubNav";
 // 日別に 食種(food_type)×区分(meal_slot)のメニュー本文を編集し、確認→公開する。
 // AI解析(自動下書き)は後でこの器に流し込む(キー設定後)。
 
-const FOOD_TYPES: { key: string; label: string }[] = [
-  { key: "regular_over3", label: "幼児食(以上児)" },
-  { key: "regular_under3", label: "幼児食(未満児)" },
-  { key: "weaning_late", label: "離乳食 後期" },
-  { key: "weaning_final", label: "完了期" },
+// 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1行入力→保存時に over3/under3 両方へ書込。
+const FOOD_TYPES: { key: string; label: string; srcs: string[] }[] = [
+  { key: "weaning_late", label: "後期", srcs: ["weaning_late"] },
+  { key: "weaning_final", label: "完了期", srcs: ["weaning_final"] },
+  { key: "regular", label: "幼児食", srcs: ["regular_over3", "regular_under3"] },
 ];
 const SLOTS: { key: string; label: string }[] = [
   { key: "am_snack", label: "午前おやつ" },
@@ -104,8 +104,16 @@ function MenuEditContent() {
         }
         continue;
       }
-      map[`${d.menu_date}:${d.food_type}:${d.meal_slot}`] = d.menu_text ?? "";
-      if (d.meal_slot === "lunch") ingrMap[`${d.menu_date}:${d.food_type}`] = d.ingredients?.text ?? "";
+      // 幼児食(以上児/未満児)は "regular" に統合。以上児(over3)を代表とし、無い場合のみ未満児で補完。
+      if (d.food_type === "regular_under3") {
+        const mk = `${d.menu_date}:regular:${d.meal_slot}`;
+        if (map[mk] === undefined) map[mk] = d.menu_text ?? "";
+        if (d.meal_slot === "lunch" && ingrMap[`${d.menu_date}:regular`] === undefined) ingrMap[`${d.menu_date}:regular`] = d.ingredients?.text ?? "";
+        continue;
+      }
+      const fk = d.food_type === "regular_over3" ? "regular" : d.food_type;
+      map[`${d.menu_date}:${fk}:${d.meal_slot}`] = d.menu_text ?? "";
+      if (d.meal_slot === "lunch") ingrMap[`${d.menu_date}:${fk}`] = d.ingredients?.text ?? "";
     }
     Promise.resolve().then(() => {
       setEdits(map);
@@ -128,31 +136,36 @@ function MenuEditContent() {
         for (const ft of FOOD_TYPES) {
           const ingrText = (ingr[`${d0}:${ft.key}`] ?? "").trim();
           for (const s of SLOTS) {
+            // 後期は午前おやつの提供なし(保存しない)。
+            if (ft.key === "weaning_late" && s.key === "am_snack") continue;
             const text = (edits[`${d0}:${ft.key}:${s.key}`] ?? "").trim();
-            const existing = days.find(
-              (x) => x.menu_date === d0 && x.food_type === ft.key && x.meal_slot === s.key && !x.removal_kind,
-            );
             const isLunch = s.key === "lunch";
             const newIngr = isLunch && ingrText ? { text: ingrText } : null;
-            const existingIngrText = (existing?.ingredients?.text ?? "").trim();
-            const menuChanged = existing ? (existing.menu_text ?? "") !== text : !!text;
-            const ingrChanged = isLunch && existingIngrText !== ingrText;
-            // 変更が無い/空で既存も無いセルはスキップ(無駄な行を作らない)。
-            if (!menuChanged && !ingrChanged) continue;
-            if (!text && !newIngr && !existing) continue;
-            const { error: e } = await supabase.rpc("upsert_menu_day", {
-              p_import_id: importId,
-              p_menu_date: d0,
-              p_food_type: ft.key,
-              p_removal_kind: null,
-              p_meal_slot: s.key,
-              p_menu_text: text || null,
-              p_ingredients: newIngr,
-              p_nutrition: null,
-              p_removal_note: null,
-            });
-            if (e) throw e;
-            count++;
+            // 幼児食は over3/under3 の両方へ同内容を書き込む(以上児/未満児で分けない)。
+            for (const src of ft.srcs) {
+              const existing = days.find(
+                (x) => x.menu_date === d0 && x.food_type === src && x.meal_slot === s.key && !x.removal_kind,
+              );
+              const existingIngrText = (existing?.ingredients?.text ?? "").trim();
+              const menuChanged = existing ? (existing.menu_text ?? "") !== text : !!text;
+              const ingrChanged = isLunch && existingIngrText !== ingrText;
+              // 変更が無い/空で既存も無いセルはスキップ(無駄な行を作らない)。
+              if (!menuChanged && !ingrChanged) continue;
+              if (!text && !newIngr && !existing) continue;
+              const { error: e } = await supabase.rpc("upsert_menu_day", {
+                p_import_id: importId,
+                p_menu_date: d0,
+                p_food_type: src,
+                p_removal_kind: null,
+                p_meal_slot: s.key,
+                p_menu_text: text || null,
+                p_ingredients: newIngr,
+                p_nutrition: null,
+                p_removal_note: null,
+              });
+              if (e) throw e;
+              count++;
+            }
           }
         }
       }
@@ -374,6 +387,14 @@ function MenuEditContent() {
                           <td className="px-2 py-2 align-top font-medium text-slate-700">{ft.label}</td>
                           {SLOTS.map((s) => {
                             const key = `${date}:${ft.key}:${s.key}`;
+                            // 後期は午前おやつの提供なし(入力欄を出さない)。
+                            if (ft.key === "weaning_late" && s.key === "am_snack") {
+                              return (
+                                <td key={s.key} className="px-2 py-2 align-top">
+                                  <div className="min-w-[160px] px-2 py-1.5 text-sm text-slate-300">提供なし</div>
+                                </td>
+                              );
+                            }
                             return (
                               <td key={s.key} className="px-2 py-2 align-top">
                                 <textarea

@@ -8,9 +8,11 @@ import { MealSubNav } from "@/components/MealSubNav";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 // 職員の食事管理表(月次)。給食管理 Phase3(336)。fetch_staff_meal_ledger を職員×日でピボット。
-type LedgerRow = { employee_id: string; employee_name: string; business_date: string; source: string };
+type LedgerRow = { employee_id: string; employee_name: string; business_date: string; source: string; has_attendance: boolean };
 // 別施設で同日に給食が付いた重複(入力ミス兆候)。migration 350。
 type ConflictRow = { employee_id: string; employee_name: string; business_date: string; office_names: string[] };
+// 勤怠なしで請求できない職員給食(赤丸)。migration 358。
+type UnbillableRow = { employee_id: string; employee_name: string; office_name: string; business_date: string; source: string };
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -22,6 +24,7 @@ function StaffMealsContent() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
+  const [unbillable, setUnbillable] = useState<UnbillableRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -48,12 +51,19 @@ function StaffMealsContent() {
       .then(({ data }) => setConflicts((data ?? []) as ConflictRow[]));
   }, [monthParam, reload]);
 
+  // 勤怠なしで請求できない職員給食(赤丸)を月内で検知(全施設横断)。
+  useEffect(() => {
+    createClient()
+      .rpc("fetch_staff_meal_unbillable", { p_month: monthParam })
+      .then(({ data }) => setUnbillable((data ?? []) as UnbillableRow[]));
+  }, [monthParam, reload]);
+
   // 職員ごとに 日→source のマップへ集約
-  const byEmployee = new Map<string, { name: string; days: Map<number, string> }>();
+  const byEmployee = new Map<string, { name: string; days: Map<number, { source: string; att: boolean }> }>();
   for (const r of rows) {
     const day = Number(r.business_date.slice(8, 10));
     if (!byEmployee.has(r.employee_id)) byEmployee.set(r.employee_id, { name: r.employee_name, days: new Map() });
-    byEmployee.get(r.employee_id)!.days.set(day, r.source);
+    byEmployee.get(r.employee_id)!.days.set(day, { source: r.source, att: r.has_attendance });
   }
   const employees = [...byEmployee.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, "ja"));
 
@@ -114,9 +124,24 @@ function StaffMealsContent() {
         </div>
 
         <p className="text-xs text-slate-400">
-          <span className="font-bold text-emerald-600">●</span> = シフトから自動 /
-          <span className="font-bold text-amber-500"> ●</span> = 自己発注 / 空欄 = 対象外。「給与控除へ反映」は当月の全施設分を職員ごとに集計し、単価(O/M/S=300円・H=250円)で控除額を給与へ転記します。
+          <span className="font-bold text-sky-600">●</span> = 実勤務あり(請求可) /
+          <span className="font-bold text-red-500"> ●</span> = 勤怠なし(シフトはあるが打刻なし=請求不可) / 空欄 = 対象外。「給与控除へ反映」は実勤務のある日のみ集計し、単価(O/M/S=300円・H=250円)で控除額を給与へ転記します(赤=請求から除外)。
         </p>
+
+        {/* 勤怠なしで請求できない職員給食(赤丸)の警告。実勤務が確認できない=給与控除から除外される。 */}
+        {unbillable.length > 0 && (
+          <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm">
+            <div className="font-bold text-red-700">⚠ 勤怠が確認できず請求できない職員給食があります({unbillable.length}件)</div>
+            <p className="mt-0.5 text-xs text-red-600">シフトから給食が計上されていますが、その日の実勤怠(打刻)が無いため給与控除の対象外です。実際に喫食した場合は勤怠の登録を、していない場合は該当日を確認してください。</p>
+            <ul className="mt-2 space-y-0.5 text-xs text-red-700">
+              {unbillable.map((u) => (
+                <li key={`${u.employee_id}-${u.business_date}`}>
+                  {(() => { const d = new Date(u.business_date); return `${d.getMonth() + 1}/${d.getDate()}`; })()}・<span className="font-semibold">{u.employee_name}</span>({u.office_name})：{u.source === "auto" ? "シフト自動" : "自己発注"}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* 別施設で同日に給食が付いた重複(入力ミス兆候)のアラート。正データはunique制約で1件のため給与は正しいが、シフト重複の是正を促す。 */}
         {conflicts.length > 0 && (
@@ -156,13 +181,14 @@ function StaffMealsContent() {
                     <td className={`sticky left-0 z-10 border-b border-r border-slate-200 px-3 py-2 font-medium text-slate-800 whitespace-nowrap ${ri % 2 === 1 ? "bg-slate-50" : "bg-white"}`}>{emp.name}</td>
                     <td className="border-b border-r border-slate-200 px-2 py-2 text-center font-bold tabular-nums">{emp.days.size}</td>
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                      const src = emp.days.get(d);
+                      const cell = emp.days.get(d);
                       const dup = conflictCells.has(`${id}|${d}`);
-                      // 丸は全て塗りつぶし(●)に統一。色でシフト自動(緑)/自己発注(橙)を区別。
-                      const color = src === "auto" ? "text-emerald-600" : src ? "text-amber-500" : "";
+                      // 青●=実勤務あり(請求可) / 赤●=勤怠なし(請求不可)。空欄=対象外。
+                      const color = !cell ? "" : cell.att ? "text-sky-600" : "text-red-500";
                       return (
-                        <td key={d} className={`border-b border-l border-slate-200 px-1 py-2 text-center ${color} ${dup ? "bg-red-100 ring-1 ring-inset ring-red-400" : ""}`}>
-                          {src ? "●" : ""}
+                        <td key={d} title={cell ? `${cell.source === "auto" ? "シフト自動" : "自己発注"}${cell.att ? "" : "・勤怠なし(請求不可)"}` : ""}
+                          className={`border-b border-l border-slate-200 px-1 py-2 text-center ${color} ${dup ? "bg-red-100 ring-1 ring-inset ring-red-400" : ""}`}>
+                          {cell ? "●" : ""}
                         </td>
                       );
                     })}

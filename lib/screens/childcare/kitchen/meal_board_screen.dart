@@ -4,8 +4,6 @@ import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
-import 'kitchen_screen.dart';
-import 'meal_photo_screen.dart';
 
 /// 食数ボード(担任用・給食管理 Phase 2)。行区分×食事区分の食数を表示し、自クラスの承認・期限内変更を行う。
 /// 厨房向けの表示(大型アラート等)は「厨房表示」から KitchenScreen へ。
@@ -40,6 +38,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
   String? _error;
   List<Map<String, dynamic>> _board = const [];
   List<Map<String, dynamic>> _suspended = const [];
+  ({bool isStation, int? milkBottles, int nextDaySnack})? _station; // Mahalo Station固有(340)
 
   @override
   void initState() {
@@ -58,10 +57,15 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
       try {
         suspended = await widget.service.fetchMealSuspendedChildren(widget.officeId);
       } catch (_) {}
+      ({bool isStation, int? milkBottles, int nextDaySnack})? station;
+      try {
+        station = await widget.service.fetchMealStationExtras(widget.officeId, _date);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
         _suspended = suspended;
+        _station = station;
         _loading = false;
       });
     } catch (_) {
@@ -102,32 +106,14 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
       appBar: AppBar(
         leading: const OhanaBackHomeLeading(),
         leadingWidth: 200,
-        title: const Text('食数ボード'),
+        title: const Text('給食発注数'),
         actions: [
           TextButton.icon(
             onPressed: _busy ? null : () => _run(() => widget.service.computeMealCounts(widget.officeId, _date), '再算出しました'),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('再算出'),
           ),
-          IconButton(
-            tooltip: '厨房表示',
-            icon: const Icon(Icons.restaurant_rounded),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => KitchenScreen(service: widget.service, officeId: widget.officeId, businessDate: _date),
-            )),
-          ),
-          IconButton(
-            tooltip: '給食写真',
-            icon: const Icon(Icons.photo_camera_rounded),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => MealPhotoScreen(
-                service: widget.service,
-                officeId: widget.officeId,
-                businessDate: _date,
-                isManager: widget.isManager,
-              ),
-            )),
-          ),
+          // 一般職員/担任は給食写真・厨房ビューなし(俊指示 2026-08-26)。給食発注数(食数確定)+ Station牛乳のみ。
           BusinessDateAction(date: _date, onChanged: _onDateChanged),
         ],
       ),
@@ -145,9 +131,11 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
     for (final b in _board) {
       final key = b['row_key'] as String;
       final row = map.putIfAbsent(key, () => {
+            'key': b['row_key'],
             'label': b['row_label'],
             'type': b['row_type'],
             'sort': (b['sort_order'] as num?)?.toInt() ?? 0,
+            'plating': b['requires_plating'] == true, // 盛り付け配膳クラス(大和はな/そら/かぜ)
             'confirmed': false,
             'cells': <String, ({int child, int staff})>{},
           });
@@ -178,7 +166,49 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
             ),
           ),
         ),
+        // Mahalo Station固有(340): 食数確認の流れの中で「明日のおやつ+今日の牛乳本数」を入力。
+        if (_station?.isStation ?? false) _stationCard(),
       ],
+    );
+  }
+
+  /// Mahalo Station固有: 明日のおやつ(翌日登園予定)と今日の牛乳本数(手入力・前日申告)。
+  Widget _stationCard() {
+    final s = _station!;
+    final ctrl = TextEditingController(text: s.milkBottles?.toString() ?? '');
+    ctrl.selection = TextSelection.collapsed(offset: ctrl.text.length);
+    return Card(
+      color: AppColors.skyBlue.withValues(alpha: 0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('明日のおやつ(登園予定)', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text('${s.nextDaySnack} 名', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+              ],
+            ),
+            const SizedBox(width: 24),
+            const Text('今日の牛乳', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, suffixText: '本'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: _busy ? null : () => _run(() => widget.service.setMilkBottles(widget.officeId, _date, int.tryParse(ctrl.text.trim())), '牛乳本数を保存しました'),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -226,8 +256,38 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
         ],
       );
 
-  Widget _row(Map<String, dynamic> r, int index) {
+  Widget _tapNum(String text, VoidCallback onTap, {Color? color}) => InkWell(
+        onTap: _busy ? null : onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Text(text, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+        ),
+      );
+
+  // 1区分のセル。事務室=職のみ / 児職両方可(昼食・午後おやつのクラス)=児 X / 職 Y / それ以外=児のみ。
+  Widget _slotCell(Map<String, dynamic> r, String slot, bool isStaff) {
     final cells = r['cells'] as Map<String, ({int child, int staff})>;
+    final cell = cells[slot];
+    if (cell == null) return const Text('—', style: TextStyle(color: AppColors.textSecondary));
+    if (isStaff) {
+      return _tapNum('${cell.staff}', () => _changeCell(r, slot, 'staff'));
+    }
+    if (_staffAllowed(r, slot)) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _tapNum('児${cell.child}', () => _changeCell(r, slot, 'child')),
+          const Text('/', style: TextStyle(color: AppColors.textSecondary)),
+          _tapNum('職${cell.staff}', () => _changeCell(r, slot, 'staff'), color: AppColors.textSecondary),
+        ],
+      );
+    }
+    return _tapNum('${cell.child}', () => _changeCell(r, slot, 'child'));
+  }
+
+  Widget _row(Map<String, dynamic> r, int index) {
     final isStaff = r['type'] == 'staff';
     final confirmed = r['confirmed'] == true;
     return Container(
@@ -237,21 +297,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
         children: [
           SizedBox(width: 132, child: Text('${r['label']}', style: const TextStyle(fontWeight: FontWeight.w600))),
           for (final s in _slots)
-            Expanded(
-              child: Center(
-                child: cells[s.key] == null
-                    ? const Text('—', style: TextStyle(color: AppColors.textSecondary))
-                    : InkWell(
-                        onTap: _busy ? null : () => _changeCell(r, s.key),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          child: Text('${isStaff ? cells[s.key]!.staff : cells[s.key]!.child}',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                        ),
-                      ),
-              ),
-            ),
+            Expanded(child: Center(child: _slotCell(r, s.key, isStaff))),
           SizedBox(
             width: 96,
             child: Center(
@@ -294,33 +340,61 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
     await _run(() => widget.service.confirmMealRow(widget.officeId, _date, rowKey), '承認しました');
   }
 
-  Future<void> _changeCell(Map<String, dynamic> r, String slot) async {
+  // 職員給食をクラスに入力できる区分か。盛り付け配膳クラス(大和はな/そら/かぜ)の昼食/午後おやつのみ。
+  // 後期/完了期は職員なし(=幼児食に含める)。それ以外(自分で盛り付け)は職員クラス入力なし。
+  bool _staffAllowed(Map<String, dynamic> r, String slot) {
+    if (slot == 'am_snack') return false;
+    if (r['type'] != 'children') return false;
+    if (r['plating'] != true) return false;
+    final key = r['key'] as String? ?? '';
+    if (key.endsWith('_late') || key.endsWith('_complete')) return false;
+    return true;
+  }
+
+  Future<void> _changeCell(Map<String, dynamic> r, String slot, String field) async {
     final cells = r['cells'] as Map<String, ({int child, int staff})>;
-    final isStaff = r['type'] == 'staff';
-    final field = isStaff ? 'staff' : 'child';
-    final cur = isStaff ? cells[slot]!.staff : cells[slot]!.child;
-    final controller = TextEditingController(text: '$cur');
+    final cur = field == 'staff' ? cells[slot]!.staff : cells[slot]!.child;
+    int selected = cur;
+    const maxCount = 60; // 発注数の選択上限(必要なら拡張)
     final result = await showDialog<int>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${r['label']} / ${_slots.firstWhere((s) => s.key == slot).label} の人数を変更'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: OutlineInputBorder(), labelText: '人数'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
-          FilledButton(
-            onPressed: () {
-              final n = int.tryParse(controller.text.trim());
-              if (n == null || n < 0) return;
-              Navigator.pop(ctx, n);
-            },
-            child: const Text('変更'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('${r['label']} / ${_slots.firstWhere((s) => s.key == slot).label} の${field == 'staff' ? '職員' : '園児'}数を変更'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('人数を選んでください', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    iconSize: 34,
+                    onPressed: selected > 0 ? () => setLocal(() => selected--) : null,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  DropdownButton<int>(
+                    value: selected,
+                    itemHeight: 52,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                    items: [for (var i = 0; i <= maxCount; i++) DropdownMenuItem(value: i, child: Text('$i 名'))],
+                    onChanged: (v) { if (v != null) setLocal(() => selected = v); },
+                  ),
+                  IconButton(
+                    iconSize: 34,
+                    onPressed: selected < maxCount ? () => setLocal(() => selected++) : null,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, selected), child: const Text('変更')),
+          ],
+        ),
       ),
     );
     if (result == null) return;
