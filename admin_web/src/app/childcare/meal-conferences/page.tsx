@@ -36,7 +36,7 @@ function fmtDate(ts: string | null): string {
 const STANDARD_CONSENT_TEXT = `アレルギー除去食の提供について
 
 給食会議において、除去・代替の提供方針について説明を受け、内容を理解しました。
-上記の内容で除去食を提供いただくことに同意します。
+上記の内容でアレルギー除去食を提供いただくことに同意します。
 
 なお、家庭での状況に変化があった場合や、除去内容の変更が必要になった場合は、
 速やかに園へ連絡します。`;
@@ -207,7 +207,7 @@ function MealConferencesContent() {
         {unackConsents > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
             <span className="text-sm font-semibold text-sky-800">
-              🔔 除去食の保護者同意が {unackConsents}件 あります（未確認）
+              🔔 アレルギー除去食の保護者同意が {unackConsents}件 あります（未確認）
             </span>
             {isManager ? (
               <button

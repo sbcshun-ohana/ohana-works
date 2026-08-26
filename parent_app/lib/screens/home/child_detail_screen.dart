@@ -473,7 +473,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
       _GridMenuItem(
         icon: Icons.event_available_rounded,
         color: AppColors.skyBlue,
-        label: '登園実績',
+        label: '登降園実績',
         onTap: () => Navigator.of(context).push<void>(
           MaterialPageRoute(
             builder: (_) => AttendanceRecordScreen(guardianService: widget.guardianService, child: widget.child),
@@ -484,7 +484,7 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
         _GridMenuItem(
           icon: Icons.assignment_rounded,
           color: AppColors.skyBlue,
-          label: '保護者からの申請・連絡',
+          label: '保護者からの連絡',
           onTap: () => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => ParentRequestListScreen(

@@ -457,7 +457,7 @@ class _MealSectionScreenState extends State<MealSectionScreen> {
             children: [
               const Icon(Icons.no_meals_rounded, size: 18, color: AppColors.warmOrange),
               const SizedBox(width: 6),
-              const Text('お子さまの除去食献立', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const Text('お子さまのアレルギー除去食献立', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
               if (kinds.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Container(

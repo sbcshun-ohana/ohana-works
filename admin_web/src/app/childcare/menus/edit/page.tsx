@@ -14,8 +14,8 @@ import { MealSubNav } from "@/components/MealSubNav";
 
 // 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1行入力→保存時に over3/under3 両方へ書込。
 const FOOD_TYPES: { key: string; label: string; srcs: string[] }[] = [
-  { key: "weaning_late", label: "後期", srcs: ["weaning_late"] },
-  { key: "weaning_final", label: "完了期", srcs: ["weaning_final"] },
+  { key: "weaning_late", label: "後期食", srcs: ["weaning_late"] },
+  { key: "weaning_final", label: "完了期食", srcs: ["weaning_final"] },
   { key: "regular", label: "幼児食", srcs: ["regular_over3", "regular_under3"] },
 ];
 const SLOTS: { key: string; label: string }[] = [
@@ -424,19 +424,19 @@ function MenuEditContent() {
                 {/* 除去食(アレルゲン別) */}
                 <div className="mt-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-amber-800">除去食(アレルゲン別・昼食)</h4>
+                    <h4 className="text-sm font-bold text-amber-800">アレルギー除去食(アレルゲン別・昼食)</h4>
                     <button
                       onClick={addAllergen}
                       className="rounded-lg border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                     >
-                      ＋ 除去食を追加
+                      ＋ アレルギー除去食を追加
                     </button>
                   </div>
                   <p className="text-xs text-slate-500">
-                    卵・そば・ピーナッツ等の除去食の昼食メニューと除去・代替内容。園側の日別ビュー・食数ボードに表示されます(保護者公開はアレルギー管理実装後)。
+                    卵・そば・ピーナッツ等のアレルギー除去食の昼食メニューと除去・代替内容。園側の月間一覧・給食発注数に表示されます(保護者公開はアレルギー管理実装後)。
                   </p>
                   {Object.keys(removals).filter((k) => k.startsWith(`${date}:`)).length === 0 ? (
-                    <p className="text-xs text-slate-400">この日の除去食はありません。</p>
+                    <p className="text-xs text-slate-400">この日のアレルギー除去食はありません。</p>
                   ) : (
                     Object.keys(removals)
                       .filter((k) => k.startsWith(`${date}:`))

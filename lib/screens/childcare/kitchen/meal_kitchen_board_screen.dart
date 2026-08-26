@@ -124,9 +124,11 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
 
   // 選択区分の合計(児/職/アレルギー)を大きく。
   Widget _totalBanner() {
-    final child = _slotRows.fold(0, (a, r) => a + _n(r, 'child_count'));
-    final staff = _slotRows.fold(0, (a, r) => a + _n(r, 'staff_count'));
-    final allergy = _slotRows.fold(0, (a, r) => a + _n(r, 'allergy_count'));
+    // 児=児童/一時保育行のみ、職=職員(事務室)行のみ。盛り付けクラスの職員配分(児行のstaff_count)は
+    // 事務室職員行の内訳(部分集合)なので合計に足すと二重計上になる(#1修正)。
+    final child = _slotRows.where((r) => (r['row_type'] as String?) != 'staff').fold(0, (a, r) => a + _n(r, 'child_count'));
+    final staff = _slotRows.where((r) => (r['row_type'] as String?) == 'staff').fold(0, (a, r) => a + _n(r, 'staff_count'));
+    final allergy = _slotRows.where((r) => (r['row_type'] as String?) != 'staff').fold(0, (a, r) => a + _n(r, 'allergy_count'));
     Widget stat(String label, String value, Color color) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -146,7 +148,7 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
           _divider(),
           stat('職', '$staff', AppColors.textSecondary),
           _divider(),
-          stat('アレルギー対応食', '$allergy', allergy > 0 ? AppColors.punchClockOut : AppColors.textSecondary),
+          stat('アレルギー除去食', '$allergy', allergy > 0 ? AppColors.punchClockOut : AppColors.textSecondary),
         ],
       ),
     );
@@ -167,7 +169,7 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
       }
     }
     if (officeIds.isEmpty) {
-      return const Center(child: Text('この日の食数データはありません(各園の食数ボードで承認してください)', style: TextStyle(color: AppColors.textSecondary)));
+      return const Center(child: Text('この日の食数データはありません(各園の給食発注数で承認してください)', style: TextStyle(color: AppColors.textSecondary)));
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -184,9 +186,9 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
     // 当該施設・当該区分の行(sort_order順)。
     final rows = _slotRows.where((r) => r['office_id'] == oid).toList()
       ..sort((a, b) => _n(a, 'sort_order').compareTo(_n(b, 'sort_order')));
-    final child = rows.fold(0, (a, r) => a + _n(r, 'child_count'));
-    final staff = rows.fold(0, (a, r) => a + _n(r, 'staff_count'));
-    final allergy = rows.fold(0, (a, r) => a + _n(r, 'allergy_count'));
+    final child = rows.where((r) => (r['row_type'] as String?) != 'staff').fold(0, (a, r) => a + _n(r, 'child_count'));
+    final staff = rows.where((r) => (r['row_type'] as String?) == 'staff').fold(0, (a, r) => a + _n(r, 'staff_count'));
+    final allergy = rows.where((r) => (r['row_type'] as String?) != 'staff').fold(0, (a, r) => a + _n(r, 'allergy_count'));
     // 承認前でも数量は表示。承認前/後をバッジで判別(全行確定なら承認済み)。
     final confirmed = rows.isNotEmpty && rows.every((r) => r['is_confirmed'] == true);
     return Container(
@@ -299,7 +301,7 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
         children: [
           Row(
             children: [
-              Text('アレルギー対応食(作る)${elim.isEmpty ? '' : '・${elim.length}名'}',
+              Text('アレルギー除去食(作る)${elim.isEmpty ? '' : '・${elim.length}名'}',
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.punchClockOut)),
               if (bento.isNotEmpty) ...[
                 const SizedBox(width: 12),
@@ -312,7 +314,7 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
           ),
           const SizedBox(height: 6),
           if (elim.isEmpty)
-            const Text('本日のアレルギー対応食はありません', style: TextStyle(color: AppColors.textSecondary))
+            const Text('本日のアレルギー除去食はありません', style: TextStyle(color: AppColors.textSecondary))
           else
             Expanded(
               child: ListView(
@@ -338,7 +340,7 @@ class _MealKitchenBoardScreenState extends State<MealKitchenBoardScreen> {
                           const SizedBox(height: 2),
                           Text('アレルゲン: ${((a['allergens'] as List?)?.cast<String>() ?? const []).join('・')}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.punchClockOut), maxLines: 1, overflow: TextOverflow.ellipsis),
                           Expanded(
-                            child: Text('代替: ${(a['substitute'] as String?) ?? '（除去食献立が未登録）'}',
+                            child: Text('代替: ${(a['substitute'] as String?) ?? '（アレルギー除去食献立が未登録）'}',
                                 style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
                           ),
                         ],

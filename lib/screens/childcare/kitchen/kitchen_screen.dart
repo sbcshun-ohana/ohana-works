@@ -358,7 +358,7 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
         const SizedBox(height: 16),
 
         // 共通除去食(誤配膳防止・大きく)
-        _sectionTitle('共通除去食の対象児', AppColors.punchClockOut, elimination.length),
+        _sectionTitle('アレルギー除去食の対象児', AppColors.punchClockOut, elimination.length),
         if (elimination.isEmpty)
           _emptyLine('対象児はいません')
         else
@@ -417,8 +417,8 @@ class _KitchenScreenState extends State<KitchenScreen> with SingleTickerProvider
   Widget _menuCard() {
     const slotLabels = {'am_snack': '午前おやつ', 'lunch': '昼食', 'pm_snack': '午後おやつ'};
     const groups = [
-      (label: '後期', srcs: ['weaning_late']),
-      (label: '完了期', srcs: ['weaning_final']),
+      (label: '後期食', srcs: ['weaning_late']),
+      (label: '完了期食', srcs: ['weaning_final']),
       (label: '幼児食', srcs: ['regular_over3', 'regular_under3']),
     ];
     final rows = _menu.where((m) => m['removal_kind'] == null).toList();

@@ -14,8 +14,8 @@ import { currentDate } from "@/lib/datetime";
 
 // 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1種類(over3/under3統合)。
 const FOOD_TYPES: { key: string; label: string; srcs: string[] }[] = [
-  { key: "weaning_late", label: "後期", srcs: ["weaning_late"] },
-  { key: "weaning_final", label: "完了期", srcs: ["weaning_final"] },
+  { key: "weaning_late", label: "後期食", srcs: ["weaning_late"] },
+  { key: "weaning_final", label: "完了期食", srcs: ["weaning_final"] },
   { key: "regular", label: "幼児食", srcs: ["regular_over3", "regular_under3"] },
 ];
 const SLOTS: { key: string; label: string }[] = [
@@ -153,7 +153,7 @@ function MenuDayViewContent() {
         {/* 除去食(アレルゲン別)。園側のみ表示(保護者公開はアレルギー管理実装後)。 */}
         {removals.length > 0 && (
           <div className="space-y-2 rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-base font-bold text-slate-800">除去食(アレルゲン別)</h3>
+            <h3 className="text-base font-bold text-slate-800">アレルギー除去食(アレルゲン別)</h3>
             {Array.from(new Set(removals.map((r) => r.removal_kind))).map((kind) => (
               <div key={kind} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <p className="text-sm font-semibold text-amber-800">{kind} 除去</p>

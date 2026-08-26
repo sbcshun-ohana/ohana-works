@@ -149,15 +149,17 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
         ],
       );
 
-  // 区分セル: 後期食/完了食/幼児食(児童・段階別)+ 職。全区分共通。
-  Widget _stageCell(int late, int complete, int toddler, int staff, {bool bold = false}) => Padding(
+  // 区分セル: 後期食/完了期食/幼児食(児童・段階別)+ 一時保育 + 職。全区分共通。
+  // 午前おやつは園児のみ(職員給食なし)のため showStaff=false。
+  Widget _stageCell(int late, int complete, int toddler, int temp, int staff, {bool bold = false, bool showStaff = true}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('後期$late ・ 完了$complete ・ 幼児$toddler',
+            Text('後期食$late ・ 完了期食$complete ・ 幼児食$toddler${temp > 0 ? ' ・ 一時$temp' : ''}',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-            Text('職$staff', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            if (showStaff)
+              Text('職$staff', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
           ],
         ),
       );
@@ -168,9 +170,9 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
     final d = DateTime.parse(r['business_date'] as String);
     return TableRow(children: [
       _cell('${d.month}/${d.day}'),
-      _stageCell(_i(r, 'am_late'), _i(r, 'am_complete'), _i(r, 'am_toddler'), _i(r, 'am_staff')),
-      _stageCell(_i(r, 'lunch_late'), _i(r, 'lunch_complete'), _i(r, 'lunch_toddler'), _i(r, 'lunch_staff')),
-      _stageCell(_i(r, 'pm_late'), _i(r, 'pm_complete'), _i(r, 'pm_toddler'), _i(r, 'pm_staff')),
+      _stageCell(_i(r, 'am_late'), _i(r, 'am_complete'), _i(r, 'am_toddler'), _i(r, 'am_temp'), _i(r, 'am_staff'), showStaff: false),
+      _stageCell(_i(r, 'lunch_late'), _i(r, 'lunch_complete'), _i(r, 'lunch_toddler'), _i(r, 'lunch_temp'), _i(r, 'lunch_staff')),
+      _stageCell(_i(r, 'pm_late'), _i(r, 'pm_complete'), _i(r, 'pm_toddler'), _i(r, 'pm_temp'), _i(r, 'pm_staff')),
       _cell(r['leftover_grams'] == null ? '—' : '${r['leftover_grams']}'),
     ]);
   }
@@ -180,9 +182,9 @@ class _MealMonthlySummaryScreenState extends State<MealMonthlySummaryScreen> {
       decoration: const BoxDecoration(color: Color(0xFFF6F8F7)),
       children: [
         _cell('月合計', bold: true),
-        _stageCell(_sum('am_late'), _sum('am_complete'), _sum('am_toddler'), _sum('am_staff'), bold: true),
-        _stageCell(_sum('lunch_late'), _sum('lunch_complete'), _sum('lunch_toddler'), _sum('lunch_staff'), bold: true),
-        _stageCell(_sum('pm_late'), _sum('pm_complete'), _sum('pm_toddler'), _sum('pm_staff'), bold: true),
+        _stageCell(_sum('am_late'), _sum('am_complete'), _sum('am_toddler'), _sum('am_temp'), _sum('am_staff'), bold: true, showStaff: false),
+        _stageCell(_sum('lunch_late'), _sum('lunch_complete'), _sum('lunch_toddler'), _sum('lunch_temp'), _sum('lunch_staff'), bold: true),
+        _stageCell(_sum('pm_late'), _sum('pm_complete'), _sum('pm_toddler'), _sum('pm_temp'), _sum('pm_staff'), bold: true),
         _cell('${_sum('leftover_grams')}', bold: true),
       ],
     );

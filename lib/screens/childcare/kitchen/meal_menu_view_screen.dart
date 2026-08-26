@@ -18,8 +18,8 @@ class MealMenuViewScreen extends StatefulWidget {
 
 // 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1種類(over3/under3統合)。
 const _foodTypes = [
-  (label: '後期', srcs: ['weaning_late'], color: Color(0xFF6D28D9)),
-  (label: '完了期', srcs: ['weaning_final'], color: Color(0xFF4338CA)),
+  (label: '後期食', srcs: ['weaning_late'], color: Color(0xFF6D28D9)),
+  (label: '完了期食', srcs: ['weaning_final'], color: Color(0xFF4338CA)),
   (label: '幼児食', srcs: ['regular_over3', 'regular_under3'], color: Color(0xFF0369A1)),
 ];
 const _slots = [
@@ -171,7 +171,7 @@ class _MealMenuViewScreenState extends State<MealMenuViewScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('除去食(アレルゲン別)', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF92400E))),
+                  const Text('アレルギー除去食(アレルゲン別)', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF92400E))),
                   const SizedBox(height: 6),
                   for (final r in removals)
                     Padding(

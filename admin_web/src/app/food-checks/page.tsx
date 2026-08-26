@@ -97,7 +97,7 @@ function FoodChecksPageContent() {
         <div>
           <h2 className="text-lg font-bold text-slate-800">食材チェック・給食管理</h2>
           <p className="text-xs text-slate-400">
-            保護者からの「症状あり」報告の確認と、給食段階(後期食/完了食/幼児食)の承認・アレルギー診断書の管理を行います(管理者以上)。
+            保護者からの「症状あり」報告の確認と、給食段階(後期食/完了期食/幼児食)の承認・アレルギー診断書の管理を行います(管理者以上)。
           </p>
         </div>
 

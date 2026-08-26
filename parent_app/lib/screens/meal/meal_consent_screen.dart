@@ -79,7 +79,7 @@ class _MealConsentScreenState extends State<MealConsentScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('同意を記録しました', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          content: const Text('除去食の提供について同意いただきました。園が提供を開始します。'),
+          content: const Text('アレルギー除去食の提供について同意いただきました。園が提供を開始します。'),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
         ),
       );
@@ -95,7 +95,7 @@ class _MealConsentScreenState extends State<MealConsentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('除去食提供の同意')),
+      appBar: AppBar(title: const Text('アレルギー除去食提供の同意')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -103,7 +103,7 @@ class _MealConsentScreenState extends State<MealConsentScreen> {
               : (_pending.isEmpty && _history.isEmpty)
                   ? const Center(child: Padding(
                       padding: EdgeInsets.all(24),
-                      child: Text('除去食に関する同意の記録はありません。', style: TextStyle(color: AppColors.textSecondary)),
+                      child: Text('アレルギー除去食に関する同意の記録はありません。', style: TextStyle(color: AppColors.textSecondary)),
                     ))
                   : ListView(
                       padding: const EdgeInsets.all(16),
@@ -193,7 +193,7 @@ class _MealConsentScreenState extends State<MealConsentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${widget.child.displayName}さんの除去食について',
+            Text('${widget.child.displayName}さんのアレルギー除去食について',
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 8),
             if (held != null)

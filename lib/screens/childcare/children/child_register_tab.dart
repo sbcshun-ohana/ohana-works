@@ -278,7 +278,7 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
     );
   }
 
-  static const _stageLabels = {'late': '後期食', 'complete': '完了食', 'toddler': '幼児食'};
+  static const _stageLabels = {'late': '後期食', 'complete': '完了期食', 'toddler': '幼児食'};
 
   /// 給食状態カード(227/228・本案§3-1の5区分)
   Widget _mealStatusCard(Map<String, dynamic> s) {
@@ -312,7 +312,8 @@ class _ChildRegisterTabState extends State<ChildRegisterTab> {
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: Text(status,
+                // 表示は「アレルギー除去食」に統一。DB内部の状態コード(共通除去食)は食数集計が依存するため不変。
+                child: Text(status == '共通除去食' ? 'アレルギー除去食' : status,
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
               ),
             ],

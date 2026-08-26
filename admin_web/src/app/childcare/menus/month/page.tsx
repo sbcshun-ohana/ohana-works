@@ -13,8 +13,8 @@ import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 
 // 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は1種類(over3/under3統合)。
 const FOOD_TYPES: { key: string; label: string; srcs: string[] }[] = [
-  { key: "weaning_late", label: "後期", srcs: ["weaning_late"] },
-  { key: "weaning_final", label: "完了期", srcs: ["weaning_final"] },
+  { key: "weaning_late", label: "後期食", srcs: ["weaning_late"] },
+  { key: "weaning_final", label: "完了期食", srcs: ["weaning_final"] },
   { key: "regular", label: "幼児食", srcs: ["regular_over3", "regular_under3"] },
 ];
 const SLOTS: { key: string; label: string }[] = [

@@ -23,6 +23,7 @@ type BoardRow = {
   staff_count: number;
   is_confirmed: boolean;
   confirmed_by_name: string | null;
+  requires_plating: boolean;
 };
 type SpecialChild = {
   child_id: string;
@@ -50,6 +51,7 @@ type PivotRow = {
   sort_order: number;
   is_confirmed: boolean;
   confirmed_by_name: string | null;
+  requires_plating: boolean;
   cells: Record<string, { child: number; staff: number } | undefined>;
 };
 type Adjustment = {
@@ -162,6 +164,7 @@ function ChildcareMealBoardContent() {
         sort_order: b.sort_order,
         is_confirmed: b.is_confirmed,
         confirmed_by_name: b.confirmed_by_name,
+        requires_plating: b.requires_plating,
         cells: {},
       };
       pivotMap.set(b.row_key, p);
@@ -390,6 +393,8 @@ function ChildcareMealBoardContent() {
                     const c = p.cells[s.key];
                     if (!c) return <td key={s.key} className="px-3 py-2 text-center text-slate-300">—</td>;
                     const val = p.row_type === "staff" ? c.staff : c.child;
+                    // 盛り付けクラス(大和・児童行)の職員配分は現場(iPad)で入力。adminは読み取り表示のみ(午前おやつを除く)。
+                    const showPlatingStaff = p.requires_plating && p.row_type !== "staff" && s.key !== "am_snack" && c.staff > 0;
                     return (
                       <td key={s.key} className="px-3 py-2 text-center">
                         <button
@@ -400,6 +405,9 @@ function ChildcareMealBoardContent() {
                         >
                           {val}
                         </button>
+                        {showPlatingStaff && (
+                          <div className="text-[10px] font-semibold text-slate-400" title="盛り付け用の職員配分(iPadで入力)">職{c.staff}</div>
+                        )}
                       </td>
                     );
                   })}
@@ -454,8 +462,8 @@ function ChildcareMealBoardContent() {
                   {(
                     [
                       // 食数ボードの給食段階と統一: 上から 後期 / 完了期 / 幼児食。幼児食は over3/under3 を統合。
-                      ["後期", ["weaning_late"]],
-                      ["完了期", ["weaning_final"]],
+                      ["後期食", ["weaning_late"]],
+                      ["完了期食", ["weaning_final"]],
                       ["幼児食", ["regular_over3", "regular_under3"]],
                     ] as const
                   )
@@ -474,7 +482,7 @@ function ChildcareMealBoardContent() {
               </table>
               {menuDay.filter((m) => m.removal_kind).length > 0 && (
                 <p className="mt-2 text-xs text-amber-700">
-                  除去食: {Array.from(new Set(menuDay.filter((m) => m.removal_kind).map((m) => m.removal_kind))).join("・")}(詳細は献立の日別ビュー)
+                  アレルギー除去食: {Array.from(new Set(menuDay.filter((m) => m.removal_kind).map((m) => m.removal_kind))).join("・")}(詳細は献立の月間一覧)
                 </p>
               )}
             </div>
@@ -483,7 +491,7 @@ function ChildcareMealBoardContent() {
 
         {/* 除去食児(誤配膳防止) */}
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-sm font-bold text-red-600">共通除去食の対象児({elimination.length}名)</h3>
+          <h3 className="mb-2 text-sm font-bold text-red-600">アレルギー除去食の対象児({elimination.length}名)</h3>
           {elimination.length === 0 ? (
             <p className="text-sm text-slate-400">対象児はいません</p>
           ) : (

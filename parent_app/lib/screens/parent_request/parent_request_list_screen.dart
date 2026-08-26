@@ -75,7 +75,7 @@ class _ParentRequestListScreenState extends State<ParentRequestListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: ChildContextAppBarTitle(
-          title: '${widget.child.nameLabel}の保護者からの申請・連絡',
+          title: '${widget.child.nameLabel}の保護者からの連絡',
           officeName: widget.child.officeName,
         ),
       ),

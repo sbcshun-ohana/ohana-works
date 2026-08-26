@@ -21,7 +21,7 @@ type Summary = {
 };
 
 const HANDLING_LABELS: Record<string, string> = {
-  elimination: "共通除去食",
+  elimination: "アレルギー除去食",
   bento: "弁当持参",
   hold: "給食開始保留",
 };
@@ -61,7 +61,7 @@ export function DailyEliminationPanel({ officeId }: { officeId: string }) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-slate-700">本日の共通除去食(給食の安全確認)</h3>
+        <h3 className="text-sm font-bold text-slate-700">本日のアレルギー除去食(給食の安全確認)</h3>
         <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
           提供日:
           <input
@@ -89,7 +89,7 @@ export function DailyEliminationPanel({ officeId }: { officeId: string }) {
           <p className="mt-1 text-sm text-slate-500">除去対象はありません(通常の給食で提供できます)</p>
         )}
         <p className="mt-2 text-xs text-slate-500">
-          共通除去食 {summary?.elimination_count ?? 0}名 / 弁当持参 {summary?.bento_count ?? 0}名 / 給食開始保留{" "}
+          アレルギー除去食 {summary?.elimination_count ?? 0}名 / 弁当持参 {summary?.bento_count ?? 0}名 / 給食開始保留{" "}
           {summary?.hold_count ?? 0}名
         </p>
       </div>
@@ -97,7 +97,7 @@ export function DailyEliminationPanel({ officeId }: { officeId: string }) {
       {/* 対象児カード(誤配膳防止) */}
       {elimination.length > 0 && (
         <div>
-          <p className="mb-1 text-xs font-bold text-violet-700">共通除去食の対象児</p>
+          <p className="mb-1 text-xs font-bold text-violet-700">アレルギー除去食の対象児</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {elimination.map((r) => (
               <div key={r.child_id} className="rounded-xl border border-violet-200 bg-white p-3">
@@ -127,7 +127,7 @@ export function DailyEliminationPanel({ officeId }: { officeId: string }) {
             ))}
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            「同意待ち」= 除去食の給食会議・保護者同意がまだのため、当面は弁当持参です(同意後に除去食提供へ)。
+            「同意待ち」= アレルギー除去食の給食会議・保護者同意がまだのため、当面は弁当持参です(同意後にアレルギー除去食提供へ)。
           </p>
         </div>
       )}

@@ -34,7 +34,7 @@ type DiagnosisRow = {
 
 export const MEAL_STAGE_LABELS: Record<string, string> = {
   late: "後期食",
-  complete: "完了食",
+  complete: "完了期食",
   toddler: "幼児食",
 };
 
@@ -126,7 +126,8 @@ export function MealStatusSection({ officeId }: { officeId: string }) {
                 <td className="px-4 py-3 text-slate-500">{r.class_name ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${mealStatusBadgeClass(r.meal_status)}`}>
-                    {r.meal_status}
+                    {/* 表示は「アレルギー除去食」に統一。DB内部コード(共通除去食)は食数集計が依存するため不変。 */}
+                    {r.meal_status === "共通除去食" ? "アレルギー除去食" : r.meal_status}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -240,7 +241,7 @@ function ApproveStageModal({ row, onClose, onSaved }: { row: MealRow; onClose: (
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
             >
               <option value="late">後期食</option>
-              <option value="complete">完了食</option>
+              <option value="complete">完了期食</option>
               <option value="toddler">幼児食</option>
             </select>
             {row.candidate_stage !== stage && (
