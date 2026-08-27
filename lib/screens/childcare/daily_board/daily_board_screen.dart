@@ -110,6 +110,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       _outingByChild = const {};
   // 一時外出フラグ。ON施設のみ行アクションに「一時外出」を出す(療育外出フラグを流用)。
   bool _outingEnabled = false;
+  // 一時外出の理由「その他」を表示するか(377・既定OFF=療育+健診のみ)。
+  bool _outingOtherEnabled = false;
 
   @override
   void initState() {
@@ -350,6 +352,13 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     } catch (_) {
       if (mounted) setState(() => _outingEnabled = false);
     }
+    try {
+      final other = await Supabase.instance.client
+          .rpc('is_outing_reason_other_enabled_for_office', params: {'p_office_id': _officeId});
+      if (mounted) setState(() => _outingOtherEnabled = other == true);
+    } catch (_) {
+      if (mounted) setState(() => _outingOtherEnabled = false);
+    }
   }
 
   // 外出中の児を取得(バッジ+戻り操作用)。付加情報のため失敗は握りつぶし(非表示=安全側)。
@@ -448,7 +457,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
               Wrap(
                 spacing: 8,
                 children: [
-                  for (final r in const ['therapy', 'checkup', 'other'])
+                  for (final r in (_outingOtherEnabled ? const ['therapy', 'checkup', 'other'] : const ['therapy', 'checkup']))
                     ChoiceChip(
                       label: Text(_outingReasonLabel(r)),
                       selected: reason == r,
