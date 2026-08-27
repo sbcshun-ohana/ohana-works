@@ -465,6 +465,16 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                     ),
                 ],
               ),
+              // 業務確認②=方針A(2026-08-27): 315は所在管理、療育の記録・帳票は171(QR/療育記録)。
+              // 療育選択時は記録先を注記して二重管理の混乱を避ける。
+              if (reason == 'therapy')
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '※ これは所在管理(外出中の把握)です。療育の実績記録・帳票はQR打刻／療育記録画面で管理してください。',
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ),
               const SizedBox(height: 12),
               TextField(
                 controller: noteCtrl,
