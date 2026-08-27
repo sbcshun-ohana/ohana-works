@@ -49,6 +49,7 @@ export function ChildcareNav() {
   const [mealVisible, setMealVisible] = useState(false);
   // 指導計画タブは guidance_plans_enabled が「アクセス可能施設のいずれかでON」のときのみ表示。
   const [guidanceVisible, setGuidanceVisible] = useState(false);
+  const [attendanceVisible, setAttendanceVisible] = useState(false);
   // 全保育施設と支援保育の対象施設。支援保育タブは「選択中施設が対象施設に含まれるとき」だけ表示する。
   // 対象施設リスト(supportOffices)は null=未取得/取得失敗 を意味し、その場合は安全側でタブを表示する。
   const [childcareOffices, setChildcareOffices] = useState<ChildcareOffice[]>([]);
@@ -84,6 +85,10 @@ export function ChildcareNav() {
           offices.map((o) => supabase.rpc("is_guidance_plans_enabled_for_office", { p_office_id: o.office_id })),
         );
         if (!cancelled) setGuidanceVisible(guidanceChecks.some((c) => c.data === true));
+        const attendanceChecks = await Promise.all(
+          offices.map((o) => supabase.rpc("is_attendance_mgmt_enabled_for_office", { p_office_id: o.office_id })),
+        );
+        if (!cancelled) setAttendanceVisible(attendanceChecks.some((c) => c.data === true));
       }
       // 支援保育の対象施設。取得失敗時は null のまま(=タブ表示側に倒す)。
       const { data: supData, error: supErr } = await supabase.rpc("fetch_my_support_childcare_offices");
@@ -155,7 +160,9 @@ export function ChildcareNav() {
       (item.href !== SUPPORT_HREF || supportVisible) &&
       (item.href !== INCIDENT_HREF || incidentVisible) &&
       (item.href !== MEAL_HREF || mealVisible) &&
-      (item.href !== GUIDANCE_HREF || guidanceVisible),
+      (item.href !== GUIDANCE_HREF || guidanceVisible) &&
+      (item.href !== "/childcare/attendance" || attendanceVisible) &&
+      (item.href !== "/childcare/closure-days" || attendanceVisible),
   );
 
   const cls = searchParams.get("class");
