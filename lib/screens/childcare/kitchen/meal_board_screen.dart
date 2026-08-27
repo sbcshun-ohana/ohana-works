@@ -279,25 +279,110 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
   }
 
   void _showAddOrderer(List<Map<String, dynamic>> addable) {
-    showModalBottomSheet<void>(
+    // 五十音順(名前昇順)に並べる。
+    final sorted = [...addable]..sort((a, b) => (a['name'] as String? ?? '').compareTo(b['name'] as String? ?? ''));
+    final selected = <String>{};
+    var query = '';
+    showDialog<void>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const Padding(padding: EdgeInsets.all(12), child: Text('発注に追加する職員', style: TextStyle(fontWeight: FontWeight.w800))),
-            for (final e in addable)
-              ListTile(
-                title: Text(e['name'] as String),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _run(() => widget.service.setStaffMealDay(widget.officeId, _date, e['employee_id'] as String, true), '');
-                },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final filtered = query.isEmpty
+              ? sorted
+              : sorted.where((e) => (e['name'] as String? ?? '').contains(query)).toList();
+          return AlertDialog(
+            title: const Text('発注に追加する職員(複数選択可)'),
+            content: SizedBox(
+              width: 680,
+              height: 500,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: '名前で絞り込み',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setLocal(() => query = v),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('該当する職員がいません', style: TextStyle(color: AppColors.textSecondary)))
+                        : Scrollbar(
+                            child: GridView.count(
+                              crossAxisCount: 3,
+                              childAspectRatio: 4.8,
+                              crossAxisSpacing: 6,
+                              mainAxisSpacing: 2,
+                              children: [
+                                for (final e in filtered)
+                                  _addOrdererCell(e, selected, setLocal),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
               ),
-          ],
-        ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+              FilledButton(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () {
+                        final ids = selected.toList();
+                        Navigator.pop(ctx);
+                        _addOrderers(ids);
+                      },
+                child: Text(selected.isEmpty ? '追加' : '追加(${selected.length}名)'),
+              ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  // 追加ダイアログの1セル(チェックボックス+名前)。
+  Widget _addOrdererCell(Map<String, dynamic> e, Set<String> selected, void Function(void Function()) setLocal) {
+    final id = e['employee_id'] as String;
+    final on = selected.contains(id);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => setLocal(() => on ? selected.remove(id) : selected.add(id)),
+      child: Row(
+        children: [
+          Checkbox(
+            value: on,
+            visualDensity: VisualDensity.compact,
+            onChanged: (v) => setLocal(() => (v ?? false) ? selected.add(id) : selected.remove(id)),
+          ),
+          Expanded(
+            child: Text(e['name'] as String? ?? '',
+                style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 選択した職員をまとめて発注に追加(1回だけ再読込)。
+  Future<void> _addOrderers(List<String> ids) async {
+    setState(() => _busy = true);
+    try {
+      for (final id in ids) {
+        await widget.service.setStaffMealDay(widget.officeId, _date, id, true);
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作できません: ${_clean(e)}')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   // 給食「提供なし」トグル(区分別)。

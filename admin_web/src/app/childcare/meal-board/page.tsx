@@ -254,11 +254,11 @@ function ChildcareMealBoardContent() {
     }, "");
   }
 
-  function changeCell(p: PivotRow, slot: string) {
-    const field = p.row_type === "staff" ? "staff" : "child";
+  function changeCell(p: PivotRow, slot: string, field: "child" | "staff") {
     const cur = p.cells[slot];
     const cof = field === "staff" ? cur?.staff ?? 0 : cur?.child ?? 0;
-    const input = window.prompt(`${p.row_label} / ${SLOTS.find((s) => s.key === slot)?.label} の人数を変更`, String(cof));
+    const kind = field === "staff" ? "職員" : "園児";
+    const input = window.prompt(`${p.row_label} / ${SLOTS.find((s) => s.key === slot)?.label} の${kind}の人数を変更`, String(cof));
     if (input === null) return;
     const n = Number(input);
     if (!Number.isInteger(n) || n < 0) {
@@ -476,21 +476,29 @@ function ChildcareMealBoardContent() {
                   {SLOTS.map((s) => {
                     const c = p.cells[s.key];
                     if (!c) return <td key={s.key} className="px-3 py-2 text-center text-slate-300">—</td>;
-                    const val = p.row_type === "staff" ? c.staff : c.child;
-                    // 盛り付けクラス(大和・児童行)の職員配分は現場(iPad)で入力。adminは読み取り表示のみ(午前おやつを除く)。
-                    const showPlatingStaff = p.requires_plating && p.row_type !== "staff" && s.key !== "am_snack" && c.staff > 0;
+                    // 職員(事務室)行は職員数を編集。
+                    if (p.row_type === "staff") {
+                      return (
+                        <td key={s.key} className="px-3 py-2 text-center">
+                          <button disabled={busy} onClick={() => changeCell(p, s.key, "staff")}
+                            className="rounded px-2 py-0.5 font-bold text-slate-700 hover:bg-sky-50" title="職員数(クリックで変更)">{c.staff}</button>
+                        </td>
+                      );
+                    }
+                    // 盛り付けクラス(大和・児童行)は 昼食/午後おやつ で職員配分も編集可。
+                    // 後期食/完了期食(離乳)は職員給食なし=職員は幼児食のみ(iPad _staffAllowed と同条件)。
+                    const platingStaff = p.requires_plating && s.key !== "am_snack"
+                      && !p.row_key.endsWith("_late") && !p.row_key.endsWith("_complete");
                     return (
                       <td key={s.key} className="px-3 py-2 text-center">
-                        <button
-                          disabled={busy}
-                          onClick={() => changeCell(p, s.key)}
-                          className="rounded px-2 py-0.5 font-bold text-slate-700 hover:bg-sky-50"
-                          title="クリックで変更(期限内)"
-                        >
-                          {val}
+                        <button disabled={busy} onClick={() => changeCell(p, s.key, "child")}
+                          className="rounded px-2 py-0.5 font-bold text-slate-700 hover:bg-sky-50" title="園児数(クリックで変更)">
+                          {platingStaff ? `児${c.child}` : c.child}
                         </button>
-                        {showPlatingStaff && (
-                          <div className="text-[10px] font-semibold text-slate-400" title="盛り付け用の職員配分(iPadで入力)">職{c.staff}</div>
+                        {platingStaff && (
+                          <button disabled={busy} onClick={() => changeCell(p, s.key, "staff")}
+                            className="ml-1 rounded px-1.5 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            title="職員の盛り付け数(クリックで変更)">職{c.staff}</button>
                         )}
                       </td>
                     );
@@ -525,9 +533,9 @@ function ChildcareMealBoardContent() {
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-700">本日の献立</h3>
             <a
-              href={`/childcare/menus/day?office=${selectedOffice}&date=${businessDate}`}
+              href={`/childcare/menus/month?office=${selectedOffice}`}
               className="text-xs font-semibold text-sky-600 hover:underline"
-            >日別ビューで見る →</a>
+            >月間一覧で見る →</a>
           </div>
           {menuDay.filter((m) => !m.removal_kind).length === 0 ? (
             <p className="text-sm text-slate-400">この日の公開済み献立はありません(献立→編集→公開で表示)。</p>

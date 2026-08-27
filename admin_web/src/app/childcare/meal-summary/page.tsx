@@ -91,23 +91,23 @@ function MealSummaryContent() {
       [`月別食数集計  ${officeName}  ${year}年${month}月`],
       [],
       ["日付",
-        "午前 後期食", "午前 完了期食", "午前 幼児食", "午前 一時", "午前(職)",
+        "午前 完了期食", "午前 幼児食", "午前 一時",
         "昼食 後期食", "昼食 完了期食", "昼食 幼児食", "昼食 一時", "昼食(職)",
         "午後 後期食", "午後 完了期食", "午後 幼児食", "午後 一時", "午後(職)", "残量(g)"],
     ];
     for (const r of monthly) {
       const d = new Date(r.business_date);
       aoa.push([`${d.getMonth() + 1}/${d.getDate()}`,
-        r.am_late, r.am_complete, r.am_toddler, r.am_temp, r.am_staff,
+        r.am_complete, r.am_toddler, r.am_temp,
         r.lunch_late, r.lunch_complete, r.lunch_toddler, r.lunch_temp, r.lunch_staff,
         r.pm_late, r.pm_complete, r.pm_toddler, r.pm_temp, r.pm_staff, r.leftover_grams ?? ""]);
     }
     aoa.push(["月合計",
-      sum("am_late"), sum("am_complete"), sum("am_toddler"), sum("am_temp"), sum("am_staff"),
+      sum("am_complete"), sum("am_toddler"), sum("am_temp"),
       sum("lunch_late"), sum("lunch_complete"), sum("lunch_toddler"), sum("lunch_temp"), sum("lunch_staff"),
       sum("pm_late"), sum("pm_complete"), sum("pm_toddler"), sum("pm_temp"), sum("pm_staff"), sum("leftover_grams")]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 8 }, ...Array(16).fill({ wch: 9 })];
+    ws["!cols"] = [{ wch: 8 }, ...Array(14).fill({ wch: 9 })];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "月別集計");
     XLSX.writeFile(wb, `月別食数集計_${officeName}_${year}-${String(month).padStart(2, "0")}.xlsx`);
@@ -167,7 +167,8 @@ function MealSummaryContent() {
                       <tr key={r.business_date} className="border-b border-slate-100 last:border-0">
                         <td className="px-3 py-2 font-medium text-slate-700">{d.getMonth() + 1}/{d.getDate()}</td>
                         <td className="px-3 py-2">
-                          <div>後期食{r.am_late} ・ 完了期食{r.am_complete} ・ 幼児食{r.am_toddler}{r.am_temp > 0 ? ` ・ 一時${r.am_temp}` : ""}</div>
+                          {/* 午前おやつは後期食なし(完了期食以降)・職員なし。 */}
+                          <div>完了期食{r.am_complete} ・ 幼児食{r.am_toddler}{r.am_temp > 0 ? ` ・ 一時${r.am_temp}` : ""}</div>
                         </td>
                         <td className="px-3 py-2">
                           <div>後期食{r.lunch_late} ・ 完了期食{r.lunch_complete} ・ 幼児食{r.lunch_toddler}{r.lunch_temp > 0 ? ` ・ 一時${r.lunch_temp}` : ""}</div>
@@ -185,7 +186,7 @@ function MealSummaryContent() {
                     <tr className="bg-slate-50 font-bold">
                       <td className="px-3 py-2">月合計</td>
                       <td className="px-3 py-2">
-                        <div>後期食{sum("am_late")} ・ 完了期食{sum("am_complete")} ・ 幼児食{sum("am_toddler")}{sum("am_temp") > 0 ? ` ・ 一時${sum("am_temp")}` : ""}</div>
+                        <div>完了期食{sum("am_complete")} ・ 幼児食{sum("am_toddler")}{sum("am_temp") > 0 ? ` ・ 一時${sum("am_temp")}` : ""}</div>
                       </td>
                       <td className="px-3 py-2">
                         <div>後期食{sum("lunch_late")} ・ 完了期食{sum("lunch_complete")} ・ 幼児食{sum("lunch_toddler")}{sum("lunch_temp") > 0 ? ` ・ 一時${sum("lunch_temp")}` : ""}</div>
@@ -242,25 +243,26 @@ function MealSummaryContent() {
                     <thead>
                       <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500">
                         <th rowSpan={2} className="border-r border-slate-100 px-3 py-2 text-left align-bottom">クラス / 区分</th>
+                        {/* 午前おやつは職員給食なし=児のみ(1列)。昼食/午後おやつは 児/職(2列)。 */}
                         {SLOTS.map((s) => (
-                          <th key={s.key} colSpan={2} className="border-r border-slate-100 px-3 py-1 text-center text-amber-600">{s.label}</th>
+                          <th key={s.key} colSpan={s.key === "am_snack" ? 1 : 2} className="border-r border-slate-100 px-3 py-1 text-center text-amber-600">{s.label}</th>
                         ))}
                       </tr>
                       <tr className="border-b border-slate-200 text-xs font-semibold text-slate-400">
                         {SLOTS.map((s) => (
                           <Fragment key={s.key}>
-                            <th className="px-3 py-1 text-center">児</th>
-                            <th className="border-r border-slate-100 px-3 py-1 text-center">職</th>
+                            <th className={`px-3 py-1 text-center ${s.key === "am_snack" ? "border-r border-slate-100" : ""}`}>児</th>
+                            {s.key !== "am_snack" && <th className="border-r border-slate-100 px-3 py-1 text-center">職</th>}
                           </Fragment>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {officeList.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">この日の食数データはありません(各園の給食発注数で承認してください)</td></tr>}
+                      {officeList.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">この日の食数データはありません(各園の給食発注数で承認してください)</td></tr>}
                       {officeList.map(([oid, oname]) => (
                         <Fragment key={oid}>
                           <tr className="bg-sky-50">
-                            <td colSpan={7} className="border-y border-sky-100 px-3 py-1.5 text-sm font-bold text-sky-800">
+                            <td colSpan={6} className="border-y border-sky-100 px-3 py-1.5 text-sm font-bold text-sky-800">
                               {oname}
                               {officeConfirmed(oid) ? (
                                 <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">✓ 承認済み</span>
@@ -279,14 +281,17 @@ function MealSummaryContent() {
                                 const cell = row.slots[s.key]; // 未提供の区分は undefined
                                 return (
                                   <Fragment key={s.key}>
-                                    <td className="px-3 py-2 text-center align-top">
-                                      <div>{cell?.[0] ?? 0}</div>
+                                    <td className={`px-3 py-2 text-center align-top ${s.key === "am_snack" ? "border-r border-slate-100" : ""}`}>
+                                      <div>{cell ? cell[0] : "—"}</div>
                                       {/* その食事のうち何食がアレルギー対応食か(赤字で明示) */}
                                       {row.allergy > 0 && cell && (
                                         <div className="text-[10px] font-bold leading-tight text-rose-600">内アレ {row.allergy}</div>
                                       )}
                                     </td>
-                                    <td className="border-r border-slate-100 px-3 py-2 text-center align-top text-slate-400">{row.type === "staff" ? (cell?.[1] ?? 0) : "—"}</td>
+                                    {/* 午前おやつは職員給食なし=職員列を設けない。昼食/午後おやつのみ職員行の数量。 */}
+                                    {s.key !== "am_snack" && (
+                                      <td className="border-r border-slate-100 px-3 py-2 text-center align-top text-slate-400">{row.type === "staff" ? (cell?.[1] ?? 0) : "—"}</td>
+                                    )}
                                   </Fragment>
                                 );
                               })}
@@ -297,11 +302,11 @@ function MealSummaryContent() {
                             <td className="border-r border-slate-100 px-3 py-1.5 pl-6">小計</td>
                             {SLOTS.map((s) => (
                               <Fragment key={s.key}>
-                                <td className="px-3 py-1.5 text-center align-top">
+                                <td className={`px-3 py-1.5 text-center align-top ${s.key === "am_snack" ? "border-r border-slate-100" : ""}`}>
                                   <div>{offTotal(oid, s.key, 0)}</div>
                                   {offTotal(oid, s.key, 2) > 0 && <div className="text-[10px] font-bold leading-tight text-rose-600">内アレ {offTotal(oid, s.key, 2)}</div>}
                                 </td>
-                                <td className="border-r border-slate-100 px-3 py-1.5 text-center align-top text-slate-500">{offTotal(oid, s.key, 1)}</td>
+                                {s.key !== "am_snack" && <td className="border-r border-slate-100 px-3 py-1.5 text-center align-top text-slate-500">{offTotal(oid, s.key, 1)}</td>}
                               </Fragment>
                             ))}
                           </tr>
@@ -312,11 +317,11 @@ function MealSummaryContent() {
                           <td className="border-r border-slate-100 px-3 py-2 align-top">合計(参考)</td>
                           {SLOTS.map((s) => (
                             <Fragment key={s.key}>
-                              <td className="px-3 py-2 text-center align-top">
+                              <td className={`px-3 py-2 text-center align-top ${s.key === "am_snack" ? "border-r border-slate-100" : ""}`}>
                                 <div>{grand(s.key, 0)}</div>
                                 {grandAllergy(s.key) > 0 && <div className="text-[10px] font-bold leading-tight text-rose-600">内アレ {grandAllergy(s.key)}</div>}
                               </td>
-                              <td className="border-r border-slate-100 px-3 py-2 text-center align-top">{grand(s.key, 1)}</td>
+                              {s.key !== "am_snack" && <td className="border-r border-slate-100 px-3 py-2 text-center align-top">{grand(s.key, 1)}</td>}
                             </Fragment>
                           ))}
                         </tr>

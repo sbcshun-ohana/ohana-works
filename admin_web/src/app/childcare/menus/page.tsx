@@ -228,7 +228,7 @@ function ChildcareMenusPageContent() {
                 {currentImport && <StatusChip status={currentImport.status} />}
               </div>
               <p className="text-sm text-slate-600">
-                日々の献立(食種×区分)を入力して公開すると、保護者アプリ・厨房ページ・日別ビューに反映されます。
+                日々の献立(食種×区分)を入力して公開すると、保護者アプリ・厨房ページ・月間一覧に反映されます。
               </p>
             </div>
             {isManager &&
