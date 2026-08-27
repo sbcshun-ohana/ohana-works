@@ -39,6 +39,10 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
   List<Map<String, dynamic>> _board = const [];
   List<Map<String, dynamic>> _suspended = const [];
   ({bool isStation, int? milkBottles, int nextDaySnack})? _station; // Mahalo Station固有(340)
+  List<Map<String, dynamic>> _orderers = const []; // 職員給食の発注者(369)
+  List<Map<String, dynamic>> _officeEmps = const []; // 追加候補
+  ({bool am, bool lunch, bool pm}) _noSvc = (am: false, lunch: false, pm: false); // 提供なし(366)
+  List<Map<String, dynamic>> _unconfirmed = const []; // 未承認確定日(370)
 
   @override
   void initState() {
@@ -61,11 +65,23 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
       try {
         station = await widget.service.fetchMealStationExtras(widget.officeId, _date);
       } catch (_) {}
+      var orderers = const <Map<String, dynamic>>[];
+      var officeEmps = const <Map<String, dynamic>>[];
+      var noSvc = (am: false, lunch: false, pm: false);
+      var unconfirmed = const <Map<String, dynamic>>[];
+      try { orderers = await widget.service.fetchStaffMealDayOrderers(widget.officeId, _date); } catch (_) {}
+      try { officeEmps = await widget.service.fetchOfficeEmployees(widget.officeId); } catch (_) {}
+      try { noSvc = await widget.service.fetchMealNoService(widget.officeId, _date); } catch (_) {}
+      try { unconfirmed = await widget.service.fetchUnconfirmedFinalizedDays(); } catch (_) {}
       if (!mounted) return;
       setState(() {
         _board = board;
         _suspended = suspended;
         _station = station;
+        _orderers = orderers;
+        _officeEmps = officeEmps;
+        _noSvc = noSvc;
+        _unconfirmed = unconfirmed;
         _loading = false;
       });
     } catch (_) {
@@ -149,6 +165,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        if (_unconfirmed.isNotEmpty) _unconfirmedBanner(),
         const Padding(
           padding: EdgeInsets.only(bottom: 8, left: 4),
           child: Text('9:31に自動算出された暫定値です。数字をタップで期限内変更(昼食10:00/午後14:00/朝9:30)。「この日を承認」で一括確定。',
@@ -181,6 +198,8 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
         ),
         const SizedBox(height: 8),
         if (_suspended.isNotEmpty) _suspendedBanner(),
+        _orderersCard(),
+        _noServiceCard(),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(8),
@@ -198,6 +217,117 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
         // Mahalo Station固有(340): 食数確認の流れの中で「明日のおやつ+今日の牛乳本数」を入力。
         if (_station?.isStation ?? false) _stationCard(),
       ],
+    );
+  }
+
+  // 未承認確定日のアラート(承認忘れ)。
+  Widget _unconfirmedBanner() => Card(
+        color: AppColors.warmOrange.withValues(alpha: 0.12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('⚠ 一括承認がされていない確定日があります(${_unconfirmed.length}件)',
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.warmOrange)),
+              const SizedBox(height: 2),
+              const Text('9:31に自動確定して厨房へ送信済みですが、朝礼での承認が押されていません。内容を確認して承認してください。',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      );
+
+  // 職員給食の発注者一覧(朝の確認・その場で追加/削除)。
+  Widget _orderersCard() {
+    final orderIds = _orderers.map((o) => o['employee_id']).toSet();
+    final addable = _officeEmps.where((e) => !orderIds.contains(e['employee_id'])).toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('職員給食の発注者(${_orderers.length}名)', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15))),
+                if (addable.isNotEmpty)
+                  TextButton.icon(onPressed: _busy ? null : () => _showAddOrderer(addable), icon: const Icon(Icons.add, size: 18), label: const Text('追加')),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (_orderers.isEmpty)
+              const Text('この日の発注者はいません。', style: TextStyle(fontSize: 13, color: AppColors.textSecondary))
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final o in _orderers)
+                    Chip(
+                      label: Text('${o['employee_name']}${o['source'] == 'manual' ? ' (手動)' : ''}', style: const TextStyle(fontSize: 13)),
+                      onDeleted: _busy ? null : () => _run(() => widget.service.setStaffMealDay(widget.officeId, _date, o['employee_id'] as String, false), ''),
+                    ),
+                ],
+              ),
+            const SizedBox(height: 4),
+            const Text('来ていないのに発注が入っている場合は × で削除。追加は締切(8:55)まで。', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddOrderer(List<Map<String, dynamic>> addable) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(padding: EdgeInsets.all(12), child: Text('発注に追加する職員', style: TextStyle(fontWeight: FontWeight.w800))),
+            for (final e in addable)
+              ListTile(
+                title: Text(e['name'] as String),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _run(() => widget.service.setStaffMealDay(widget.officeId, _date, e['employee_id'] as String, true), '');
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 給食「提供なし」トグル(区分別)。
+  Widget _noServiceCard() {
+    Widget btn(String slot, String label, bool on) => Padding(
+          padding: const EdgeInsets.only(right: 8, bottom: 4),
+          child: on
+              ? FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.warmOrange),
+                  onPressed: _busy ? null : () => _run(() => widget.service.setMealNoService(widget.officeId, _date, slot, false), ''),
+                  child: Text('✓ $label 提供なし'))
+              : OutlinedButton(
+                  onPressed: _busy ? null : () => _run(() => widget.service.setMealNoService(widget.officeId, _date, slot, true), ''),
+                  child: Text(label)),
+        );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('給食「提供なし」', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            const SizedBox(height: 8),
+            Wrap(children: [btn('am_snack', '朝おやつ', _noSvc.am), btn('lunch', '昼食', _noSvc.lunch), btn('pm_snack', '午後おやつ', _noSvc.pm)]),
+            const SizedBox(height: 2),
+            const Text('昼食を提供なしにすると職員給食も全員キャンセルされます。一部クラスだけ弁当の場合は発注者から個別に削除してください。',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
     );
   }
 

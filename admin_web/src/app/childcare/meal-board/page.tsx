@@ -96,6 +96,11 @@ function ChildcareMealBoardContent() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [orderers, setOrderers] = useState<{ employee_id: string; employee_name: string; source: string }[]>([]);
+  const [officeEmps, setOfficeEmps] = useState<{ employee_id: string; name: string }[]>([]);
+  const [addEmp, setAddEmp] = useState("");
+  const [noSvc, setNoSvc] = useState<{ am: boolean; lunch: boolean; pm: boolean }>({ am: false, lunch: false, pm: false });
+  const [unconfirmed, setUnconfirmed] = useState<{ office_id: string; office_name: string; business_date: string }[]>([]);
 
   useEffect(() => {
     function begin() {
@@ -135,6 +140,24 @@ function ChildcareMealBoardContent() {
         setStation(s);
         setMilkInput(s?.milk_bottles != null ? String(s.milk_bottles) : "");
       });
+    void supabase
+      .rpc("fetch_staff_meal_day_orderers", { p_office: selectedOffice, p_date: businessDate })
+      .then(({ data }) => setOrderers((data ?? []) as { employee_id: string; employee_name: string; source: string }[]));
+    void supabase
+      .rpc("fetch_office_employees", { p_office_id: selectedOffice })
+      .then(({ data }) => setOfficeEmps((data ?? []) as { employee_id: string; name: string }[]));
+    void supabase
+      .from("meal_count_days")
+      .select("no_service_am_snack,no_service_lunch,no_service_pm_snack")
+      .eq("office_id", selectedOffice).eq("business_date", businessDate).maybeSingle()
+      .then(({ data }) => setNoSvc({
+        am: (data?.no_service_am_snack as boolean) ?? false,
+        lunch: (data?.no_service_lunch as boolean) ?? false,
+        pm: (data?.no_service_pm_snack as boolean) ?? false,
+      }));
+    void supabase
+      .rpc("fetch_unconfirmed_finalized_days", { p_days: 7 })
+      .then(({ data }) => setUnconfirmed((data ?? []) as { office_id: string; office_name: string; business_date: string }[]));
   }, [selectedOffice, businessDate, reloadToken]);
 
   const run = useCallback(
@@ -282,6 +305,19 @@ function ChildcareMealBoardContent() {
       <ChildcareNav />
       <MealSubNav />
       <main className="flex-1 space-y-5 p-6">
+        {unconfirmed.length > 0 && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+            <div className="font-bold text-amber-800">⚠ 一括承認がされていない確定日があります({unconfirmed.length}件)</div>
+            <p className="mt-0.5 text-xs text-amber-700">9:31に自動確定して厨房へ送信済みですが、朝礼での一括承認が押されていません。内容を確認して承認してください。</p>
+            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-800">
+              {unconfirmed.map((u) => (
+                <li key={`${u.office_id}-${u.business_date}`}>
+                  {(() => { const d = new Date(u.business_date); return `${d.getMonth() + 1}/${d.getDate()}`; })()}・{u.office_name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-800">給食発注数</h2>
           <div className="flex items-center gap-3">
@@ -320,6 +356,54 @@ function ChildcareMealBoardContent() {
         <p className="text-xs text-slate-400">
           9:31に自動算出された暫定値です。「この日を承認(一括)」で確定(クラスごとの承認は不要)。変更期限=昼食10:00 / 午後おやつ14:00 / 午前おやつ9:30。承認前でも厨房ビューには表示されます。
         </p>
+
+        {/* 職員給食の発注者一覧(朝の確認・その場で追加/削除) */}
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-slate-700">職員給食の発注者({orderers.length}名)</h3>
+            <div className="flex items-center gap-2">
+              <select value={addEmp} onChange={(e) => setAddEmp(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                <option value="">職員を追加…</option>
+                {officeEmps.filter((e) => !orderers.some((o) => o.employee_id === e.employee_id)).map((e) => (
+                  <option key={e.employee_id} value={e.employee_id}>{e.name}</option>
+                ))}
+              </select>
+              <button disabled={busy || !addEmp}
+                onClick={() => { const emp = addEmp; setAddEmp(""); void run(async (s) => { const { error } = await s.rpc("set_staff_meal_day", { p_office: selectedOffice, p_date: businessDate, p_employee: emp, p_will_eat: true }); return { error }; }, ""); }}
+                className="rounded-lg bg-sky-600 px-3 py-1 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50">追加</button>
+            </div>
+          </div>
+          {orderers.length === 0 ? (
+            <p className="text-xs text-slate-400">この日の発注者はいません。</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {orderers.map((o) => (
+                <span key={o.employee_id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                  {o.employee_name}
+                  {o.source === "manual" && <span className="text-[10px] font-semibold text-amber-600">手動</span>}
+                  <button disabled={busy} title="この日の発注を削除"
+                    onClick={() => void run(async (s) => { const { error } = await s.rpc("set_staff_meal_day", { p_office: selectedOffice, p_date: businessDate, p_employee: o.employee_id, p_will_eat: false }); return { error }; }, "")}
+                    className="ml-1 text-slate-400 hover:text-red-500">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-slate-400">来ていないのに発注が入っている場合は ✕ で削除。追加は締切(8:55)まで。締切後・過去月の変更は権限・期限の制限があります。</p>
+        </div>
+
+        {/* 給食「提供なし」トグル(区分別) */}
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+          <span className="text-sm font-bold text-slate-700">本日 給食なし:</span>
+          {([["am_snack", "朝おやつ", noSvc.am], ["lunch", "昼食", noSvc.lunch], ["pm_snack", "午後おやつ", noSvc.pm]] as const).map(([slot, label, on]) => (
+            <button key={slot} disabled={busy}
+              onClick={() => void run(async (s) => { const { error } = await s.rpc("set_meal_no_service", { p_office: selectedOffice, p_date: businessDate, p_slot: slot, p_value: !on }); return { error }; }, "")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${on ? "bg-orange-500 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
+              {on ? `✓ ${label} 提供なし` : label}
+            </button>
+          ))}
+          <span className="text-[11px] text-slate-400">昼食を提供なしにすると職員給食も全員キャンセルされます。一部クラスだけ弁当の場合は個別に削除してください。</span>
+        </div>
 
         {station?.is_station && (
           <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-4 shadow-sm">

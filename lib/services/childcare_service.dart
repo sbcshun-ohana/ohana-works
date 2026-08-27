@@ -1832,6 +1832,51 @@ class ChildcareService {
     await _client.rpc('unconfirm_meal_day', params: {'p_office_id': officeId, 'p_business_date': dateOnly(businessDate)});
   }
 
+  // ===== 職員給食 自己注文モデル(369-371) =====
+  /// その日◯の職員一覧(朝の発注画面)。
+  Future<List<Map<String, dynamic>>> fetchStaffMealDayOrderers(String officeId, DateTime date) async {
+    final rows = await _client.rpc('fetch_staff_meal_day_orderers', params: {'p_office': officeId, 'p_date': dateOnly(date)});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 職員×日の◯を追加/削除(締切前=日別上書き / 締切後・過去=手動)。
+  Future<void> setStaffMealDay(String officeId, DateTime date, String employeeId, bool willEat) async {
+    await _client.rpc('set_staff_meal_day',
+        params: {'p_office': officeId, 'p_date': dateOnly(date), 'p_employee': employeeId, 'p_will_eat': willEat});
+  }
+
+  /// 給食「提供なし」の区分別切替(am_snack/lunch/pm_snack)。
+  Future<void> setMealNoService(String officeId, DateTime date, String slot, bool value) async {
+    await _client.rpc('set_meal_no_service', params: {'p_office': officeId, 'p_date': dateOnly(date), 'p_slot': slot, 'p_value': value});
+  }
+
+  /// 当日の提供なし状態(区分別)。meal_count_days をRLS範囲で直読。
+  Future<({bool am, bool lunch, bool pm})> fetchMealNoService(String officeId, DateTime date) async {
+    final row = await _client
+        .from('meal_count_days')
+        .select('no_service_am_snack,no_service_lunch,no_service_pm_snack')
+        .eq('office_id', officeId)
+        .eq('business_date', dateOnly(date))
+        .maybeSingle();
+    return (
+      am: (row?['no_service_am_snack'] as bool?) ?? false,
+      lunch: (row?['no_service_lunch'] as bool?) ?? false,
+      pm: (row?['no_service_pm_snack'] as bool?) ?? false,
+    );
+  }
+
+  /// 施設の職員一覧(発注者に追加する候補)。
+  Future<List<Map<String, dynamic>>> fetchOfficeEmployees(String officeId) async {
+    final rows = await _client.rpc('fetch_office_employees', params: {'p_office_id': officeId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 一括承認されていない確定日(承認忘れアラート)。
+  Future<List<Map<String, dynamic>>> fetchUnconfirmedFinalizedDays({int days = 7}) async {
+    final rows = await _client.rpc('fetch_unconfirmed_finalized_days', params: {'p_days': days});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// 期限内変更(当日・昼食10:00/午後14:00/朝9:30)。変更前後を履歴化。
   Future<void> changeMealRow(
     String officeId,

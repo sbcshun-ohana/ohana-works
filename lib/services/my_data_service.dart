@@ -71,27 +71,32 @@ class MyDataService {
   String _formatDate(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  // ===== 給食の発注(給食管理 Phase3・336) =====
-  /// 期間内の各日の発注状態(自動対象/当日エントリ/実効/締め)。
-  Future<List<Map<String, dynamic>>> fetchStaffMealOrderDays(DateTime from, DateTime to) async {
-    final rows = await _client.rpc('fetch_staff_meal_order_days',
-        params: {'p_from': _formatDate(from), 'p_to': _formatDate(to)});
+  // ===== 給食の注文(自己注文モデル・365-371) =====
+  /// 曜日テンプレ(毎週の既定。月=0..日=6)。設定済みの曜日のみ返る。
+  Future<List<Map<String, dynamic>>> fetchStaffMealWeeklyTemplate() async {
+    final rows = await _client.rpc('fetch_staff_meal_weekly_template');
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
-  /// 自己発注(食べる/食べない)。当日は9:00締め。
+  /// 曜日テンプレを設定(食べる/食べない)。weekday: 0=月..6=日。
+  Future<void> setStaffMealWeeklyTemplate(int weekday, bool willEat) async {
+    await _client.rpc('set_staff_meal_weekly_template', params: {'p_weekday': weekday, 'p_will_eat': willEat});
+  }
+
+  /// 月カレンダー(各日の実効◯×・締切・施設休)。business_date/will_eat/office_id/locked/blocked_reason。
+  Future<List<Map<String, dynamic>>> fetchStaffMealMonth(int year, int month) async {
+    final rows = await _client.rpc('fetch_staff_meal_month', params: {'p_year': year, 'p_month': month});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 日別の注文上書き(食べる/食べない)。当日は8:55締め。
   Future<void> setStaffMealEntry(DateTime date, bool willEat) async {
     await _client.rpc('set_staff_meal_entry', params: {'p_date': _formatDate(date), 'p_will_eat': willEat});
   }
 
-  /// 当日分の自己発注を取り消して既定に戻す。
+  /// 当日分の日別上書きを取り消して曜日テンプレに戻す。
   Future<void> clearStaffMealEntry(DateTime date) async {
     await _client.rpc('clear_staff_meal_entry', params: {'p_date': _formatDate(date)});
-  }
-
-  /// 恒常的な喫食既定(普段給食を食べないOFF設定)。
-  Future<void> setStaffMealDefault(bool eats) async {
-    await _client.rpc('set_staff_meal_default', params: {'p_eats': eats});
   }
 
   /// 自己発注画面用: 自分の所属施設の公開済み献立(当日/翌日の昼食メニュー等)。
