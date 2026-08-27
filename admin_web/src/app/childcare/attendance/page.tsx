@@ -104,7 +104,8 @@ function auditDetail(row: AuditRow): { field: string; text: string }[] {
 const MONTH_COL_WIDTH = 34; // 月間の日カラム最小幅(出欠/時刻で揃える。全幅テーブルで31日+集計が横スクロールなしで収まる目安)。
 
 function AttendanceContent() {
-  const { officesError, selectedOffice } = useChildcareOffices();
+  const { offices, officesError, selectedOffice } = useChildcareOffices();
+  const officeName = offices?.find((o) => o.office_id === selectedOffice)?.office_name ?? "";
   const now = new Date();
   const [mode, setMode] = useState<"day" | "month">("day");
   const [monthSub, setMonthSub] = useState<"attendance" | "time" | "child">("attendance");
@@ -240,6 +241,45 @@ function AttendanceContent() {
     if (c) void exportChildXlsx(rows, year, month, c.id, c.name, c.cls);
   }
 
+  // 帳票PDF(§7)。出席簿/登降園実績表をサーバー生成(pdfkit)→DL→監査ログ(log_report_output・379)。
+  async function onExportPdf(reportType: "register" | "actuals") {
+    if (rows.length === 0) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/childcare/attendance-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportType, officeName, year, month, openDays,
+          closureDays: Object.keys(closures).map(Number),
+          rows,
+        }),
+      });
+      if (!res.ok) throw new Error("PDF生成に失敗しました");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${reportType === "actuals" ? "登降園実績表" : "出席簿"}_${year}-${String(month).padStart(2, "0")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      // DL成功後に出力を記録(主任以上)。失敗しても帳票DLは成立しているのでUIは止めない。
+      const childCount = new Set(rows.map((r) => r.child_id)).size;
+      await createClient().rpc("log_report_output", {
+        p_office_id: selectedOffice,
+        p_report_type: reportType === "actuals" ? "attendance_actuals" : "attendance_register",
+        p_format: "pdf",
+        p_params: { year, month },
+        p_row_count: childCount,
+      });
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "PDF生成に失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (officesError) {
     return (
       <div className="flex flex-1 flex-col">
@@ -282,6 +322,21 @@ function AttendanceContent() {
                 className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
               >
                 {monthSub === "attendance" ? "出席簿Excel" : monthSub === "child" ? "園児別Excel" : "時刻Excel"}
+              </button>
+              {/* 帳票PDF(§7・主任以上)。出席簿/登降園実績表。出力は監査ログに記録。 */}
+              <button
+                onClick={() => void onExportPdf("register")}
+                disabled={rows.length === 0 || busy}
+                className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+              >
+                出席簿PDF
+              </button>
+              <button
+                onClick={() => void onExportPdf("actuals")}
+                disabled={rows.length === 0 || busy}
+                className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+              >
+                実績表PDF
               </button>
             </>
           )}
