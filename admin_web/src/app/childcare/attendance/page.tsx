@@ -31,6 +31,7 @@ function registerSymbol(r: Row): string {
 type Edit = { in: string; out: string; ret: string; depart: string; note: string };
 // Phase B(317): 要確認(anomaly)。severity=action は補正必須(確認済み不可)。
 type Anomaly = { child_id: string; business_date: string; anomaly_type: string; label: string; severity: string };
+type AuditRow = { occurred_at: string; operator: string; target_type: string; action: string; before_data: Record<string, unknown> | null; after_data: Record<string, unknown> | null };
 const anomKey = (childId: string, date: string) => `${childId}__${date.slice(0, 10)}`;
 
 function todayStr(): string {
@@ -52,6 +53,54 @@ function kindValue(r: Row | undefined): string {
   if (r.absence_kind === "sick_absence" || r.absence_kind === "personal_absence") return r.absence_kind;
   return "";
 }
+
+// ── 監査履歴(378)の表示ヘルパ ──
+const auditTargetLabel = (t: string): string =>
+  ({ child_daily_attendance: "出欠", child_attendance_events: "打刻", child_outings: "外出" } as Record<string, string>)[t] ?? t;
+const auditActionLabel = (a: string): string =>
+  ({ INSERT: "登録", UPDATE: "変更", DELETE: "取消" } as Record<string, string>)[a] ?? a;
+// target_type ごとに、履歴に出す列と日本語ラベル。
+const AUDIT_FIELDS: Record<string, [string, string][]> = {
+  child_daily_attendance: [["is_absent", "欠席"], ["attendance_kind", "区分"], ["absence_reason", "欠席理由"], ["attendance_note", "出欠メモ"]],
+  child_attendance_events: [["event_type", "種別"], ["occurred_at", "時刻"], ["rejection_reason", "却下理由"], ["admin_override_reason", "上書き理由"]],
+  child_outings: [["reason", "理由"], ["reason_note", "補足"], ["out_at", "外出"], ["return_planned_at", "戻り予定"], ["return_at", "戻り"], ["converted_to_departure", "降園変換"]],
+};
+function fmtAuditVal(key: string, raw: unknown): string {
+  if (raw == null || raw === "") return "—";
+  const s = String(raw);
+  if (key === "is_absent") return s === "true" ? "欠席" : "出席";
+  if (key === "converted_to_departure") return s === "true" ? "はい" : "いいえ";
+  if (key === "attendance_kind") return ({ none: "出席", late: "遅刻", early_leave: "早退", sick_absence: "病欠", personal_absence: "都合欠" } as Record<string, string>)[s] ?? s;
+  if (key === "event_type")
+    return ({ drop_off: "登園", pick_up: "降園", proxy_drop_off: "代理登園", proxy_pick_up: "代理降園", rejected: "却下", out: "外出", return: "戻り" } as Record<string, string>)[s] ?? s;
+  if (key === "reason") return ({ therapy: "療育", checkup: "健診", other: "その他" } as Record<string, string>)[s] ?? s;
+  if (["occurred_at", "out_at", "return_planned_at", "return_at"].includes(key)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+  return s;
+}
+// 1件の監査行を「登園08:30 のように」人間可読な差分文にする。
+// UPDATE=before→after で変化した列のみ / INSERT=after の主要列 / DELETE=before の主要列。
+function auditDetail(row: AuditRow): { field: string; text: string }[] {
+  const fields = AUDIT_FIELDS[row.target_type] ?? [];
+  const before = row.before_data ?? {};
+  const after = row.after_data ?? {};
+  const out: { field: string; text: string }[] = [];
+  for (const [key, label] of fields) {
+    const b = before[key] ?? null;
+    const a = after[key] ?? null;
+    if (row.action === "UPDATE") {
+      if (String(b ?? "") === String(a ?? "")) continue;
+      out.push({ field: label, text: `${fmtAuditVal(key, b)} → ${fmtAuditVal(key, a)}` });
+    } else {
+      const v = row.action === "DELETE" ? b : a;
+      if (v == null || v === "") continue;
+      out.push({ field: label, text: fmtAuditVal(key, v) });
+    }
+  }
+  return out;
+}
 const MONTH_COL_WIDTH = 34; // 月間の日カラム最小幅(出欠/時刻で揃える。全幅テーブルで31日+集計が横スクロールなしで収まる目安)。
 
 function AttendanceContent() {
@@ -72,6 +121,9 @@ function AttendanceContent() {
   // 休園日(網掛け・開所日数・375)。day番号 → 理由/ラベル。
   const [closures, setClosures] = useState<Record<number, { reason: string | null; label: string | null }>>({});
   const [openDays, setOpenDays] = useState<number | null>(null);
+  // 監査履歴モーダル(378)。開いている園児と取得行。
+  const [auditFor, setAuditFor] = useState<{ childId: string; name: string } | null>(null);
+  const [auditRows, setAuditRows] = useState<AuditRow[] | null>(null);
 
   useEffect(() => {
     if (!selectedOffice) return;
@@ -139,6 +191,15 @@ function AttendanceContent() {
     if (error || noteErr) return setErr((error ?? noteErr)!.message);
     setErr(null);
     setReloadToken((t) => t + 1);
+  }
+
+  // 監査履歴を開く(378)。園児×当日の登降園・打刻・外出の変更履歴を event_logs から取得。
+  async function openAudit(childId: string, name: string) {
+    setAuditFor({ childId, name });
+    setAuditRows(null);
+    const { data, error } = await createClient().rpc("fetch_child_attendance_audit", { p_child_id: childId, p_business_date: date });
+    if (error) { setErr(error.message); setAuditRows([]); return; }
+    setAuditRows((data ?? []) as AuditRow[]);
   }
 
   // 備考のみ保存(欠席児は時刻の保存ボタンが無効なため、備考はフォーカスアウトで即保存)。
@@ -236,8 +297,55 @@ function AttendanceContent() {
 
         {mode === "day" ? <DayView /> : monthSub === "child" ? <ChildMonthView /> : <MonthGridView withTime={monthSub === "time"} />}
       </main>
+      {auditFor && <AuditModal />}
     </div>
   );
+
+  // 監査履歴モーダル(378)。園児×当日の登降園・打刻・外出の変更を時系列で表示。
+  function AuditModal() {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAuditFor(null)}>
+        <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+            <div>
+              <div className="text-sm font-bold text-slate-800">{auditFor!.name} — 変更履歴</div>
+              <div className="text-xs text-slate-400">{date} の登降園・打刻・外出の記録</div>
+            </div>
+            <button onClick={() => setAuditFor(null)} className="rounded-lg px-2 py-1 text-lg leading-none text-slate-400 hover:bg-slate-100">×</button>
+          </div>
+          <div className="p-5">
+            {auditRows === null && <div className="py-8 text-center text-sm text-slate-400">読み込み中…</div>}
+            {auditRows !== null && auditRows.length === 0 && <div className="py-8 text-center text-sm text-slate-400">この日の変更履歴はありません。</div>}
+            {auditRows !== null && auditRows.length > 0 && (
+              <ol className="space-y-2">
+                {auditRows.map((r, i) => {
+                  const diffs = auditDetail(r);
+                  const time = new Date(r.occurred_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <li key={i} className="rounded-xl border border-slate-200 px-4 py-2.5">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span className="font-mono text-slate-400">{time}</span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600">{auditTargetLabel(r.target_type)}</span>
+                        <span className={`rounded px-1.5 py-0.5 font-semibold ${r.action === "DELETE" ? "bg-red-100 text-red-600" : r.action === "INSERT" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{auditActionLabel(r.action)}</span>
+                        <span className="text-slate-500">{r.operator}</span>
+                      </div>
+                      {diffs.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-slate-700">
+                          {diffs.map((d, j) => (
+                            <span key={j}><span className="text-slate-400">{d.field}:</span> {d.text}</span>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function DayView() {
     return (
@@ -281,8 +389,12 @@ function AttendanceContent() {
                     </td>
                   ))}
                   <td className="px-3 py-2">
-                    <button disabled={busy || r.is_absent} onClick={() => void saveActuals(r.child_id)}
-                      className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">保存</button>
+                    <div className="flex items-center gap-2">
+                      <button disabled={busy || r.is_absent} onClick={() => void saveActuals(r.child_id)}
+                        className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">保存</button>
+                      <button onClick={() => void openAudit(r.child_id, r.child_name)}
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">履歴</button>
+                    </div>
                   </td>
                   <td className="px-2 py-2">
                     {/* 備考(小さめ・主任以上)。フォーカスアウトで自動保存。 */}
