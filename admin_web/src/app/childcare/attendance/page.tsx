@@ -32,6 +32,8 @@ type Edit = { in: string; out: string; ret: string; depart: string; note: string
 // Phase B(317): 要確認(anomaly)。severity=action は補正必須(確認済み不可)。
 type Anomaly = { child_id: string; business_date: string; anomaly_type: string; label: string; severity: string };
 type AuditRow = { occurred_at: string; operator: string; target_type: string; action: string; before_data: Record<string, unknown> | null; after_data: Record<string, unknown> | null };
+type ReportLog = { output_at: string; operator: string; report_type: string; format: string; params: Record<string, unknown> | null; row_count: number | null };
+const REPORT_TYPE_LABEL: Record<string, string> = { attendance_register: "出席簿", attendance_actuals: "登降園実績表" };
 const anomKey = (childId: string, date: string) => `${childId}__${date.slice(0, 10)}`;
 
 function todayStr(): string {
@@ -123,6 +125,8 @@ function AttendanceContent() {
   const [closures, setClosures] = useState<Record<number, { reason: string | null; label: string | null }>>({});
   const [openDays, setOpenDays] = useState<number | null>(null);
   // 監査履歴モーダル(378)。開いている園児と取得行。
+  const [reportLogsOpen, setReportLogsOpen] = useState(false);
+  const [reportLogs, setReportLogs] = useState<ReportLog[] | null>(null);
   const [auditFor, setAuditFor] = useState<{ childId: string; name: string } | null>(null);
   const [auditRows, setAuditRows] = useState<AuditRow[] | null>(null);
 
@@ -241,6 +245,15 @@ function AttendanceContent() {
     if (c) void exportChildXlsx(rows, year, month, c.id, c.name, c.cls);
   }
 
+  // 帳票出力履歴(§7・379)。管理者以上のみ閲覧可(RPCが権限判定)。
+  async function openReportLogs() {
+    setReportLogsOpen(true);
+    setReportLogs(null);
+    const { data, error } = await createClient().rpc("fetch_report_output_logs", { p_office_id: selectedOffice, p_limit: 100 });
+    if (error) { setErr(error.message); setReportLogs([]); return; }
+    setReportLogs((data ?? []) as ReportLog[]);
+  }
+
   // 帳票PDF(§7)。出席簿/登降園実績表をサーバー生成(pdfkit)→DL→監査ログ(log_report_output・379)。
   async function onExportPdf(reportType: "register" | "actuals") {
     if (rows.length === 0) return;
@@ -338,6 +351,13 @@ function AttendanceContent() {
               >
                 実績表PDF
               </button>
+              {/* 出力履歴(§7・管理者以上)。誰がいつ何を出力したか。 */}
+              <button
+                onClick={() => void openReportLogs()}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                出力履歴
+              </button>
             </>
           )}
           <span className="text-xs text-slate-400">※ 赤=要確認(補正が必要)。編集は主任以上。</span>
@@ -353,8 +373,56 @@ function AttendanceContent() {
         {mode === "day" ? <DayView /> : monthSub === "child" ? <ChildMonthView /> : <MonthGridView withTime={monthSub === "time"} />}
       </main>
       {auditFor && <AuditModal />}
+      {reportLogsOpen && <ReportLogsModal />}
     </div>
   );
+
+  // 帳票出力履歴モーダル(§7・379)。管理者以上が閲覧。
+  function ReportLogsModal() {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setReportLogsOpen(false)}>
+        <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+            <div>
+              <div className="text-sm font-bold text-slate-800">帳票 出力履歴</div>
+              <div className="text-xs text-slate-400">誰がいつ何を出力したか(管理者以上)</div>
+            </div>
+            <button onClick={() => setReportLogsOpen(false)} className="rounded-lg px-2 py-1 text-lg leading-none text-slate-400 hover:bg-slate-100">×</button>
+          </div>
+          <div className="p-5">
+            {reportLogs === null && <div className="py-8 text-center text-sm text-slate-400">読み込み中…</div>}
+            {reportLogs !== null && reportLogs.length === 0 && <div className="py-8 text-center text-sm text-slate-400">出力履歴はありません。</div>}
+            {reportLogs !== null && reportLogs.length > 0 && (
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
+                    <th className="px-2 py-1.5">日時</th><th className="px-2 py-1.5">操作者</th><th className="px-2 py-1.5">帳票</th>
+                    <th className="px-2 py-1.5">形式</th><th className="px-2 py-1.5">対象</th><th className="px-2 py-1.5">件数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportLogs.map((l, i) => {
+                    const p = l.params ?? {};
+                    const period = p.year && p.month ? `${p.year}年${p.month}月` : "";
+                    return (
+                      <tr key={i} className="border-b border-slate-100">
+                        <td className="px-2 py-1.5 font-mono text-xs text-slate-500">{new Date(l.output_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+                        <td className="px-2 py-1.5 text-slate-700">{l.operator}</td>
+                        <td className="px-2 py-1.5 text-slate-700">{REPORT_TYPE_LABEL[l.report_type] ?? l.report_type}</td>
+                        <td className="px-2 py-1.5 uppercase text-slate-500">{l.format}</td>
+                        <td className="px-2 py-1.5 text-slate-500">{period}</td>
+                        <td className="px-2 py-1.5 tabular-nums text-slate-500">{l.row_count ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 監査履歴モーダル(378)。園児×当日の登降園・打刻・外出の変更を時系列で表示。
   function AuditModal() {
