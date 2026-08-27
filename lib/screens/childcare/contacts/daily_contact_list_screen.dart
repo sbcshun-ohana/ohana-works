@@ -5,6 +5,7 @@ import '../../../services/childcare_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
+import '../children/child_internal_notes_tab.dart';
 import 'child_day_health_nap_views.dart';
 import 'daily_contact_detail_screen.dart';
 
@@ -16,12 +17,16 @@ class DailyContactListScreen extends StatefulWidget {
     required this.officeId,
     required this.businessDate,
     required this.isManager,
+    this.initialTab,
   });
 
   final ChildcareService service;
   final String officeId;
   final DateTime businessDate;
   final bool isManager;
+
+  /// 右パネルの初期タブ('internal'=園内記録)。null=連絡帳(既定)。園内記録タブは施設フラグON時のみ。
+  final String? initialTab;
 
   @override
   State<DailyContactListScreen> createState() => _DailyContactListScreenState();
@@ -35,17 +40,29 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
   String? _selectedClassId;
   // 分割ビュー(iPad幅)で右パネルに表示中の園児。
   DailyContact? _selectedContact;
+  // 園内記録タブ(145)。ON施設のみ右パネルのタブに追加する(俊指示 2026-08-27)。
+  bool _internalNotesEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadClasses();
+    _loadInternalNotesFlag();
   }
 
   Future<void> _loadClasses() async {
     final c = await widget.service.fetchChildcareClasses(widget.officeId);
     if (mounted) setState(() => _classes = c);
+  }
+
+  Future<void> _loadInternalNotesFlag() async {
+    try {
+      final enabled = await widget.service.isChildInternalNotesEnabledForOffice(widget.officeId);
+      if (mounted) setState(() => _internalNotesEnabled = enabled);
+    } catch (_) {
+      if (mounted) setState(() => _internalNotesEnabled = false);
+    }
   }
 
   void _load() {
@@ -217,10 +234,18 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
         child: Text('左の一覧から園児を選択してください', style: TextStyle(color: AppColors.textSecondary)),
       );
     }
-    final childKey = ValueKey('${c.childId}_${_businessDate.toIso8601String()}');
+    // フラグ変化でタブ数が変わるため childKey に含めて再構築する。
+    final childKey = ValueKey('${c.childId}_${_businessDate.toIso8601String()}_$_internalNotesEnabled');
+    final tabs = <Tab>[
+      const Tab(text: '連絡帳'), const Tab(text: '午睡'), const Tab(text: '健康'), const Tab(text: '食事'),
+      if (_internalNotesEnabled) const Tab(text: '園内記録'),
+    ];
+    // ホーム/導線から initialTab='internal' で来たら園内記録タブを初期選択(フラグON時のみ)。
+    final initialIndex = (widget.initialTab == 'internal' && _internalNotesEnabled) ? tabs.length - 1 : 0;
     return DefaultTabController(
       key: childKey,
-      length: 4,
+      length: tabs.length,
+      initialIndex: initialIndex,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -229,7 +254,7 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
             child: Text('${c.nameLabel}${c.isAbsent ? "(欠席)" : ""}',
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
           ),
-          const TabBar(tabs: [Tab(text: '連絡帳'), Tab(text: '午睡'), Tab(text: '健康'), Tab(text: '食事')]),
+          TabBar(tabs: tabs),
           Expanded(
             child: TabBarView(
               children: [
@@ -267,6 +292,13 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
                   businessDate: _businessDate,
                   ageGroup: _ageGroupFor(c.className),
                 ),
+                // 園内記録(職員専用・園児別の走り書き履歴)。ON施設のみ。連絡帳のタブに集約(俊指示 2026-08-27)。
+                if (_internalNotesEnabled)
+                  ChildInternalNotesTab(
+                    service: widget.service,
+                    childId: c.childId,
+                    officeId: widget.officeId,
+                  ),
               ],
             ),
           ),

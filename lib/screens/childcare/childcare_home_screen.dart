@@ -288,17 +288,18 @@ class _ChildcareHomeScreenState extends State<ChildcareHomeScreen> {
               onTap: () => _comingSoon('保護者からの連絡'),
             ),
             // 園内記録: child_internal_notes_enabled がONの施設のみ表示。
-            // 新規画面は作らず、園児詳細(デイリーボード→園児→園内記録タブ)の既存導線に乗せる。
+            // 連絡帳画面(園児別の日次記録ハブ)の「園内記録」タブを直開きで開く(俊指示 2026-08-27)。
             if (_internalNotesEnabled)
               _HomeTile(
                 icon: Icons.edit_note_rounded,
                 color: AppColors.leafGreen,
                 label: '園内記録',
-                onTap: () => _push(DailyBoardScreen(
+                onTap: () => _push(DailyContactListScreen(
                   service: widget.service,
                   officeId: office.officeId,
                   businessDate: _businessDate,
                   isManager: office.isManager,
+                  initialTab: 'internal',
                 )),
               ),
             // ヒヤリハット・事故報告(246-250・Phase A)。incident_reports_enabled がONの施設のみ。

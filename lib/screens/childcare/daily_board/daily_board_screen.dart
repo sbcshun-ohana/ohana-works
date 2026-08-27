@@ -11,6 +11,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/business_date_action.dart';
 import '../../../widgets/ohana_logo_home_button.dart';
 import '../contacts/daily_contact_detail_screen.dart';
+import '../contacts/daily_contact_list_screen.dart';
 import '../infection/handover_card_create_screen.dart';
 import '../family_report/family_report_list_screen.dart';
 import '../health/temperature_screen.dart';
@@ -100,6 +101,8 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
       _infectionByChild = const {};
   // 209: 感染症管理フラグ。ONの施設のみ行アクションに「引き継ぎカード」を出す。
   bool _infectionControlEnabled = false;
+  // 園内記録フラグ(145)。ON施設のみ上部に「園内記録」ボタン(→連絡帳の園内記録タブ)を出す。
+  bool _internalNotesEnabled = false;
   // 202: 承認済みお迎え変更の行内バッジ用。childId→リスト(氏名/時間/確認済み/書類有無)。
   Map<String, List<({String? name, String? relationship, String? arrive, String? leave, bool idVerified, bool hasDocument})>>
       _pickupChangeByChild = const {};
@@ -122,6 +125,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadMedication();
     _loadPickupChanges();
     _loadInfectionFlag();
+    _loadInternalNotesFlag();
     _loadAllergyFlags();
     _loadOutingOtherEnabled();
     _subscribe();
@@ -184,6 +188,7 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     _loadMedication();
     _loadPickupChanges();
     _loadInfectionFlag();
+    _loadInternalNotesFlag();
     _loadAllergyFlags();
     _loadOutingOtherEnabled();
     _subscribe();
@@ -335,6 +340,29 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
     } catch (_) {
       if (mounted) setState(() => _infectionControlEnabled = false);
     }
+  }
+
+  Future<void> _loadInternalNotesFlag() async {
+    try {
+      final data = await Supabase.instance.client
+          .rpc('is_child_internal_notes_enabled_for_office', params: {'p_office_id': _officeId});
+      if (mounted) setState(() => _internalNotesEnabled = data == true);
+    } catch (_) {
+      if (mounted) setState(() => _internalNotesEnabled = false);
+    }
+  }
+
+  // 園内記録へ: 連絡帳画面を「園内記録タブ」直開きで開く(記録の実体は連絡帳タブに集約)。
+  void _openInternalNotes() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => DailyContactListScreen(
+        service: widget.service,
+        officeId: _officeId,
+        businessDate: _businessDate,
+        isManager: _isManager,
+        initialTab: 'internal',
+      ),
+    ));
   }
 
   // 外出理由「その他」フラグ(377)。出欠編集の外出理由チップで その他 を出すか。
@@ -1158,6 +1186,11 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                         onTap: _openFamilyReports),
                     const SizedBox(width: 8),
                     _quickTile(Icons.thermostat_rounded, '健康チェック', AppColors.punchClockOut, onTap: _openHealthCheck),
+                    // 園内記録(145)。ON施設のみ。連絡帳画面の園内記録タブへのショートカット。
+                    if (_internalNotesEnabled) ...[
+                      const SizedBox(width: 8),
+                      _quickTile(Icons.edit_note_rounded, '園内記録', AppColors.leafGreen, onTap: _openInternalNotes),
+                    ],
                   ],
                 ),
               ),
