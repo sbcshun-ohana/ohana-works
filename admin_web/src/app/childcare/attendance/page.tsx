@@ -486,7 +486,7 @@ function AttendanceContent() {
       {openDays !== null && (
         <div className="flex items-center gap-3 text-sm">
           <span className="rounded-lg bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">開所日数 {openDays}日</span>
-          <span className="text-xs text-slate-400">網掛け=休園日(定休/祝日/園独自)。休園日の管理は「休園日」タブ。</span>
+          <span className="text-xs text-slate-400">網掛け=休園日(日曜/祝日/年末年始、土曜はマハロステーション・ハレレアのみ)。稼働曜日で自動判定。</span>
         </div>
       )}
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">

@@ -15,7 +15,6 @@ const GUIDANCE_HREF = "/childcare/guidance-plans";
 const CHILDCARE_NAV_ITEMS = [
   { href: "/childcare/daily-board", label: "デイリーボード" },
   { href: "/childcare/attendance", label: "登降園管理" },
-  { href: "/childcare/closure-days", label: "休園日" },
   { href: "/childcare/family-reports", label: "家庭での様子" },
   { href: "/childcare/nap", label: "午睡チェック" },
   { href: "/childcare/health-check", label: "健康チェック" },
@@ -161,8 +160,7 @@ export function ChildcareNav() {
       (item.href !== INCIDENT_HREF || incidentVisible) &&
       (item.href !== MEAL_HREF || mealVisible) &&
       (item.href !== GUIDANCE_HREF || guidanceVisible) &&
-      (item.href !== "/childcare/attendance" || attendanceVisible) &&
-      (item.href !== "/childcare/closure-days" || attendanceVisible),
+      (item.href !== "/childcare/attendance" || attendanceVisible),
   );
 
   const cls = searchParams.get("class");
