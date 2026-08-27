@@ -948,48 +948,8 @@ class ChildcareService {
     return map;
   }
 
-  /// Phase C(315): 一時外出。指定日の「外出中」の児を childId→レコードで返す(バッジ用。戻り済は除外)。
-  Future<Map<String, ({String id, String reason, String? reasonNote, DateTime? returnPlannedAt, DateTime? outAt, bool isOverdue})>>
-      fetchChildOutingsForOffice(String officeId, DateTime businessDate) async {
-    final rows = await _client.rpc('fetch_child_outings_for_office', params: {
-      'p_office_id': officeId,
-      'p_business_date': dateOnly(businessDate),
-    });
-    final map = <String, ({String id, String reason, String? reasonNote, DateTime? returnPlannedAt, DateTime? outAt, bool isOverdue})>{};
-    for (final r in (rows as List)) {
-      final m = r as Map<String, dynamic>;
-      if (m['is_active'] != true) continue; // バッジ表示は外出中のみ
-      map[m['child_id'] as String] = (
-        id: m['id'] as String,
-        reason: m['reason'] as String,
-        reasonNote: m['reason_note'] as String?,
-        returnPlannedAt: m['return_planned_at'] != null ? DateTime.parse(m['return_planned_at'] as String) : null,
-        outAt: m['out_at'] != null ? DateTime.parse(m['out_at'] as String) : null,
-        isOverdue: m['is_overdue'] == true,
-      );
-    }
-    return map;
-  }
-
-  /// 一時外出を開始(職員明示操作・理由+戻り予定必須)。
-  Future<void> startChildOuting(String childId, String reason, String? reasonNote, DateTime returnPlannedAt) async {
-    await _client.rpc('start_child_outing', params: {
-      'p_child_id': childId,
-      'p_reason': reason,
-      'p_reason_note': reasonNote,
-      'p_return_planned_at': returnPlannedAt.toUtc().toIso8601String(),
-    });
-  }
-
-  /// 一時外出の「戻り(再入室)」を記録。
-  Future<void> endChildOuting(String outingId) async {
-    await _client.rpc('end_child_outing', params: {'p_id': outingId});
-  }
-
-  /// 一時外出→降園変換(主任以上・降園記録込み)。
-  Future<void> convertOutingToDeparture(String outingId) async {
-    await _client.rpc('convert_outing_to_departure', params: {'p_id': outingId});
-  }
+  // 一時外出(315)の専用RPC群(start/end/convert/fetch_child_outings)呼び出しは381で廃止。
+  // 外出は出欠状況の「外/戻」(set_child_attendance_actuals + outing_reason)へ統合済み。
 
   /// 198方式: ボードのお迎え変更表示(202)。承認済みお迎え変更を childId→リストで返す
   /// (同児で複数申請があり得るためリスト。氏名・時間・確認済み・書類有無)。
