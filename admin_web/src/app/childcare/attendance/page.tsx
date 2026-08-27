@@ -69,6 +69,9 @@ function AttendanceContent() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  // 休園日(網掛け・開所日数・375)。day番号 → 理由/ラベル。
+  const [closures, setClosures] = useState<Record<number, { reason: string | null; label: string | null }>>({});
+  const [openDays, setOpenDays] = useState<number | null>(null);
 
   useEffect(() => {
     if (!selectedOffice) return;
@@ -93,6 +96,24 @@ function AttendanceContent() {
     supabase
       .rpc("fetch_attendance_anomalies_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
       .then(({ data }) => setAnomalies((data ?? []) as Anomaly[]));
+    // 休園日カレンダー(375)。月間ビューの網掛け・開所日数。
+    if (mode === "month") {
+      supabase
+        .rpc("fetch_office_closure_calendar", { p_office: selectedOffice, p_year: year, p_month: month })
+        .then(({ data }) => {
+          const map: Record<number, { reason: string | null; label: string | null }> = {};
+          for (const c of (data ?? []) as { business_date: string; closed: boolean; reason: string | null; label: string | null }[]) {
+            if (c.closed) map[Number(c.business_date.slice(8, 10))] = { reason: c.reason, label: c.label };
+          }
+          setClosures(map);
+        });
+      supabase
+        .rpc("count_office_open_days", { p_office: selectedOffice, p_year: year, p_month: month })
+        .then(({ data }) => setOpenDays((data as number | null) ?? null));
+    } else {
+      setClosures({});
+      setOpenDays(null);
+    }
   }, [selectedOffice, mode, date, year, month, reloadToken]);
 
   // (child_id+日) → 要確認ラベル配列。
@@ -148,7 +169,7 @@ function AttendanceContent() {
   // Excel出力(俊指示 2026-08-25: CSV→Excel・月付き日付・中央寄せ・罫線・縞模様・欠席児下部・集計)。
   // 出欠→出席簿(◯/病欠/都合欠+集計) / 時刻→登降園時刻(登園/降園/欠席の3行) / 園児別→選択児の1ヶ月。
   function onExport() {
-    if (monthSub === "attendance") { void exportRegisterXlsx(rows, year, month); return; }
+    if (monthSub === "attendance") { void exportRegisterXlsx(rows, year, month, closures, openDays); return; }
     if (monthSub === "time") { void exportTimeXlsx(rows, year, month); return; }
     const seen = new Set<string>();
     const children: { id: string; name: string; cls: string | null }[] = [];
@@ -294,13 +315,21 @@ function AttendanceContent() {
       return g === 0 ? "text-red-500" : g === 6 ? "text-sky-500" : "text-slate-400";
     };
     return (
+      <div className="space-y-2">
+      {openDays !== null && (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="rounded-lg bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">開所日数 {openDays}日</span>
+          <span className="text-xs text-slate-400">網掛け=休園日(定休/祝日/園独自)。休園日の管理は「休園日」タブ。</span>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-slate-200">
               <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-slate-500">園児</th>
               {days.map((d) => (
-                <th key={d} className={`px-0.5 py-2 text-center font-semibold ${dowColor(d)}`} style={{ minWidth: MONTH_COL_WIDTH }}>
+                <th key={d} className={`px-0.5 py-2 text-center font-semibold ${dowColor(d)} ${closures[d] ? "bg-slate-200" : ""}`} style={{ minWidth: MONTH_COL_WIDTH }}
+                    title={closures[d]?.label ?? undefined}>
                   <div>{d}</div>
                   <div className="text-[10px] font-normal">{WEEKDAYS[new Date(year, month - 1, d).getDay()]}</div>
                 </th>
@@ -325,18 +354,19 @@ function AttendanceContent() {
                   {c.name}<span className="ml-1 text-slate-400">{c.cls ?? ""}</span>
                 </td>
                 {days.map((d) => {
+                  const shut = closures[d] ? "bg-slate-100" : "";
                   const r = c.days.get(d);
-                  if (!r) return <td key={d} className="px-0.5 py-1.5 text-center text-slate-200">·</td>;
+                  if (!r) return <td key={d} className={`px-0.5 py-1.5 text-center text-slate-200 ${shut}`}>·</td>;
                   const anoms = anomByKey.get(anomKey(r.child_id, r.business_date)) ?? [];
                   const miss = anoms.length > 0;
                   if (r.is_absent) {
                     const sym = registerSymbol(r);
-                    return <td key={d} className="px-0.5 py-1.5 text-center font-bold text-slate-400" title={r.absence_reason ?? "欠席"}>{sym}</td>;
+                    return <td key={d} className={`px-0.5 py-1.5 text-center font-bold text-slate-400 ${shut}`} title={r.absence_reason ?? "欠席"}>{sym}</td>;
                   }
                   if (withTime) {
                     return (
                       <td key={d} onClick={miss ? () => jumpToDayEdit(r.business_date) : undefined}
-                        className={`px-0.5 py-1 text-center tabular-nums leading-tight ${miss ? "cursor-pointer bg-red-50 hover:bg-red-100" : ""}`}
+                        className={`px-0.5 py-1 text-center tabular-nums leading-tight ${miss ? "cursor-pointer bg-red-50 hover:bg-red-100" : shut}`}
                         title={miss ? `要確認: ${anoms.join(" / ")}(クリックで修正)` : undefined}>
                         <div className={miss && !r.in_time ? "text-red-600 font-bold" : "text-slate-700"}>{hhmm(r.in_time) || "—"}</div>
                         <div className={miss && !r.depart_time ? "text-red-600 font-bold" : "text-slate-400"}>{hhmm(r.depart_time) || "—"}</div>
@@ -345,7 +375,7 @@ function AttendanceContent() {
                   }
                   return (
                     <td key={d} onClick={miss ? () => jumpToDayEdit(r.business_date) : undefined}
-                      className={`px-0.5 py-1.5 text-center ${miss ? "cursor-pointer bg-red-100 font-bold text-red-600 hover:bg-red-200" : "text-emerald-600"}`}
+                      className={`px-0.5 py-1.5 text-center ${miss ? "cursor-pointer bg-red-100 font-bold text-red-600 hover:bg-red-200" : `text-emerald-600 ${shut}`}`}
                       title={miss ? `要確認: ${anoms.join(" / ")}(クリックで修正)` : `${hhmm(r.in_time) || "—"} 〜 ${hhmm(r.depart_time) || "—"}`}>
                       {miss ? "!" : "◯"}
                     </td>
@@ -359,6 +389,7 @@ function AttendanceContent() {
             })}
           </tbody>
         </table>
+      </div>
       </div>
     );
   }

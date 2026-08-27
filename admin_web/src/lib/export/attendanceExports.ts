@@ -83,7 +83,10 @@ async function download(wb: ExcelJS.Workbook, filename: string) {
 }
 
 // 出席簿(◯/病欠/都合欠)。園児×日 + 集計。欠席の多い児は下にまとめる。
-export async function exportRegisterXlsx(rows: AttendanceExportRow[], year: number, month: number) {
+export async function exportRegisterXlsx(
+  rows: AttendanceExportRow[], year: number, month: number,
+  closures?: Record<number, { reason: string | null; label: string | null }>, openDays?: number | null,
+) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const { map, order } = groupByChild(rows);
@@ -98,7 +101,7 @@ export async function exportRegisterXlsx(rows: AttendanceExportRow[], year: numb
   const lastCol = 2 + days.length + 3;
   ws.mergeCells(1, 1, 1, lastCol);
   const title = ws.getCell(1, 1);
-  title.value = `${year}年${month}月 出席簿`;
+  title.value = openDays != null ? `${year}年${month}月 出席簿(開所日数 ${openDays}日)` : `${year}年${month}月 出席簿`;
   title.font = { bold: true, size: 14 };
   title.alignment = { horizontal: "center", vertical: "middle" };
 
@@ -121,9 +124,9 @@ export async function exportRegisterXlsx(rows: AttendanceExportRow[], year: numb
   ws.getRow(3).font = { size: 9, color: { argb: "FF94A3B8" } };
   centerAll(ws);
   stripe(ws, 4, 1); // 出席簿は1行ごとに縞
-  // 土日カラムの淡色(縞より優先)。
+  // 休園日カラムの網掛け(定休/祝日/園独自=グレー)。closures未指定時は従来の土日淡色。
   days.forEach((d, i) => {
-    const fill = dowFill(d, year, month);
+    const fill = closures?.[d] ? "FFE2E8F0" : dowFill(d, year, month);
     if (fill) for (let r = 2; r <= ws.rowCount; r++) ws.getRow(r).getCell(3 + i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
   });
   ws.getColumn(1).width = 9; ws.getColumn(2).width = 14;
