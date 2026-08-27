@@ -14,24 +14,8 @@ import { currentDate } from "@/lib/datetime";
 import type { AttendanceKind, DailyBoardRow, DailyBoardSummary, WeatherRecord, NapMissing } from "@/lib/types";
 import { ATTENDANCE_KIND_LABELS, DAILY_BOARD_STATUS_LABELS, WEATHER_OPTIONS, deriveContactBadge } from "@/lib/types";
 
-// Phase C(315): 一時外出の1行。fetch_child_outings_for_office の戻り。
-type OutingRow = {
-  id: string;
-  child_id: string;
-  child_name: string;
-  class_name: string | null;
-  reason: string;
-  reason_note: string | null;
-  out_at: string | null;
-  return_planned_at: string | null;
-  return_at: string | null;
-  converted_to_departure: boolean;
-  is_active: boolean;
-  is_overdue: boolean;
-};
-const OUTING_REASON_LABEL: Record<string, string> = { therapy: "療育", checkup: "健診", other: "その他" };
-const hmLocal = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "";
+// 一時外出(315)の専用パネルは廃止。外出は出欠状況の「外」+理由へ統合(381)。
+// 未クローズは fetch_childcare_alerts_for_office のアラートバー(child_attendance_events ベース)で通知。
 
 // K7で出欠種別=病欠/都合欠(is_absent同期対象)の園児は、状態列を「欠席」表示にする
 // (daily_child_status は代理打刻由来のため未登園のままになる。サマリーの欠席数と整合させる)。
@@ -190,26 +174,6 @@ function ChildcareDailyBoardPageContent() {
   const [arrivalNoteByChild, setArrivalNoteByChild] = useState<Record<string, string>>({});
   const [arrivalDraftByChild, setArrivalDraftByChild] = useState<Record<string, string>>({});
   const [savingArrivalChild, setSavingArrivalChild] = useState<string | null>(null);
-  // Phase C(315): 一時外出。外出中の児(is_active)を上部パネルで俯瞰し、主任は降園変換ができる。
-  const [outings, setOutings] = useState<OutingRow[]>([]);
-
-  // 一時外出の当日分を取得(施設×日)。外出中(is_active)のみ表示。
-  useEffect(() => {
-    if (!selectedOffice) return;
-    createClient()
-      .rpc("fetch_child_outings_for_office", { p_office_id: selectedOffice, p_business_date: businessDate })
-      .then(({ data }) => setOutings(((data ?? []) as OutingRow[]).filter((o) => o.is_active)));
-  }, [selectedOffice, businessDate, reloadToken]);
-
-  async function convertOutingToDeparture(id: string) {
-    const { error } = await createClient().rpc("convert_outing_to_departure", { p_id: id });
-    if (error) {
-      showToast(`降園変換に失敗しました(主任以上のみ): ${error.message}`);
-      return;
-    }
-    setReloadToken((t) => t + 1);
-  }
-
   // 園内記録機能フラグ(施設単位)。ONの施設のみ「園内記録」導線を表示する。
   // 表示判定はRPCの戻り値のみに従い、クライアント側で再実装しない。
   useEffect(() => {
@@ -699,57 +663,6 @@ function ChildcareDailyBoardPageContent() {
           <h2 className="text-lg font-bold text-slate-800">デイリーボード</h2>
           <NowClock />
         </div>
-
-        {/* Phase C(315): 一時外出中パネル。戻り予定超過は赤で強調。主任は「降園に変換」で1操作。 */}
-        {outings.length > 0 && (
-          <div
-            className={`rounded-2xl border p-4 shadow-sm ${
-              outings.some((o) => o.is_overdue) ? "border-red-300 bg-red-50" : "border-violet-200 bg-violet-50"
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-sm font-bold text-slate-700">🚶 一時外出中</span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600">{outings.length}名</span>
-              {outings.some((o) => o.is_overdue) && (
-                <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">戻り予定超過あり</span>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {outings.map((o) => (
-                <div
-                  key={o.id}
-                  className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-white px-3 py-1.5 text-sm ${
-                    o.is_overdue ? "ring-1 ring-red-300" : ""
-                  }`}
-                >
-                  <span className="font-semibold text-slate-800">{o.child_name}</span>
-                  <span className="text-xs text-slate-400">{o.class_name ?? ""}</span>
-                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
-                    {OUTING_REASON_LABEL[o.reason] ?? o.reason}
-                    {o.reason_note ? `(${o.reason_note})` : ""}
-                  </span>
-                  <span className="text-xs text-slate-500 tabular-nums">
-                    外出{hmLocal(o.out_at)}
-                    {o.return_planned_at && (
-                      <span className={o.is_overdue ? "ml-1 font-bold text-red-600" : "ml-1"}>
-                        / 戻り予定{hmLocal(o.return_planned_at)}
-                        {o.is_overdue ? " ⚠超過" : ""}
-                      </span>
-                    )}
-                  </span>
-                  {isManager && (
-                    <button
-                      onClick={() => void convertOutingToDeparture(o.id)}
-                      className="ml-auto rounded-lg bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-                    >
-                      降園に変換
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
           <div>

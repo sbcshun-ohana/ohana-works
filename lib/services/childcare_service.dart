@@ -740,7 +740,8 @@ class ChildcareService {
     });
   }
 
-  /// 登降園実績の手動修正(187)。全置換=現在値を全4値プリフィルして渡すこと。NULL=クリア。
+  /// 登降園実績の手動修正(187/381)。全置換=現在値を全4値プリフィルして渡すこと。NULL=クリア。
+  /// outingReason=外出理由(therapy/checkup/other)。外時刻とセットで保存(381)。
   Future<void> setChildAttendanceActuals(
     String childId,
     DateTime businessDate, {
@@ -748,6 +749,7 @@ class ChildcareService {
     String? outAt,
     String? returnAt,
     String? departAt,
+    String? outingReason,
   }) async {
     await _client.rpc('set_child_attendance_actuals', params: {
       'p_child_id': childId,
@@ -756,7 +758,17 @@ class ChildcareService {
       'p_out': outAt,
       'p_return': returnAt,
       'p_depart': departAt,
+      'p_outing_reason': outingReason,
     });
+  }
+
+  /// 当日の外出理由(最新'out'の outing_reason)を取得(382・出欠編集のプリフィル用)。
+  Future<String?> fetchChildOutReason(String childId, DateTime businessDate) async {
+    final r = await _client.rpc('fetch_child_out_reason', params: {
+      'p_child_id': childId,
+      'p_business_date': dateOnly(businessDate),
+    });
+    return r as String?;
   }
 
   /// 園側検温の記録(188・upsert)。measuredAt='HH:MM'。
