@@ -30,7 +30,7 @@ const NAV_ITEMS = [
 // 保育業務の施設選択(?office=)に依存するトップレベルページ。
 // useChildcareOffices を使うページを /childcare の外へ出す場合はここへ追加すること
 // (追加しないと施設プルダウンが出ず、先頭施設が黙って選ばれる)。
-const CHILDCARE_OFFICE_PAGES = ["/children", "/guardians", "/enrollment-forms", "/infection-masters", "/food-checks"];
+const CHILDCARE_OFFICE_PAGES = ["/children", "/guardians", "/enrollment-forms", "/infection-masters", "/food-checks", "/billing/fee-master"];
 
 // useSearchParams はビルド時の静的プリレンダーで Suspense 境界を要求するため、
 // 内側を Suspense でラップする(下部の export function AppHeader)。
@@ -42,6 +42,9 @@ function AppHeaderInner() {
   const { offices, selectedOffice, setSelectedOffice } = useChildcareOffices();
   // ログイン中の氏名(役職)を常時表示する(複数施設管理時の取り違え防止)。
   const [identity, setIdentity] = useState<SessionIdentity | null>(null);
+  // 料金マスタータブは「請求フラグONの施設を管理する主任以上」にのみ表示(金額非表示=AC-22)。
+  // fetch_billing_offices は一般職員・フラグ全OFFでは0件を返すのでタブごと消える。
+  const [showBilling, setShowBilling] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -49,6 +52,9 @@ function AppHeaderInner() {
       if (!error && Array.isArray(data) && data.length > 0) {
         setIdentity(data[0] as SessionIdentity);
       }
+    });
+    supabase.rpc("fetch_billing_offices").then(({ data, error }) => {
+      setShowBilling(!error && Array.isArray(data) && data.length > 0);
     });
   }, []);
 
@@ -60,9 +66,11 @@ function AppHeaderInner() {
 
   // 保育業務の入口はデイリーボード(全職員が閲覧可)。/childcare/attendance は主任以上RPC+
   // attendance_mgmt_enabled ゲートのため、入口に使うと一般職員・フラグOFF施設で赤帯着地になる。
-  const navItems = showChildcare
-    ? [...NAV_ITEMS, { href: "/childcare/daily-board", label: "保育業務" }]
-    : NAV_ITEMS;
+  const navItems = [
+    ...NAV_ITEMS,
+    ...(showBilling ? [{ href: "/billing/fee-master", label: "料金マスター" }] : []),
+    ...(showChildcare ? [{ href: "/childcare/daily-board", label: "保育業務" }] : []),
+  ];
 
   async function handleLogout() {
     const supabase = createClient();
