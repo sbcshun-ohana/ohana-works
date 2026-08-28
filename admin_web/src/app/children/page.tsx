@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { BulkPromoteChildrenModal } from "@/components/BulkPromoteChildrenModal";
 import { ChildClassChangeModal } from "@/components/ChildClassChangeModal";
+import { ChildContractModal } from "@/components/ChildContractModal";
 import { ChildDevelopmentModal } from "@/components/ChildDevelopmentModal";
 import { ChildKahaiPeriodModal } from "@/components/ChildKahaiPeriodModal";
 import { DevelopmentApprovalPanel } from "@/components/DevelopmentApprovalPanel";
@@ -48,6 +49,12 @@ function ChildcareChildrenPageContent() {
   const [developmentEnabled, setDevelopmentEnabled] = useState(false);
   const [kahaiActive, setKahaiActive] = useState<Set<string>>(new Set()); // 本日時点で加配適用中の child_id
   const [kahaiRow, setKahaiRow] = useState<ChildMasterRow | null>(null);   // 加配期間モーダル対象
+  const [billingEnabled, setBillingEnabled] = useState(false);             // 請求フラグ(契約ボタン表示)
+  const [contractRow, setContractRow] = useState<ChildMasterRow | null>(null); // 契約モーダル対象
+  // 免除書類の確認待ちアラート(391・統括のみ返る。確認完了まで出続ける=俊要望 2026-08-28)
+  const [exemptionAlerts, setExemptionAlerts] = useState<
+    { child_id: string; child_name: string; kind: string; document_state: string; document_fiscal_year: number | null }[]
+  >([]);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
   useEffect(() => {
@@ -62,6 +69,9 @@ function ChildcareChildrenPageContent() {
       supabase
         .rpc("is_development_records_enabled_for_office", { p_office_id: selectedOffice })
         .then(({ data }) => setDevelopmentEnabled(Boolean(data)));
+      supabase
+        .rpc("is_billing_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setBillingEnabled(Boolean(data)));
     }
     load();
   }, [selectedOffice]);
@@ -92,6 +102,11 @@ function ChildcareChildrenPageContent() {
       .then(({ data }) => {
         setKahaiActive(new Set((data ?? []).map((r: { child_id: string }) => r.child_id)));
       });
+    // 免除書類の確認待ちアラート(391)。統括以外・フラグOFFはエラー=黙って空(バナー非表示)。
+    // 契約モーダルを閉じるとreloadTokenが進み再取得される(確認済みにすると消える)。
+    supabase
+      .rpc("fetch_pending_exemption_alerts", { p_office_id: selectedOffice })
+      .then(({ data, error }) => setExemptionAlerts(error ? [] : ((data ?? []) as typeof exemptionAlerts)));
   }, [selectedOffice, reloadToken]);
 
   const classOrder = classOrderIndex(classes);
@@ -171,6 +186,42 @@ function ChildcareChildrenPageContent() {
 
         {developmentEnabled && isManager && selectedOffice && (
           <DevelopmentApprovalPanel officeId={selectedOffice} />
+        )}
+
+        {/* 免除書類の確認待ちアラート(統括のみ表示・確認完了まで出続ける) */}
+        {exemptionAlerts.length > 0 && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
+            <p className="text-sm font-bold text-amber-800">
+              ⚠ 免除書類の確認が必要です({exemptionAlerts.length}件)
+            </p>
+            <ul className="mt-2 space-y-1">
+              {exemptionAlerts.map((a) => {
+                const target = rows.find((r) => r.child_id === a.child_id);
+                return (
+                  <li key={`${a.child_id}-${a.kind}`} className="flex items-center gap-2 text-sm text-amber-900">
+                    <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+                      a.document_state === "deficient" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
+                      {a.document_state === "deficient" ? "不備あり" : "書類確認待ち"}
+                    </span>
+                    <span className="font-medium">{a.child_name}</span>
+                    <span className="text-amber-700">
+                      {{ free_childcare: "無償化(保育料)", meal_main: "主食費免除", meal_side: "副食費免除",
+                         company_paid: "会社負担", custom: "個別免除" }[a.kind] ?? a.kind}
+                      {a.document_fiscal_year ? `(${a.document_fiscal_year}年度)` : ""}
+                    </span>
+                    {target && (
+                      <button
+                        onClick={() => setContractRow(target)}
+                        className="rounded border border-amber-300 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        契約を開く
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-4 shadow-sm">
@@ -371,6 +422,15 @@ function ChildcareChildrenPageContent() {
                           >
                             週次予定
                           </button>
+                          {billingEnabled && (
+                            <button
+                              onClick={() => setContractRow(row)}
+                              className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                              title="契約プラン・月極延長・免除(統括のみ)の登録と履歴"
+                            >
+                              契約
+                            </button>
+                          )}
                           {therapyEnabled && (
                             <button
                               onClick={() => setTherapyRow(row)}
@@ -411,6 +471,14 @@ function ChildcareChildrenPageContent() {
           isManager={isManager}
           onClose={() => setWeeklyRow(null)}
           onSaved={() => setWeeklyRow(null)}
+        />
+      )}
+
+      {contractRow && (
+        <ChildContractModal
+          row={contractRow}
+          officeId={selectedOffice}
+          onClose={() => { setContractRow(null); setReloadToken((t) => t + 1); }}
         />
       )}
 
