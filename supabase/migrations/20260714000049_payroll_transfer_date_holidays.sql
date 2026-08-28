@@ -78,6 +78,11 @@ on conflict (holiday_date) do nothing;
 
 -- 銀行営業日か判定(土日・国民の祝日・年末年始を除く)。
 -- company_holiday(会社独自の休業日)は銀行の営業可否とは無関係のため対象外とする。
+-- ⚠注意(2026-08-28): 383で holidays に year_end_new_year の 12/29・12/30(保育の休園日・
+--   銀行は営業日)が追加されたため、本関数はこの2日を「銀行休業」と誤扱いする。
+--   現行の唯一の利用経路 compute_payroll_transfer_date(25日→前営業日繰上げ)は
+--   12/29-30 に到達し得ず実害ゼロだが、給与・振込日系で本関数を再利用する際は
+--   holiday_type の分離 or name 基準への変更を検討すること(HANDOFF_2026-08-27 4-2)。
 create or replace function is_bank_business_day(p_date date)
 returns boolean
 language sql
