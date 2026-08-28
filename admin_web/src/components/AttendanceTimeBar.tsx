@@ -2,7 +2,9 @@
 
 // 登降園タイムバー(K6・コドモン準拠)。
 // 予定(薄青: scheduled_start→end)の上に実績(濃青: arrival→departure)を重ね、
-// 日中の中抜け(out→return)は実績バーを白く抜く。両端に実績(無ければ予定)の時刻を表示。
+// 日中の外出(out→return)は紫セグメントで表現(俊指示 2026-08-28: iPad と同じ
+// 青→外出で紫→戻りで青。旧仕様の白抜きは色抜けに見えるため廃止)。
+// 両端に実績(無ければ予定)の時刻を表示。
 // 時刻はすべて JST(Asia/Tokyo)基準。timestamptz は JST の壁時計へ、time文字列はそのまま。
 
 const DAY_START_MIN = 7 * 60; // 07:00
@@ -79,9 +81,10 @@ export function AttendanceTimeBar({
   const nowMin = tzToJstMinutes(new Date().toISOString()) ?? DAY_END_MIN;
   const actualEnd = dep ?? Math.min(nowMin, DAY_END_MIN);
 
-  // 中抜け(外出→戻り)の白抜き区間。戻り未登録なら実績右端まで外出中。
+  // 外出(out→戻り)の紫区間。戻り未登録なら実績右端(=現在)まで外出中。
   const gapStart = out;
   const gapEnd = out != null ? (ret ?? actualEnd) : null;
+  const outNow = out != null && ret == null && dep == null; // 外出中(戻り・降園なし)
 
   return (
     <div className="flex items-center gap-2">
@@ -103,12 +106,12 @@ export function AttendanceTimeBar({
             style={{ left: `${pct(arr!)}%`, width: `${Math.max(pct(actualEnd) - pct(arr!), 1)}%` }}
           />
         )}
-        {/* 中抜け(白抜き) */}
+        {/* 外出(紫・iPadの #7A5FC0 と同色)。外出中は現在時刻まで紫が伸びる */}
         {gapStart != null && gapEnd != null && gapEnd > gapStart && (
           <div
-            className="absolute top-0 h-3 bg-white"
-            style={{ left: `${pct(gapStart)}%`, width: `${pct(gapEnd) - pct(gapStart)}%` }}
-            title={`中抜け ${fmt(gapStart)}〜${ret != null ? fmt(ret) : "(戻り未)"}`}
+            className="absolute top-0 h-3"
+            style={{ left: `${pct(gapStart)}%`, width: `${pct(gapEnd) - pct(gapStart)}%`, backgroundColor: "#7A5FC0" }}
+            title={outNow ? `外出中 ${fmt(gapStart)}〜` : `外出 ${fmt(gapStart)}〜${fmt(ret)}`}
           />
         )}
       </div>
