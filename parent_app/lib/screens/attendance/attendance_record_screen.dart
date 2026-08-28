@@ -43,7 +43,9 @@ class _AttendanceRecordScreenState extends State<AttendanceRecordScreen> {
       final days = await widget.guardianService.fetchChildAttendanceMonth(widget.child.childId, _year, _month);
       final map = {for (final d in days) d.date.day: d};
       if (mounted) setState(() { _byDay = map; _loading = false; });
-    } catch (_) {
+    } catch (e) {
+      // 原因特定用(RPC未適用・権限・パース等を握りつぶさない)。UI文言は変えない。
+      debugPrint('attendance month fetch error: $e');
       if (mounted) setState(() { _error = '登降園実績の取得に失敗しました'; _loading = false; });
     }
   }
@@ -161,9 +163,9 @@ class _AttendanceRecordScreenState extends State<AttendanceRecordScreen> {
             ? AppColors.skyBlue.withValues(alpha: 0.05)
             : null;
     return Container(
-      color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFECEFF3)))),
+      // color と decoration は併用不可(Flutter assert)。色は decoration 側に含める。
+      decoration: BoxDecoration(color: bg, border: const Border(bottom: BorderSide(color: Color(0xFFECEFF3)))),
       child: Row(
         children: [
           SizedBox(

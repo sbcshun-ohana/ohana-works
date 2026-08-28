@@ -25,6 +25,8 @@ class AttendanceRecordDay {
         returnTime: m['return_time'] as String?,
         departTime: m['depart_time'] as String?,
         isAbsent: m['is_absent'] == true,
-        absenceKind: m['attendance_kind'] as String?,
+        // RPC 326 の返却キーは RETURNS TABLE の OUT列名 'absence_kind'
+        // (値の出所は child_daily_attendance.attendance_kind だがキー名は列名)。
+        absenceKind: m['absence_kind'] as String?,
       );
 }
