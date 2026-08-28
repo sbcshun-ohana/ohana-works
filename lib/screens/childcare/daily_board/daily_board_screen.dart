@@ -1837,11 +1837,14 @@ class _AttendanceTimeBar extends StatelessWidget {
     const span = winEnd - winStart;
     double frac(int m) => ((m.clamp(winStart, winEnd) - winStart) / span).toDouble();
 
+    // 外出中(俊指示 2026-08-28): 「外」打刻後に戻り・降園が無い間はバーを紫で表現し、
+    // 戻ったら青に戻す(右側バッジではなく時間軸の色で合図する)。
+    final outNow = out != null && (ret == null || ret < out) && dep == null;
     final actualLabel = arr == null
         ? ''
         : '登園 ${_hm(arr)}'
-            '${dep != null ? ' / 降園 ${_hm(dep)}' : ' / 在園中'}'
-            '${(out != null && ret != null) ? ' ・中抜け ${_hm(out)}〜${_hm(ret)}' : ''}';
+            '${dep != null ? ' / 降園 ${_hm(dep)}' : (outNow ? ' / 外出中 ${_hm(out)}〜' : ' / 在園中')}'
+            '${(out != null && ret != null && out < ret) ? ' ・中抜け ${_hm(out)}〜${_hm(ret)}' : ''}';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -1849,7 +1852,11 @@ class _AttendanceTimeBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (actualLabel.isNotEmpty)
-            Text(actualLabel, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.skyBlue)),
+            Text(actualLabel,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: outNow ? const Color(0xFF7A5FC0) : AppColors.skyBlue)),
           const SizedBox(height: 2),
           LayoutBuilder(builder: (context, c) {
             final w = c.maxWidth;
@@ -1875,9 +1882,16 @@ class _AttendanceTimeBar extends StatelessWidget {
               children.add(seg(schedS, schedE, AppColors.skyBlue.withValues(alpha: 0.28), 5, 10));
             }
             if (arr != null && actEnd != null) {
-              if (out != null && ret != null && out < ret) {
-                children.add(seg(arr, out, AppColors.skyBlue, 5, 10));
-                children.add(seg(ret, actEnd, AppColors.skyBlue, 5, 10));
+              // 外出セグメントは紫で塗る(俊指示 2026-08-28: 切れ目ではなく色で外出を表現。
+              // 外出中=外〜現在が紫、戻り済み=外〜戻りが紫で以降は青に戻る)。
+              const outPurple = Color(0xFF7A5FC0);
+              if (out != null && out >= arr) {
+                if (out > arr) children.add(seg(arr, out, AppColors.skyBlue, 5, 10));
+                final outEnd = (ret != null && ret > out) ? ret : actEnd;
+                if (outEnd > out) children.add(seg(out, outEnd, outPurple, 5, 10));
+                if (ret != null && ret > out && actEnd > ret) {
+                  children.add(seg(ret, actEnd, AppColors.skyBlue, 5, 10));
+                }
               } else {
                 children.add(seg(arr, actEnd, AppColors.skyBlue, 5, 10));
               }
@@ -1961,9 +1975,10 @@ class _AttendanceEditSheetState extends State<_AttendanceEditSheet> {
   void initState() {
     super.initState();
     // 既存の外出理由をプリフィル(再保存で理由が消えないように)。主任以外でも取得可。
+    // 取得完了前にユーザーがチップを選んだ場合は遅延到着のサーバー値で上書きしない。
     if (widget.row.outAt != null) {
       widget.service.fetchChildOutReason(widget.row.childId, widget.businessDate).then((r) {
-        if (mounted) setState(() => _outingReason = r);
+        if (mounted && _outingReason == null) setState(() => _outingReason = r);
       }).catchError((_) {});
     }
   }
@@ -2089,7 +2104,8 @@ class _AttendanceEditSheetState extends State<_AttendanceEditSheet> {
               const Text('外出理由', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
               const SizedBox(height: 6),
               Wrap(spacing: 8, children: [
-                for (final r in (widget.outingOtherEnabled ? const ['therapy', 'checkup', 'other'] : const ['therapy', 'checkup']))
+                // フラグOFF施設でも既存理由が「その他」の場合は選択状態が見えるようチップに含める。
+                for (final r in ((widget.outingOtherEnabled || _outingReason == 'other') ? const ['therapy', 'checkup', 'other'] : const ['therapy', 'checkup']))
                   ChoiceChip(
                     label: Text(r == 'therapy' ? '療育' : r == 'checkup' ? '健診' : 'その他'),
                     selected: _outingReason == r,
