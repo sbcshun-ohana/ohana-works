@@ -124,6 +124,8 @@ function AttendanceContent() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<Row[]>([]);
+  // クラス絞り込み(俊指示 2026-08-28)。""=全クラス。表示・Excel/PDF出力・監査記録の件数すべてに適用。
+  const [classFilter, setClassFilter] = useState("");
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [selectedChild, setSelectedChild] = useState("");
@@ -144,6 +146,10 @@ function AttendanceContent() {
 
   useEffect(() => {
     if (!selectedOffice) return;
+    // ステール応答ガード: 日別⇄月間や日付の高速切替時、先に発行した(重い)リクエストの応答が
+    // 後から届いて新しい結果を上書きすると、日別ビューに月間の複数日行が混入して園児が重複表示される
+    // (2026-08-28 実機で確認された314由来のレース)。クリーンアップで旧応答を無効化する。
+    let stale = false;
     const p = (n: number) => String(n).padStart(2, "0");
     const start = mode === "day" ? date : `${year}-${p(month)}-01`;
     const end = mode === "day" ? date : `${year}-${p(month)}-${p(new Date(year, month, 0).getDate())}`;
@@ -152,6 +158,7 @@ function AttendanceContent() {
     supabase
       .rpc("fetch_attendance_matrix_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
       .then(({ data, error }) => {
+        if (stale) return;
         setFetching(false);
         if (error) { setErr(error.message); setRows([]); return; }
         setErr(null);
@@ -166,7 +173,7 @@ function AttendanceContent() {
     // 要確認(317)。付加情報のため失敗しても本体表示は継続。
     supabase
       .rpc("fetch_attendance_anomalies_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
-      .then(({ data }) => setAnomalies((data ?? []) as Anomaly[]));
+      .then(({ data }) => { if (!stale) setAnomalies((data ?? []) as Anomaly[]); });
     // 休園日カレンダー(375)。月間ビューの網掛け・開所日数。失敗は静かに欠落させず表示する。
     if (mode === "month") {
       supabase
@@ -189,6 +196,7 @@ function AttendanceContent() {
       setClosures({});
       setOpenDays(null);
     }
+    return () => { stale = true; };
   }, [selectedOffice, mode, date, year, month, reloadToken]);
 
   // (child_id+日) → 要確認ラベル配列。
@@ -198,6 +206,10 @@ function AttendanceContent() {
     if (!anomByKey.has(k)) anomByKey.set(k, []);
     anomByKey.get(k)!.push(a.label);
   }
+
+  // クラス一覧(RPCの年齢順の初出順を保つ)と、絞り込み後の表示行。
+  const classNames = Array.from(new Set(rows.map((r) => r.class_name).filter((c): c is string => !!c)));
+  const viewRows = classFilter ? rows.filter((r) => r.class_name === classFilter) : rows;
 
   async function saveActuals(childId: string) {
     const e = edits[childId];
@@ -253,7 +265,7 @@ function AttendanceContent() {
   // Excel出力の監査記録(§7・379)。DL成功後に呼ぶ。失敗してもDLは成立しているのでUIは止めない。
   function logXlsxOutput(reportType: string, extraParams: Record<string, unknown> = {}) {
     if (!selectedOffice) return;
-    const childCount = new Set(rows.map((r) => r.child_id)).size;
+    const childCount = new Set(viewRows.map((r) => r.child_id)).size;
     void createClient().rpc("log_report_output", {
       p_office_id: selectedOffice,
       p_report_type: reportType,
@@ -266,24 +278,24 @@ function AttendanceContent() {
   // Excel出力(俊指示 2026-08-25: CSV→Excel・月付き日付・中央寄せ・罫線・縞模様・欠席児下部・集計)。
   // 出欠→出席簿(◯/病欠/都合欠+集計) / 時刻→登降園時刻(登園/降園/欠席の3行) / 園児別→選択児の1ヶ月。
   function onExport() {
-    if (!selectedOffice || rows.length === 0) return;
+    if (!selectedOffice || viewRows.length === 0) return;
     if (monthSub === "attendance") {
-      void exportRegisterXlsx(rows, year, month, closures, openDays);
+      void exportRegisterXlsx(viewRows, year, month, closures, openDays);
       logXlsxOutput("attendance_register");
       return;
     }
     if (monthSub === "time") {
-      void exportTimeXlsx(rows, year, month);
+      void exportTimeXlsx(viewRows, year, month);
       logXlsxOutput("attendance_time");
       return;
     }
     const seen = new Set<string>();
     const children: { id: string; name: string; cls: string | null }[] = [];
-    for (const r of rows) if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
+    for (const r of viewRows) if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
     const cid = selectedChild && children.some((c) => c.id === selectedChild) ? selectedChild : children[0]?.id ?? "";
     const c = children.find((x) => x.id === cid);
     if (c) {
-      void exportChildXlsx(rows, year, month, c.id, c.name, c.cls);
+      void exportChildXlsx(viewRows, year, month, c.id, c.name, c.cls);
       logXlsxOutput("attendance_child", { child_id: c.id });
     }
   }
@@ -306,7 +318,7 @@ function AttendanceContent() {
 
   // 帳票PDF(§7)。出席簿/登降園実績表をサーバー生成(pdfkit)→DL→監査ログ(log_report_output・379)。
   async function onExportPdf(reportType: "register" | "actuals") {
-    if (!selectedOffice || rows.length === 0) return;
+    if (!selectedOffice || viewRows.length === 0) return;
     setBusy(true);
     try {
       const res = await fetch("/api/childcare/attendance-pdf", {
@@ -315,7 +327,7 @@ function AttendanceContent() {
         body: JSON.stringify({
           reportType, officeName, year, month, openDays,
           closureDays: Object.keys(closures).map(Number),
-          rows,
+          rows: viewRows,
         }),
       });
       if (!res.ok) throw new Error("PDF生成に失敗しました");
@@ -327,7 +339,7 @@ function AttendanceContent() {
       a.click();
       URL.revokeObjectURL(url);
       // DL成功後に出力を記録(主任以上)。失敗しても帳票DLは成立しているのでUIは止めない。
-      const childCount = new Set(rows.map((r) => r.child_id)).size;
+      const childCount = new Set(viewRows.map((r) => r.child_id)).size;
       await createClient().rpc("log_report_output", {
         p_office_id: selectedOffice,
         p_report_type: reportType === "actuals" ? "attendance_actuals" : "attendance_register",
@@ -363,6 +375,15 @@ function AttendanceContent() {
             <button onClick={() => setMode("day")} className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "day" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>日別</button>
             <button onClick={() => setMode("month")} className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "month" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>月間</button>
           </div>
+          {/* クラス絞り込み(俊指示 2026-08-28)。日別・月間共通。出力(Excel/PDF)にも適用。 */}
+          <select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">全クラス</option>
+            {classNames.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           {mode === "day" ? (
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           ) : (
@@ -381,7 +402,7 @@ function AttendanceContent() {
               </div>
               <button
                 onClick={onExport}
-                disabled={rows.length === 0 || fetching}
+                disabled={viewRows.length === 0 || fetching}
                 className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
               >
                 {monthSub === "attendance" ? "出席簿Excel" : monthSub === "child" ? "園児別Excel" : "時刻Excel"}
@@ -389,14 +410,14 @@ function AttendanceContent() {
               {/* 帳票PDF(§7・主任以上)。出席簿/登降園実績表。出力は監査ログに記録。 */}
               <button
                 onClick={() => void onExportPdf("register")}
-                disabled={rows.length === 0 || busy || fetching}
+                disabled={viewRows.length === 0 || busy || fetching}
                 className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
               >
                 出席簿PDF
               </button>
               <button
                 onClick={() => void onExportPdf("actuals")}
-                disabled={rows.length === 0 || busy || fetching}
+                disabled={viewRows.length === 0 || busy || fetching}
                 className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
               >
                 実績表PDF
@@ -537,8 +558,8 @@ function AttendanceContent() {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">在籍児がいません</td></tr>}
-            {rows.map((r) => {
+            {viewRows.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">在籍児がいません</td></tr>}
+            {viewRows.map((r) => {
               const e = edits[r.child_id] ?? { in: "", out: "", ret: "", depart: "", note: "" };
               const set = (k: keyof Edit, v: string) => setEdits((prev) => ({ ...prev, [r.child_id]: { ...e, [k]: v } }));
               const anoms = anomByKey.get(anomKey(r.child_id, date)) ?? [];
@@ -594,7 +615,7 @@ function AttendanceContent() {
     const daysInMonth = new Date(year, month, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const byChild = new Map<string, { name: string; cls: string | null; days: Map<number, Row> }>();
-    for (const r of rows) {
+    for (const r of viewRows) {
       const d = new Date(r.business_date).getDate();
       if (!byChild.has(r.child_id)) byChild.set(r.child_id, { name: r.child_name, cls: r.class_name, days: new Map() });
       byChild.get(r.child_id)!.days.set(d, r);
@@ -690,12 +711,12 @@ function AttendanceContent() {
     // 園児一覧(RPCの年齢/氏名順を保持)。
     const seen = new Set<string>();
     const children: { id: string; name: string; cls: string | null }[] = [];
-    for (const r of rows) {
+    for (const r of viewRows) {
       if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
     }
     const cid = selectedChild && children.some((c) => c.id === selectedChild) ? selectedChild : children[0]?.id ?? "";
     const byDay = new Map<number, Row>();
-    for (const r of rows) if (r.child_id === cid) byDay.set(new Date(r.business_date).getDate(), r);
+    for (const r of viewRows) if (r.child_id === cid) byDay.set(new Date(r.business_date).getDate(), r);
     const dateStr = (d: number) => `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     return (
       <div className="space-y-3">

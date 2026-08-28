@@ -1343,6 +1343,17 @@ class _DailyBoardScreenState extends State<DailyBoardScreen> {
                                           if (_infectionControlEnabled)
                                             _actionIcon(Icons.medical_information_rounded, '引き継ぎカード',
                                                 const Color(0xFFB05FA0), () => _openHandoverCard(row)),
+                                          // 園内記録(145)。ON施設のみ。その子の園内記録画面へ直行(俊指示 2026-08-28)。
+                                          if (_internalNotesEnabled)
+                                            _actionIcon(Icons.edit_note_rounded, '園内記録', AppColors.leafGreen,
+                                                () => Navigator.of(context).push(MaterialPageRoute(
+                                                      builder: (_) => ChildInternalNotesScreen(
+                                                        service: widget.service,
+                                                        officeId: _officeId,
+                                                        childId: row.childId,
+                                                        childNameLabel: row.nameLabel,
+                                                      ),
+                                                    ))),
                                           // 一時外出(315)の専用アイコンは廃止。外出は出欠編集の「外」+理由へ統合(381)。
                                         ],
                                       ),

@@ -207,7 +207,7 @@ class _DailyContactListScreenState extends State<DailyContactListScreen> {
                   // 狭幅(非split)はタブが無いため、園内記録モードでは専用画面へ(俊指示の入口を狭幅でも成立させる)。
                   await Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => _InternalNotesScreen(
+                      builder: (_) => ChildInternalNotesScreen(
                         service: widget.service,
                         officeId: widget.officeId,
                         childId: contact.childId,
@@ -349,10 +349,11 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-/// 狭幅(非split)用の園内記録単独画面。連絡帳一覧の「園内記録モード」から園児タップで開く。
-/// タブUIが無い幅では ChildInternalNotesTab を AppBar 付きで包んで提供する。
-class _InternalNotesScreen extends StatelessWidget {
-  const _InternalNotesScreen({
+/// 園内記録の単独画面(園児1名)。連絡帳一覧の狭幅モードと、デイリーボードの
+/// 行アクション「園内記録」(俊指示 2026-08-28)から使う共有画面。
+class ChildInternalNotesScreen extends StatelessWidget {
+  const ChildInternalNotesScreen({
+    super.key,
     required this.service,
     required this.officeId,
     required this.childId,
