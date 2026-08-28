@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/childcare/therapy-qr": ["src/assets/fonts/**/*"],
     "/api/childcare/therapy-records-pdf": ["src/assets/fonts/**/*"],
+    "/api/childcare/attendance-pdf": ["src/assets/fonts/**/*"],
   },
 };
 

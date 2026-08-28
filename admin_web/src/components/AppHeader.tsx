@@ -58,8 +58,10 @@ function AppHeaderInner() {
   // トップレベルページ(CHILDCARE_OFFICE_PAGES)で表示する。他ドメイン(勤怠/シフト等)は対象外。
   const isChildcarePage = pathname.startsWith("/childcare") || CHILDCARE_OFFICE_PAGES.includes(pathname);
 
+  // 保育業務の入口はデイリーボード(全職員が閲覧可)。/childcare/attendance は主任以上RPC+
+  // attendance_mgmt_enabled ゲートのため、入口に使うと一般職員・フラグOFF施設で赤帯着地になる。
   const navItems = showChildcare
-    ? [...NAV_ITEMS, { href: "/childcare/attendance", label: "保育業務" }]
+    ? [...NAV_ITEMS, { href: "/childcare/daily-board", label: "保育業務" }]
     : NAV_ITEMS;
 
   async function handleLogout() {
@@ -117,7 +119,7 @@ function AppHeaderInner() {
       <nav className="mt-2 flex flex-wrap gap-1">
         {navItems.map((item) => {
           // 「保育業務」タブは /childcare 配下でアクティブ。ただし重要事項説明書はトップレベル扱いのため除外。
-          const isActive = item.href === "/childcare/attendance"
+          const isActive = item.href === "/childcare/daily-board"
             ? pathname.startsWith("/childcare") && !pathname.startsWith("/childcare/important-matters")
             : pathname === item.href;
           return (

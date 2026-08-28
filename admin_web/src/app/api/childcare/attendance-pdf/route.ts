@@ -36,7 +36,11 @@ type Body = {
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
 const kindLabel = (r: Row) =>
   r.absence_kind === "sick_absence" ? "病欠" : r.absence_kind === "personal_absence" ? "都合欠" : "欠席";
-const registerSymbol = (r: Row) => (r.is_absent ? kindLabel(r) : r.in_time || r.depart_time ? "◯" : "");
+// 出席簿グリッドは日セル幅18ptのため1文字(病/都/欠)。2文字以上は折返して次行と重なる(凡例で補足)。
+const registerSymbol = (r: Row) =>
+  r.is_absent
+    ? (r.absence_kind === "sick_absence" ? "病" : r.absence_kind === "personal_absence" ? "都" : "欠")
+    : r.in_time || r.depart_time ? "◯" : "";
 // 実測時間 = 初回登園〜最終降園(延長単位は Phase D 待ちで出さない)。
 function actualDuration(r: Row): string {
   if (!r.in_time || !r.depart_time) return "";
@@ -79,6 +83,7 @@ function renderRegister(b: Body): Promise<Buffer> {
 
   doc.fontSize(15).text(`出席簿(${b.year}年${b.month}月)`, { align: "center" });
   doc.fontSize(9).fillColor("#555").text(`${b.officeName}${b.openDays != null ? `  開所日数 ${b.openDays}日` : ""}`, { align: "center" });
+  doc.fontSize(7.5).text("◯=出席  病=病欠  都=都合欠  欠=欠席(種別未設定)  網掛け=休園日", { align: "center" });
   doc.moveDown(0.6).fillColor("#000");
 
   const nameW = 78, clsW = 44;
@@ -144,6 +149,9 @@ function renderActuals(b: Body): Promise<Buffer> {
     y += rowH;
   };
   const pageGuard = () => { if (y > doc.page.height - 40) { doc.addPage(); y = doc.y; } };
+  // グループ開始時は「園児見出し+表ヘッダ+最低1行」(約50pt)を同一ページに確保する。
+  // 40pt残しでは見出しがページ下端からはみ出し pdfkit の自動改ページと座標がずれる。
+  const groupGuard = () => { if (y > doc.page.height - 90) { doc.addPage(); y = doc.y; } };
 
   for (const g of groups) {
     // 活動のある日(打刻いずれか or 欠席)を抽出。
@@ -151,7 +159,7 @@ function renderActuals(b: Body): Promise<Buffer> {
       .filter(([, r]) => r.is_absent || r.in_time || r.depart_time || r.out_time || r.return_time)
       .sort((a, b2) => a[0] - b2[0]);
     if (dayEntries.length === 0) continue;
-    pageGuard();
+    groupGuard();
     doc.fontSize(10.5).text(`${g.name}${g.cls ? `(${g.cls})` : ""}`, startX, y + 2);
     y += rowH + 2;
     drawCells(cols.map((c) => c.label), true);

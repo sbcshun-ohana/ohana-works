@@ -33,7 +33,12 @@ type Edit = { in: string; out: string; ret: string; depart: string; note: string
 type Anomaly = { child_id: string; business_date: string; anomaly_type: string; label: string; severity: string };
 type AuditRow = { occurred_at: string; operator: string; target_type: string; action: string; before_data: Record<string, unknown> | null; after_data: Record<string, unknown> | null };
 type ReportLog = { output_at: string; operator: string; report_type: string; format: string; params: Record<string, unknown> | null; row_count: number | null };
-const REPORT_TYPE_LABEL: Record<string, string> = { attendance_register: "出席簿", attendance_actuals: "登降園実績表" };
+const REPORT_TYPE_LABEL: Record<string, string> = {
+  attendance_register: "出席簿",
+  attendance_actuals: "登降園実績表",
+  attendance_time: "登降園時刻表",
+  attendance_child: "園児別実績",
+};
 const anomKey = (childId: string, date: string) => `${childId}__${date.slice(0, 10)}`;
 
 function todayStr(): string {
@@ -64,7 +69,7 @@ const auditActionLabel = (a: string): string =>
 // target_type ごとに、履歴に出す列と日本語ラベル。
 const AUDIT_FIELDS: Record<string, [string, string][]> = {
   child_daily_attendance: [["is_absent", "欠席"], ["attendance_kind", "区分"], ["absence_reason", "欠席理由"], ["attendance_note", "出欠メモ"]],
-  child_attendance_events: [["event_type", "種別"], ["occurred_at", "時刻"], ["rejection_reason", "却下理由"], ["admin_override_reason", "上書き理由"]],
+  child_attendance_events: [["event_type", "種別"], ["occurred_at", "時刻"], ["outing_reason", "外出理由"], ["rejection_reason", "却下理由"], ["admin_override_reason", "上書き理由"]],
   child_outings: [["reason", "理由"], ["reason_note", "補足"], ["out_at", "外出"], ["return_planned_at", "戻り予定"], ["return_at", "戻り"], ["converted_to_departure", "降園変換"]],
 };
 function fmtAuditVal(key: string, raw: unknown): string {
@@ -75,7 +80,7 @@ function fmtAuditVal(key: string, raw: unknown): string {
   if (key === "attendance_kind") return ({ none: "出席", late: "遅刻", early_leave: "早退", sick_absence: "病欠", personal_absence: "都合欠" } as Record<string, string>)[s] ?? s;
   if (key === "event_type")
     return ({ drop_off: "登園", pick_up: "降園", proxy_drop_off: "代理登園", proxy_pick_up: "代理降園", rejected: "却下", out: "外出", return: "戻り" } as Record<string, string>)[s] ?? s;
-  if (key === "reason") return ({ therapy: "療育", checkup: "健診", other: "その他" } as Record<string, string>)[s] ?? s;
+  if (key === "reason" || key === "outing_reason") return ({ therapy: "療育", checkup: "健診", other: "その他" } as Record<string, string>)[s] ?? s;
   if (["occurred_at", "out_at", "return_planned_at", "return_at"].includes(key)) {
     const d = new Date(s);
     return isNaN(d.getTime()) ? s : d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -100,6 +105,10 @@ function auditDetail(row: AuditRow): { field: string; text: string }[] {
       if (v == null || v === "") continue;
       out.push({ field: label, text: fmtAuditVal(key, v) });
     }
+  }
+  // 追跡対象外の列(予定時刻等)のみの変更は差分ゼロになる。空行に見えないよう注記を出す。
+  if (out.length === 0 && row.action === "UPDATE") {
+    out.push({ field: "変更", text: "(詳細表示対象外の項目の変更)" });
   }
   return out;
 }
@@ -127,8 +136,11 @@ function AttendanceContent() {
   // 監査履歴モーダル(378)。開いている園児と取得行。
   const [reportLogsOpen, setReportLogsOpen] = useState(false);
   const [reportLogs, setReportLogs] = useState<ReportLog[] | null>(null);
+  const [reportLogsErr, setReportLogsErr] = useState<string | null>(null);
   const [auditFor, setAuditFor] = useState<{ childId: string; name: string } | null>(null);
   const [auditRows, setAuditRows] = useState<AuditRow[] | null>(null);
+  // 年月・施設切替中の帳票出力を防ぐ(前月データで新年月のファイル名が出るレースの回避)。
+  const [fetching, setFetching] = useState(false);
 
   useEffect(() => {
     if (!selectedOffice) return;
@@ -136,9 +148,11 @@ function AttendanceContent() {
     const start = mode === "day" ? date : `${year}-${p(month)}-01`;
     const end = mode === "day" ? date : `${year}-${p(month)}-${p(new Date(year, month, 0).getDate())}`;
     const supabase = createClient();
+    setFetching(true);
     supabase
       .rpc("fetch_attendance_matrix_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
       .then(({ data, error }) => {
+        setFetching(false);
         if (error) { setErr(error.message); setRows([]); return; }
         setErr(null);
         const rs = (data ?? []) as Row[];
@@ -153,11 +167,12 @@ function AttendanceContent() {
     supabase
       .rpc("fetch_attendance_anomalies_for_office", { p_office_id: selectedOffice, p_start: start, p_end: end })
       .then(({ data }) => setAnomalies((data ?? []) as Anomaly[]));
-    // 休園日カレンダー(375)。月間ビューの網掛け・開所日数。
+    // 休園日カレンダー(375)。月間ビューの網掛け・開所日数。失敗は静かに欠落させず表示する。
     if (mode === "month") {
       supabase
         .rpc("fetch_office_closure_calendar", { p_office: selectedOffice, p_year: year, p_month: month })
-        .then(({ data }) => {
+        .then(({ data, error }) => {
+          if (error) { setErr(`休園日の取得に失敗しました: ${error.message}`); setClosures({}); return; }
           const map: Record<number, { reason: string | null; label: string | null }> = {};
           for (const c of (data ?? []) as { business_date: string; closed: boolean; reason: string | null; label: string | null }[]) {
             if (c.closed) map[Number(c.business_date.slice(8, 10))] = { reason: c.reason, label: c.label };
@@ -166,7 +181,10 @@ function AttendanceContent() {
         });
       supabase
         .rpc("count_office_open_days", { p_office: selectedOffice, p_year: year, p_month: month })
-        .then(({ data }) => setOpenDays((data as number | null) ?? null));
+        .then(({ data, error }) => {
+          if (error) { setErr(`開所日数の取得に失敗しました: ${error.message}`); setOpenDays(null); return; }
+          setOpenDays((data as number | null) ?? null);
+        });
     } else {
       setClosures({});
       setOpenDays(null);
@@ -232,31 +250,63 @@ function AttendanceContent() {
     setMode("day");
   }
 
+  // Excel出力の監査記録(§7・379)。DL成功後に呼ぶ。失敗してもDLは成立しているのでUIは止めない。
+  function logXlsxOutput(reportType: string, extraParams: Record<string, unknown> = {}) {
+    if (!selectedOffice) return;
+    const childCount = new Set(rows.map((r) => r.child_id)).size;
+    void createClient().rpc("log_report_output", {
+      p_office_id: selectedOffice,
+      p_report_type: reportType,
+      p_format: "xlsx",
+      p_params: { year, month, ...extraParams },
+      p_row_count: childCount,
+    });
+  }
+
   // Excel出力(俊指示 2026-08-25: CSV→Excel・月付き日付・中央寄せ・罫線・縞模様・欠席児下部・集計)。
   // 出欠→出席簿(◯/病欠/都合欠+集計) / 時刻→登降園時刻(登園/降園/欠席の3行) / 園児別→選択児の1ヶ月。
   function onExport() {
-    if (monthSub === "attendance") { void exportRegisterXlsx(rows, year, month, closures, openDays); return; }
-    if (monthSub === "time") { void exportTimeXlsx(rows, year, month); return; }
+    if (!selectedOffice || rows.length === 0) return;
+    if (monthSub === "attendance") {
+      void exportRegisterXlsx(rows, year, month, closures, openDays);
+      logXlsxOutput("attendance_register");
+      return;
+    }
+    if (monthSub === "time") {
+      void exportTimeXlsx(rows, year, month);
+      logXlsxOutput("attendance_time");
+      return;
+    }
     const seen = new Set<string>();
     const children: { id: string; name: string; cls: string | null }[] = [];
     for (const r of rows) if (!seen.has(r.child_id)) { seen.add(r.child_id); children.push({ id: r.child_id, name: r.child_name, cls: r.class_name }); }
     const cid = selectedChild && children.some((c) => c.id === selectedChild) ? selectedChild : children[0]?.id ?? "";
     const c = children.find((x) => x.id === cid);
-    if (c) void exportChildXlsx(rows, year, month, c.id, c.name, c.cls);
+    if (c) {
+      void exportChildXlsx(rows, year, month, c.id, c.name, c.cls);
+      logXlsxOutput("attendance_child", { child_id: c.id });
+    }
   }
 
-  // 帳票出力履歴(§7・379)。管理者以上のみ閲覧可(RPCが権限判定)。
+  // 帳票出力履歴(§7・379)。管理者以上のみ閲覧可(RPCが権限判定)。エラーはモーダル内に表示する
+  // (chief=主任は閲覧不可のため、権限エラーが「履歴なし」に化けないように)。
   async function openReportLogs() {
+    if (!selectedOffice) return;
     setReportLogsOpen(true);
     setReportLogs(null);
+    setReportLogsErr(null);
     const { data, error } = await createClient().rpc("fetch_report_output_logs", { p_office_id: selectedOffice, p_limit: 100 });
-    if (error) { setErr(error.message); setReportLogs([]); return; }
+    if (error) {
+      setReportLogsErr(error.message.includes("not authorized") ? "出力履歴の閲覧は施設管理者以上です。" : `取得に失敗しました: ${error.message}`);
+      setReportLogs([]);
+      return;
+    }
     setReportLogs((data ?? []) as ReportLog[]);
   }
 
   // 帳票PDF(§7)。出席簿/登降園実績表をサーバー生成(pdfkit)→DL→監査ログ(log_report_output・379)。
   async function onExportPdf(reportType: "register" | "actuals") {
-    if (rows.length === 0) return;
+    if (!selectedOffice || rows.length === 0) return;
     setBusy(true);
     try {
       const res = await fetch("/api/childcare/attendance-pdf", {
@@ -331,7 +381,7 @@ function AttendanceContent() {
               </div>
               <button
                 onClick={onExport}
-                disabled={rows.length === 0}
+                disabled={rows.length === 0 || fetching}
                 className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
               >
                 {monthSub === "attendance" ? "出席簿Excel" : monthSub === "child" ? "園児別Excel" : "時刻Excel"}
@@ -339,14 +389,14 @@ function AttendanceContent() {
               {/* 帳票PDF(§7・主任以上)。出席簿/登降園実績表。出力は監査ログに記録。 */}
               <button
                 onClick={() => void onExportPdf("register")}
-                disabled={rows.length === 0 || busy}
+                disabled={rows.length === 0 || busy || fetching}
                 className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
               >
                 出席簿PDF
               </button>
               <button
                 onClick={() => void onExportPdf("actuals")}
-                disabled={rows.length === 0 || busy}
+                disabled={rows.length === 0 || busy || fetching}
                 className="rounded-lg border border-emerald-600 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
               >
                 実績表PDF
@@ -370,10 +420,14 @@ function AttendanceContent() {
         )}
         {err && <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{err}</div>}
 
-        {mode === "day" ? <DayView /> : monthSub === "child" ? <ChildMonthView /> : <MonthGridView withTime={monthSub === "time"} />}
+        {/* JSX要素(<DayView/>)ではなく関数呼び出しで展開する。内部関数は親の再レンダーごとに
+            再生成されるため、要素にすると type が毎回変わり React がサブツリーを再マウント
+            = 備考・時刻入力が1文字ごとにフォーカスを失う(2026-08-28 実機で確認された実害)。
+            これらの関数は hooks を持たないため、呼び出し展開は Rules of Hooks 上も安全。 */}
+        {mode === "day" ? DayView() : monthSub === "child" ? ChildMonthView() : MonthGridView({ withTime: monthSub === "time" })}
       </main>
-      {auditFor && <AuditModal />}
-      {reportLogsOpen && <ReportLogsModal />}
+      {auditFor && AuditModal()}
+      {reportLogsOpen && ReportLogsModal()}
     </div>
   );
 
@@ -390,8 +444,9 @@ function AttendanceContent() {
             <button onClick={() => setReportLogsOpen(false)} className="rounded-lg px-2 py-1 text-lg leading-none text-slate-400 hover:bg-slate-100">×</button>
           </div>
           <div className="p-5">
-            {reportLogs === null && <div className="py-8 text-center text-sm text-slate-400">読み込み中…</div>}
-            {reportLogs !== null && reportLogs.length === 0 && <div className="py-8 text-center text-sm text-slate-400">出力履歴はありません。</div>}
+            {reportLogsErr && <div className="rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-600">{reportLogsErr}</div>}
+            {!reportLogsErr && reportLogs === null && <div className="py-8 text-center text-sm text-slate-400">読み込み中…</div>}
+            {!reportLogsErr && reportLogs !== null && reportLogs.length === 0 && <div className="py-8 text-center text-sm text-slate-400">出力履歴はありません。</div>}
             {reportLogs !== null && reportLogs.length > 0 && (
               <table className="min-w-full text-sm">
                 <thead>
