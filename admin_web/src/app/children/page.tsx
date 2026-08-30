@@ -53,42 +53,37 @@ function ChildcareChildrenPageContent() {
   const [contractRow, setContractRow] = useState<ChildMasterRow | null>(null); // 契約モーダル対象
   // 免除書類の確認待ちアラート(391・統括のみ返る。確認完了まで出続ける=俊要望 2026-08-28)
   const [exemptionAlerts, setExemptionAlerts] = useState<
-    { child_id: string; child_name: string; kind: string; document_state: string; document_fiscal_year: number | null }[]
+    { child_id: string; child_name: string; kind: string; document_state: string; document_fiscal_year: number | null; start_month: string }[]
   >([]);
 
   // 園内記録機能フラグ(施設単位)。ONの施設のみボタンを表示する
+  // 施設切替のステール応答ガード(314/394): 遅れて届いた前施設の応答で上書きしない
   useEffect(() => {
-    function load() {
-      if (!selectedOffice) {
-        return;
-      }
-      const supabase = createClient();
-      supabase
-        .rpc("is_therapy_outing_enabled_for_office", { p_office_id: selectedOffice })
-        .then(({ data }) => setTherapyEnabled(Boolean(data)));
-      supabase
-        .rpc("is_development_records_enabled_for_office", { p_office_id: selectedOffice })
-        .then(({ data }) => setDevelopmentEnabled(Boolean(data)));
-      supabase
-        .rpc("is_billing_enabled_for_office", { p_office_id: selectedOffice })
-        .then(({ data }) => setBillingEnabled(Boolean(data)));
-    }
-    load();
+    if (!selectedOffice) return;
+    let stale = false;
+    const supabase = createClient();
+    supabase
+      .rpc("is_therapy_outing_enabled_for_office", { p_office_id: selectedOffice })
+      .then(({ data }) => { if (!stale) setTherapyEnabled(Boolean(data)); });
+    supabase
+      .rpc("is_development_records_enabled_for_office", { p_office_id: selectedOffice })
+      .then(({ data }) => { if (!stale) setDevelopmentEnabled(Boolean(data)); });
+    supabase
+      .rpc("is_billing_enabled_for_office", { p_office_id: selectedOffice })
+      .then(({ data }) => { if (!stale) setBillingEnabled(Boolean(data)); });
+    return () => { stale = true; };
   }, [selectedOffice]);
 
   useEffect(() => {
-    function loadRows() {
-      if (!selectedOffice) return null;
-      setIsLoading(true);
-      setRowsError(null);
-      return createClient();
-    }
-
-    const supabase = loadRows();
-    if (!supabase) return;
+    if (!selectedOffice) return;
+    let stale = false;
+    setIsLoading(true);
+    setRowsError(null);
+    const supabase = createClient();
     supabase
       .rpc("fetch_children_for_office_master", { p_office_id: selectedOffice })
       .then(({ data, error }) => {
+        if (stale) return;
         setIsLoading(false);
         if (error) {
           setRowsError(error.message);
@@ -100,13 +95,19 @@ function ChildcareChildrenPageContent() {
     supabase
       .rpc("fetch_children_kahai_active", { p_office_id: selectedOffice, p_ref_date: new Date().toISOString().slice(0, 10) })
       .then(({ data }) => {
+        if (stale) return;
         setKahaiActive(new Set((data ?? []).map((r: { child_id: string }) => r.child_id)));
       });
     // 免除書類の確認待ちアラート(391)。統括以外・フラグOFFはエラー=黙って空(バナー非表示)。
     // 契約モーダルを閉じるとreloadTokenが進み再取得される(確認済みにすると消える)。
+    // ステールガード必須: 免除アラートは機微情報のため他施設への誤表示を防ぐ(394)。
     supabase
       .rpc("fetch_pending_exemption_alerts", { p_office_id: selectedOffice })
-      .then(({ data, error }) => setExemptionAlerts(error ? [] : ((data ?? []) as typeof exemptionAlerts)));
+      .then(({ data, error }) => {
+        if (stale) return;
+        setExemptionAlerts(error ? [] : ((data ?? []) as typeof exemptionAlerts));
+      });
+    return () => { stale = true; };
   }, [selectedOffice, reloadToken]);
 
   const classOrder = classOrderIndex(classes);
@@ -198,7 +199,7 @@ function ChildcareChildrenPageContent() {
               {exemptionAlerts.map((a) => {
                 const target = rows.find((r) => r.child_id === a.child_id);
                 return (
-                  <li key={`${a.child_id}-${a.kind}`} className="flex items-center gap-2 text-sm text-amber-900">
+                  <li key={`${a.child_id}-${a.kind}-${a.start_month}`} className="flex items-center gap-2 text-sm text-amber-900">
                     <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
                       a.document_state === "deficient" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
                       {a.document_state === "deficient" ? "不備あり" : "書類確認待ち"}

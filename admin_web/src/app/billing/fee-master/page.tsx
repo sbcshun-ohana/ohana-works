@@ -197,8 +197,13 @@ function FeeMasterPageContent() {
   async function handleRevise() {
     if (!reviseTarget) return;
     const amount = Number(reviseAmount);
-    if (!Number.isInteger(amount) || amount < 0) {
+    // 空欄はNumber("")=0になり検証を通過してしまうため明示的に拒否(0円の恒久登録防止・394)
+    if (reviseAmount.trim() === "" || !Number.isInteger(amount) || amount < 0) {
       setActionError("金額は0以上の整数(円)で入力してください");
+      return;
+    }
+    if (!reviseFrom) {
+      setActionError("適用開始日を入力してください");
       return;
     }
     setIsActing(true);
@@ -591,7 +596,11 @@ function FeeMasterPageContent() {
                 区分
                 <select
                   value={addCategory}
-                  onChange={(e) => setAddCategory(e.target.value)}
+                  onChange={(e) => {
+                    setAddCategory(e.target.value);
+                    // 区分に合わせて単位の既定値を再導出(単位は作成後変更不可のため誤登録防止・394)
+                    setAddCalcUnit(e.target.value === "supply" || e.target.value === "diaper" ? "per_piece" : "one_time");
+                  }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
                 >
                   {CATEGORY_ORDER.map((c) => (

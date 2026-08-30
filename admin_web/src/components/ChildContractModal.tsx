@@ -105,6 +105,12 @@ function currentFiscalYear(): number {
   return d.getMonth() + 1 >= 4 ? d.getFullYear() : d.getFullYear() - 1;
 }
 
+// 今月の月初(ローカル=JST運用)。toISOString()はUTCのため月初0-9時に前月へズレる(394修正)
+function currentMonthFirst(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 function certLabel(cert: string | null, ageBand: string | null): string {
   if (cert === "standard") return "標準時間認定";
   if (cert === "short") return "短時間認定";
@@ -153,6 +159,7 @@ export function ChildContractModal({ row, officeId, onClose }: Props) {
 
   useEffect(() => {
     let alive = true;
+    setLoadError(null);  // 再取得時に古いエラー表示を残さない(394)
     createClient()
       .rpc("fetch_child_billing_contracts", { p_child_id: row.child_id })
       .then(({ data: d, error }) => {
@@ -302,7 +309,8 @@ export function ChildContractModal({ row, officeId, onClose }: Props) {
     setBusy(true);
     setActionError(null);
     const supabase = createClient();
-    const fy = target.document_fiscal_year ?? new Date().getFullYear();
+    // フォールバックは暦年でなく年度(1〜3月に添付すると翌年度扱いになるのを防ぐ・394)
+    const fy = target.document_fiscal_year ?? currentFiscalYear();
     const path = `${row.child_id}/${fy}/${Date.now()}.pdf`;
     const { error: upErr } = await supabase.storage
       .from("exemption-documents")
@@ -369,7 +377,7 @@ export function ChildContractModal({ row, officeId, onClose }: Props) {
     reload();
   }
 
-  const current = data?.contracts.find((c) => !c.is_future && (c.end_month === null || c.end_month >= new Date().toISOString().slice(0, 8) + "01"));
+  const current = data?.contracts.find((c) => !c.is_future && (c.end_month === null || c.end_month >= currentMonthFirst()));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
@@ -469,15 +477,18 @@ export function ChildContractModal({ row, officeId, onClose }: Props) {
               </table>
             </section>
 
-            {/* 月極延長(プランのある施設=大和のみ表示) */}
-            {data.available_extension_plans.length > 0 && (
+            {/* 月極延長(プランのある施設=大和のみ表示。プラン失効後も加入履歴が残る間は
+                終了・取消操作のためセクションを出し続ける=394修正) */}
+            {(data.available_extension_plans.length > 0 || data.extension_contracts.length > 0) && (
               <section>
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-slate-700">月極延長</h4>
-                  <button onClick={() => setShowAddExt((v) => !v)}
-                    className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100">
-                    + 加入・変更
-                  </button>
+                  {data.available_extension_plans.length > 0 && (
+                    <button onClick={() => setShowAddExt((v) => !v)}
+                      className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100">
+                      + 加入・変更
+                    </button>
+                  )}
                 </div>
                 {showAddExt && (
                   <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-sky-100 bg-sky-50/50 p-3">
