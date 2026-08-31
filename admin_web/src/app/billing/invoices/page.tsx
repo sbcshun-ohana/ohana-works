@@ -24,6 +24,7 @@ type InvoiceRow = {
   invoice_no: string;
   child_id: string;
   child_name: string;
+  class_name: string | null;
   status: string;
   total_amount: number;
   due_date: string | null;
@@ -39,16 +40,19 @@ type Overview = {
 };
 
 type InvoiceItem = {
+  id: string;
   category: string;
   description: string;
   target_period: string | null;
   quantity: number;
   unit_amount: number | null;
   amount: number;
+  is_manual: boolean;
 };
 
 type InvoiceDetail = {
   invoice: {
+    id: string;
     invoice_no: string;
     child_name: string;
     billing_month: string;
@@ -60,6 +64,14 @@ type InvoiceDetail = {
   };
   items: InvoiceItem[];
 };
+
+// 手動明細で選べる種別(実費系のみ。自動計算系はRPC側でも拒否される)
+const MANUAL_CATEGORIES: { value: string; label: string }[] = [
+  { value: "supply", label: "備品代" },
+  { value: "diaper", label: "おむつ代" },
+  { value: "event", label: "行事費" },
+  { value: "misc", label: "その他実費" },
+];
 
 const CYCLE_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   draft: { label: "作成中", cls: "bg-slate-100 text-slate-600" },
@@ -98,6 +110,12 @@ function BillingInvoicesPageContent() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
+  const [classFilter, setClassFilter] = useState<string>("");  // ""=全クラス(俊要望 2026-08-31)
+  // 手動明細の追加フォーム(下書き請求書のみ・俊要望 2026-08-31)
+  const [miCat, setMiCat] = useState("supply");
+  const [miDesc, setMiDesc] = useState("");
+  const [miQty, setMiQty] = useState("1");
+  const [miUnit, setMiUnit] = useState("");
 
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
 
@@ -149,11 +167,51 @@ function BillingInvoicesPageContent() {
     setDetail(d as InvoiceDetail);
   }
 
+  // 明細モーダル内の操作後に、モーダルと一覧の両方を最新化する
+  async function refreshDetail(invoiceId: string) {
+    const { data: d, error } = await createClient().rpc("fetch_invoice_detail", { p_invoice_id: invoiceId });
+    if (!error) setDetail(d as InvoiceDetail);
+    reload();
+  }
+
+  async function handleAddManualItem(invoiceId: string, category: string, description: string, quantity: number, unitAmount: number) {
+    setBusy(true);
+    const { error } = await createClient().rpc("add_manual_invoice_item", {
+      p_invoice_id: invoiceId,
+      p_category: category,
+      p_description: description,
+      p_quantity: quantity,
+      p_unit_amount: unitAmount,
+    });
+    setBusy(false);
+    if (error) {
+      window.alert(`追加に失敗しました: ${error.message}`);
+      return;
+    }
+    await refreshDetail(invoiceId);
+  }
+
+  async function handleDeleteManualItem(invoiceId: string, item: InvoiceItem) {
+    if (!window.confirm(`「${item.description}」を削除しますか?`)) return;
+    const { error } = await createClient().rpc("delete_manual_invoice_item", { p_item_id: item.id });
+    if (error) {
+      window.alert(`削除に失敗しました: ${error.message}`);
+      return;
+    }
+    await refreshDetail(invoiceId);
+  }
+
   const cycle = data?.cycle ?? null;
   const cycleStatus = cycle ? CYCLE_STATUS_LABELS[cycle.status] : null;
   const errorChecks = (data?.checks ?? []).filter((c) => c.severity === "error");
   const warnChecks = (data?.checks ?? []).filter((c) => c.severity === "warning");
   const infoChecks = (data?.checks ?? []).filter((c) => c.severity === "info");
+  const classNames = Array.from(
+    new Set((data?.invoices ?? []).map((i) => i.class_name).filter((n): n is string => !!n)),
+  ).sort();
+  const visibleInvoices = (data?.invoices ?? []).filter(
+    (i) => !classFilter || i.class_name === classFilter,
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -242,7 +300,7 @@ function BillingInvoicesPageContent() {
                     <>
                       <button
                         onClick={() => runAction("publish_billing_cycle", { p_cycle_id: cycle.id },
-                          "保護者へ公開しますか?(公開後は取消できません・支払期限=公開日+10日)")}
+                          "保護者へ公開しますか?(支払期限=公開日+10日)")}
                         disabled={busy}
                         className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                       >
@@ -259,6 +317,21 @@ function BillingInvoicesPageContent() {
                         取消
                       </button>
                     </>
+                  )}
+                  {/* 公開済みの差し戻し(俊要望 2026-08-31): 統括のみ・入金済みがあればRPC側で拒否・
+                      保護者へ取り下げ通知が送られる */}
+                  {cycle?.status === "published" && (
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt(
+                          "公開済みの請求を差し戻します。\n保護者アプリから見えなくなり、取り下げのお知らせが送られます。\n(入金済みの請求がある場合は差し戻せません)\n\n差し戻し理由を入力してください:");
+                        if (reason) void runAction("cancel_billing_cycle", { p_cycle_id: cycle.id, p_reason: reason });
+                      }}
+                      disabled={busy}
+                      className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      差し戻し(取消)
+                    </button>
                   )}
                 </div>
               </div>
@@ -295,10 +368,29 @@ function BillingInvoicesPageContent() {
             {/* 請求一覧 */}
             {cycle && (
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                    クラス:
+                    <select
+                      value={classFilter}
+                      onChange={(e) => setClassFilter(e.target.value)}
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-normal text-slate-800"
+                    >
+                      <option value="">全クラス</option>
+                      {classNames.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <span className="text-xs text-slate-400">
+                    {classFilter ? `${visibleInvoices.length}件を表示` : `全${(data.invoices ?? []).length}件`}
+                  </span>
+                </div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-slate-400">
                       <th className="px-4 py-2 font-medium">請求番号</th>
+                      <th className="px-2 py-2 font-medium">クラス</th>
                       <th className="px-2 py-2 font-medium">園児</th>
                       <th className="px-2 py-2 text-right font-medium">金額</th>
                       <th className="px-2 py-2 font-medium">状態</th>
@@ -307,9 +399,10 @@ function BillingInvoicesPageContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.invoices.map((inv) => (
+                    {visibleInvoices.map((inv) => (
                       <tr key={inv.id} className="border-t border-slate-100">
                         <td className="px-4 py-2 font-mono text-xs text-slate-600">{inv.invoice_no}</td>
+                        <td className="px-2 py-2 text-slate-600">{inv.class_name ?? ""}</td>
                         <td className="px-2 py-2 font-medium text-slate-700">{inv.child_name}</td>
                         <td className="px-2 py-2 text-right font-semibold tabular-nums text-slate-800">{yen(inv.total_amount)}</td>
                         <td className="px-2 py-2">
@@ -322,17 +415,65 @@ function BillingInvoicesPageContent() {
                         </td>
                         <td className="px-2 py-2 tabular-nums text-slate-600">{inv.due_date ?? ""}</td>
                         <td className="px-4 py-2 text-right">
-                          <button
-                            onClick={() => openDetail(inv)}
-                            className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
-                          >
-                            明細
-                          </button>
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => openDetail(inv)}
+                              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+                            >
+                              明細
+                            </button>
+                            {/* 個別差し戻し・再発行(俊要望 2026-08-31): 公開済みサイクルで1件単位の修正を可能に */}
+                            {cycle?.status === "published" && inv.status === "issued" && (
+                              <button
+                                onClick={() => {
+                                  const reason = window.prompt(
+                                    `${inv.child_name}さんの請求(${inv.invoice_no})を差し戻します。\n保護者には取り下げのお知らせが送られます。\n\n差し戻し理由:`);
+                                  if (reason) void runAction("cancel_invoice", { p_invoice_id: inv.id, p_reason: reason });
+                                }}
+                                disabled={busy}
+                                className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-60"
+                              >
+                                差し戻し
+                              </button>
+                            )}
+                            {cycle?.status === "published" && inv.status === "cancelled" &&
+                              !visibleInvoices.some((o) => o.child_id === inv.child_id && o.status !== "cancelled") && (
+                              <button
+                                onClick={() => runAction("rebuild_child_invoice",
+                                  { p_cycle_id: cycle.id, p_child_id: inv.child_id },
+                                  `${inv.child_name}さんの請求を再発行しますか?(修正後の内容で下書きを作り直します)`)}
+                                disabled={busy}
+                                className="rounded border border-sky-200 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-60"
+                              >
+                                再発行
+                              </button>
+                            )}
+                            {cycle?.status === "published" && inv.status === "draft" && (
+                              <button
+                                onClick={() => runAction("approve_invoice", { p_invoice_id: inv.id },
+                                  `${inv.child_name}さんの請求(${yen(inv.total_amount)})を承認しますか?`)}
+                                disabled={busy}
+                                className="rounded border border-sky-200 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-60"
+                              >
+                                承認
+                              </button>
+                            )}
+                            {cycle?.status === "published" && inv.status === "approved" && (
+                              <button
+                                onClick={() => runAction("publish_invoice", { p_invoice_id: inv.id },
+                                  `${inv.child_name}さんへ公開しますか?(公開通知が送られます・期限=今日+10日)`)}
+                                disabled={busy}
+                                className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                              >
+                                公開
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
-                    {data.invoices.length === 0 && (
-                      <tr><td colSpan={6} className="px-4 py-3 text-sm text-slate-400">請求書はありません</td></tr>
+                    {visibleInvoices.length === 0 && (
+                      <tr><td colSpan={7} className="px-4 py-3 text-sm text-slate-400">請求書はありません</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -369,13 +510,29 @@ function BillingInvoicesPageContent() {
                 </tr>
               </thead>
               <tbody>
-                {detail.items.map((it, idx) => (
-                  <tr key={idx} className="border-t border-slate-100">
-                    <td className="py-1.5 pr-2 text-slate-700">{it.description}</td>
+                {detail.items.map((it) => (
+                  <tr key={it.id} className="border-t border-slate-100">
+                    <td className="py-1.5 pr-2 text-slate-700">
+                      {it.description}
+                      {it.is_manual && (
+                        <span className="ml-1.5 rounded bg-sky-50 px-1 py-0.5 text-xs text-sky-600">手動</span>
+                      )}
+                    </td>
                     <td className="py-1.5 pr-2 text-xs text-slate-500">{it.target_period ?? ""}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums text-slate-600">{it.quantity}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums text-slate-600">{yen(it.unit_amount)}</td>
-                    <td className="py-1.5 text-right font-semibold tabular-nums text-slate-800">{yen(it.amount)}</td>
+                    <td className="py-1.5 text-right font-semibold tabular-nums text-slate-800">
+                      {yen(it.amount)}
+                      {detail.invoice.status === "draft" && it.is_manual && (
+                        <button
+                          onClick={() => void handleDeleteManualItem(detail.invoice.id, it)}
+                          className="ml-2 text-xs text-red-400 hover:text-red-600"
+                          title="手動明細を削除"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -388,6 +545,57 @@ function BillingInvoicesPageContent() {
             </table>
             {detail.invoice.due_date && (
               <p className="mt-2 text-xs text-slate-500">支払期限: {detail.invoice.due_date}</p>
+            )}
+
+            {/* 手動明細の追加(下書きのみ・統括のみ=RPC側で強制)。備品もれ・行事費などの実費 */}
+            {detail.invoice.status === "draft" && (
+              <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/50 p-3">
+                <p className="mb-2 text-xs font-bold text-slate-600">明細を追加(備品もれ・行事費などの実費)</p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-xs text-slate-600">
+                    種別
+                    <select value={miCat} onChange={(e) => setMiCat(e.target.value)}
+                      className="mt-0.5 block rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+                      {MANUAL_CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    内容
+                    <input type="text" value={miDesc} onChange={(e) => setMiDesc(e.target.value)}
+                      placeholder="例: 帽子(7月分もれ)"
+                      className="mt-0.5 block w-44 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    数量
+                    <input type="number" min={1} value={miQty} onChange={(e) => setMiQty(e.target.value)}
+                      className="mt-0.5 block w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    単価(円)
+                    <input type="number" min={0} value={miUnit} onChange={(e) => setMiUnit(e.target.value)}
+                      className="mt-0.5 block w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                  </label>
+                  <button
+                    onClick={() => {
+                      const qty = Number(miQty);
+                      const unit = Number(miUnit);
+                      if (!miDesc.trim() || miUnit.trim() === "" || !Number.isFinite(qty) || qty <= 0
+                          || !Number.isInteger(unit) || unit < 0) {
+                        window.alert("内容・数量(1以上)・単価(0円以上の整数)を入力してください");
+                        return;
+                      }
+                      void handleAddManualItem(detail.invoice.id, miCat, miDesc.trim(), qty, unit)
+                        .then(() => { setMiDesc(""); setMiQty("1"); setMiUnit(""); });
+                    }}
+                    disabled={busy}
+                    className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+                  >
+                    追加
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
