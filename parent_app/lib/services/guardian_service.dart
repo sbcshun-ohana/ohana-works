@@ -8,6 +8,7 @@ import '../models/communication_book_entry.dart';
 import '../models/enrollment_form.dart';
 import '../models/family_daily_report.dart';
 import '../models/guardian_broadcast_notice.dart';
+import '../models/guardian_invoice.dart';
 import '../models/guardian_profile.dart';
 import '../models/guardian_qr_token.dart';
 import '../models/linked_child.dart';
@@ -1083,6 +1084,17 @@ class GuardianService {
     final rows = await _client.rpc('fetch_child_attendance_month_for_guardian',
         params: {'p_child_id': childId, 'p_year': year, 'p_month': month});
     return [for (final r in (rows as List)) AttendanceRecordDay.fromMap(r as Map<String, dynamic>)];
+  }
+
+  /// 公開済み請求書の一覧(請求Phase8a・397)。全ての子の分が返るため画面側で子別に絞る。
+  Future<List<GuardianInvoice>> fetchMyInvoices() async {
+    final rows = await _client.rpc('fetch_my_invoices');
+    return [for (final r in (rows as List)) GuardianInvoice.fromMap(r as Map<String, dynamic>)];
+  }
+
+  Future<GuardianInvoiceDetail> fetchMyInvoiceDetail(String invoiceId) async {
+    final data = await _client.rpc('fetch_my_invoice_detail', params: {'p_invoice_id': invoiceId});
+    return GuardianInvoiceDetail.fromMap((data as Map).cast<String, dynamic>());
   }
 
   String _translateEnrollmentError(String message) {

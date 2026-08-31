@@ -5,6 +5,7 @@ import '../../services/guardian_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/child_context_app_bar_title.dart';
 import '../attendance/attendance_record_screen.dart';
+import '../billing/invoice_list_screen.dart';
 import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
@@ -480,6 +481,18 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           ),
         ),
       ),
+      // ご請求(請求Phase8a・397): 公開済み請求書の閲覧。施設の請求フラグONのときのみ表示。
+      if (_enabledFeatures.contains('billing_enabled'))
+        _GridMenuItem(
+          icon: Icons.receipt_long_rounded,
+          color: AppColors.warmOrange,
+          label: 'ご請求',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => InvoiceListScreen(guardianService: widget.guardianService, child: widget.child),
+            ),
+          ),
+        ),
       if (_enabledFeatures.contains('guardian_requests'))
         _GridMenuItem(
           icon: Icons.assignment_rounded,
