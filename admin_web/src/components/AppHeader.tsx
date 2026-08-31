@@ -30,7 +30,7 @@ const NAV_ITEMS = [
 // 保育業務の施設選択(?office=)に依存するトップレベルページ。
 // useChildcareOffices を使うページを /childcare の外へ出す場合はここへ追加すること
 // (追加しないと施設プルダウンが出ず、先頭施設が黙って選ばれる)。
-const CHILDCARE_OFFICE_PAGES = ["/children", "/guardians", "/enrollment-forms", "/infection-masters", "/food-checks", "/billing/fee-master"];
+const CHILDCARE_OFFICE_PAGES = ["/children", "/guardians", "/enrollment-forms", "/infection-masters", "/food-checks", "/billing/fee-master", "/billing/invoices"];
 
 // useSearchParams はビルド時の静的プリレンダーで Suspense 境界を要求するため、
 // 内側を Suspense でラップする(下部の export function AppHeader)。
@@ -68,7 +68,12 @@ function AppHeaderInner() {
   // attendance_mgmt_enabled ゲートのため、入口に使うと一般職員・フラグOFF施設で赤帯着地になる。
   const navItems = [
     ...NAV_ITEMS,
-    ...(showBilling ? [{ href: "/billing/fee-master", label: "料金マスター" }] : []),
+    ...(showBilling
+      ? [
+          { href: "/billing/fee-master", label: "料金マスター" },
+          { href: "/billing/invoices", label: "請求管理" },
+        ]
+      : []),
     ...(showChildcare ? [{ href: "/childcare/daily-board", label: "保育業務" }] : []),
   ];
 
