@@ -413,7 +413,7 @@ export type ParentRequestRow = {
   child_id: string;
   child_display_name: string;
   guardian_name: string;
-  request_type: "absence" | "tardiness" | "early_leave" | "pickup_person_change" | "medication" | "other";
+  request_type: "absence" | "tardiness" | "early_leave" | "pickup_person_change" | "medication" | "schedule_change" | "other";
   target_date: string;
   end_date: string | null;
   absence_kind: "sick_absence" | "personal_absence" | null;
@@ -437,6 +437,7 @@ export const PARENT_REQUEST_TYPE_LABELS: Record<ParentRequestRow["request_type"]
   early_leave: "早退",
   pickup_person_change: "お迎えの方の変更",
   medication: "服薬連絡",
+  schedule_change: "利用時間の変更",
   other: "その他連絡",
 };
 

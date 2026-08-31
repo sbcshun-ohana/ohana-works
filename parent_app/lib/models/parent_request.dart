@@ -67,6 +67,7 @@ const parentRequestTypeLabels = {
   'early_leave': '早退',
   'pickup_person_change': 'お迎えの方の変更',
   'medication': '服薬連絡',
+  'schedule_change': '利用時間の変更',
   'other': 'その他連絡',
 };
 

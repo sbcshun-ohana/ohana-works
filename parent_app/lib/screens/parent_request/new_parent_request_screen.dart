@@ -48,6 +48,9 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
   // 登園・お迎え時間(任意)。連絡帳から移設(俊指示 2026-08-14)。details(日本語キー)に格納。
   TimeOfDay? _pickupArriveTime;
   TimeOfDay? _pickupLeaveTime;
+  // 利用時間の一時変更(402・schedule_change)。希望登降園時刻。
+  TimeOfDay? _schedStart;
+  TimeOfDay? _schedEnd;
 
   // お迎え者身分証明書(202)。フラグON施設のみ: 初回(=お迎え者マスタに同名なし)は写真添付必須。
   bool _pickupIdDocEnabled = false;
@@ -238,6 +241,24 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
     }
   }
 
+  // 利用時間の一時変更(402)の希望時刻ピッカー。
+  Future<void> _pickSchedTime({required bool isStart}) async {
+    final current = isStart ? _schedStart : _schedEnd;
+    final picked = await showTimeDropdownPicker(
+      context: context,
+      initialTime: current ?? (isStart ? const TimeOfDay(hour: 9, minute: 0) : const TimeOfDay(hour: 17, minute: 0)),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _schedStart = picked;
+        } else {
+          _schedEnd = picked;
+        }
+      });
+    }
+  }
+
   String _formatTimeOfDay(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Map<String, dynamic> _buildDetails() {
@@ -269,6 +290,13 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
           if (_selectedMedicationKinds.contains('その他')) 'その他の薬': _medicationOtherController.text.trim(),
           'お子さまの様子・症状': _symptomController.text.trim(),
           if (_medicationNotesController.text.trim().isNotEmpty) '備考': _medicationNotesController.text.trim(),
+        };
+      case 'schedule_change':
+        // 承認時に対象日の予定登降園時刻(child_daily_attendance override)へ反映(402)。
+        return {
+          if (_schedStart != null) '希望登園時刻': _formatTimeOfDay(_schedStart!),
+          if (_schedEnd != null) '希望降園時刻': _formatTimeOfDay(_schedEnd!),
+          if (_reasonController.text.trim().isNotEmpty) '理由': _reasonController.text.trim(),
         };
       case 'other':
         return {'連絡内容': _otherMessageController.text.trim()};
@@ -305,6 +333,12 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
         return '「その他」を選択した場合は薬の内容をご記入ください';
       }
       if (_symptomController.text.trim().isEmpty) return 'お子さまの様子・症状を入力してください';
+    }
+    if (_requestType == 'schedule_change') {
+      if (_schedStart == null || _schedEnd == null) return '希望の登園・降園時刻を選択してください';
+      final startMin = _schedStart!.hour * 60 + _schedStart!.minute;
+      final endMin = _schedEnd!.hour * 60 + _schedEnd!.minute;
+      if (endMin <= startMin) return '降園時刻は登園時刻より後にしてください';
     }
     return null;
   }
@@ -448,6 +482,37 @@ class _NewParentRequestScreenState extends State<NewParentRequestScreen> {
             onPressed: _pickTime,
             icon: const Icon(Icons.access_time_rounded),
             label: Text(_time == null ? '時刻を選択' : _formatTimeOfDay(_time!)),
+          ),
+          const SizedBox(height: 20),
+          _reasonField('理由(任意)'),
+        ];
+      case 'schedule_change':
+        return [
+          const Text('希望の登園・降園時刻', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickSchedTime(isStart: true),
+                  icon: const Icon(Icons.login_rounded),
+                  label: Text(_schedStart == null ? '登園' : _formatTimeOfDay(_schedStart!)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickSchedTime(isStart: false),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: Text(_schedEnd == null ? '降園' : _formatTimeOfDay(_schedEnd!)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '※ 契約時間より前の登園・後の降園は、当日の延長保育料の対象になる場合があります。',
+            style: TextStyle(fontSize: 12, color: AppColors.warmOrange),
           ),
           const SizedBox(height: 20),
           _reasonField('理由(任意)'),
