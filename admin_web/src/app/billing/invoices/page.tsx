@@ -65,6 +65,20 @@ type InvoiceDetail = {
   items: InvoiceItem[];
 };
 
+type SupplyOrderRow = {
+  order_id: string;
+  child_id: string;
+  child_name: string;
+  class_name: string | null;
+  item_name: string;
+  quantity: number;
+  status: string;
+  note: string | null;
+  unit_amount: number | null;
+  requested_at: string;
+  guardian_name: string | null;
+};
+
 // 手動明細で選べる種別(実費系のみ。自動計算系はRPC側でも拒否される)
 const MANUAL_CATEGORIES: { value: string; label: string }[] = [
   { value: "supply", label: "備品代" },
@@ -116,6 +130,20 @@ function BillingInvoicesPageContent() {
   const [miDesc, setMiDesc] = useState("");
   const [miQty, setMiQty] = useState("1");
   const [miUnit, setMiUnit] = useState("");
+  // 備品注文(401): 申請中の承認/却下と、承認済み(次回請求に合算予定)の把握
+  const [supplyOrders, setSupplyOrders] = useState<SupplyOrderRow[]>([]);
+
+  useEffect(() => {
+    if (!selectedOffice) return;
+    let stale = false;
+    createClient()
+      .rpc("fetch_supply_orders", { p_office_id: selectedOffice })
+      .then(({ data: d, error }) => {
+        if (stale) return;
+        setSupplyOrders(error ? [] : ((d ?? []) as SupplyOrderRow[]));
+      });
+    return () => { stale = true; };
+  }, [selectedOffice, reloadToken]);
 
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
 
@@ -337,6 +365,69 @@ function BillingInvoicesPageContent() {
               </div>
               {actionError && <p className="mt-2 text-sm font-medium text-red-500">{actionError}</p>}
             </section>
+
+            {/* 備品注文(401): 保護者からの注文を承認/却下。承認分は次回サイクルで自動合算 */}
+            {supplyOrders.length > 0 && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-bold text-slate-700">
+                  備品注文
+                  {supplyOrders.filter((o) => o.status === "requested").length > 0 && (
+                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">
+                      申請中 {supplyOrders.filter((o) => o.status === "requested").length}件
+                    </span>
+                  )}
+                </h3>
+                <table className="mt-2 w-full text-sm">
+                  <tbody>
+                    {supplyOrders.map((o) => (
+                      <tr key={o.order_id} className="border-t border-slate-100">
+                        <td className="py-1.5 pr-2 text-slate-600">{o.class_name ?? ""}</td>
+                        <td className="py-1.5 pr-2 font-medium text-slate-700">{o.child_name}</td>
+                        <td className="py-1.5 pr-2 text-slate-700">
+                          {o.item_name} × {o.quantity}
+                          {o.note && <span className="ml-1 text-xs text-slate-400">({o.note})</span>}
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+                            o.status === "requested" ? "bg-amber-100 text-amber-700"
+                            : o.status === "approved" ? "bg-emerald-50 text-emerald-700"
+                            : o.status === "rejected" ? "bg-red-100 text-red-600"
+                            : "bg-slate-200 text-slate-500"}`}>
+                            {o.status === "requested" ? "申請中"
+                              : o.status === "approved" ? (o.unit_amount !== null ? `承認済み(次回請求 ${yen(o.unit_amount * o.quantity)})` : "承認済み")
+                              : o.status === "rejected" ? "却下" : "取消"}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {o.status === "requested" && (
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => runAction("approve_supply_order", { p_order_id: o.order_id },
+                                  `${o.child_name}さんの「${o.item_name} × ${o.quantity}」を承認しますか?(次回請求に合算・保護者へ通知)`)}
+                                disabled={busy}
+                                className="rounded border border-sky-200 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-60"
+                              >
+                                承認
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const reason = window.prompt(`「${o.item_name}」の却下理由(保護者へ通知されます):`);
+                                  if (reason) void runAction("reject_supply_order", { p_order_id: o.order_id, p_reason: reason });
+                                }}
+                                disabled={busy}
+                                className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-60"
+                              >
+                                却下
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
 
             {/* 自動チェック */}
             {cycle && (errorChecks.length > 0 || warnChecks.length > 0 || infoChecks.length > 0) && (

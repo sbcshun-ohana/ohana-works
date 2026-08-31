@@ -9,6 +9,7 @@ import '../models/enrollment_form.dart';
 import '../models/family_daily_report.dart';
 import '../models/guardian_broadcast_notice.dart';
 import '../models/guardian_invoice.dart';
+import '../models/supply_order.dart';
 import '../models/guardian_profile.dart';
 import '../models/guardian_qr_token.dart';
 import '../models/linked_child.dart';
@@ -1095,6 +1096,30 @@ class GuardianService {
   Future<GuardianInvoiceDetail> fetchMyInvoiceDetail(String invoiceId) async {
     final data = await _client.rpc('fetch_my_invoice_detail', params: {'p_invoice_id': invoiceId});
     return GuardianInvoiceDetail.fromMap((data as Map).cast<String, dynamic>());
+  }
+
+  /// 備品注文(401): カタログ(単価登録済みのsupply品目のみ)
+  Future<List<SupplyCatalogItem>> fetchSupplyCatalog(String childId) async {
+    final rows = await _client.rpc('fetch_supply_catalog', params: {'p_child_id': childId});
+    return [for (final r in (rows as List)) SupplyCatalogItem.fromMap(r as Map<String, dynamic>)];
+  }
+
+  Future<void> createSupplyOrder(String childId, String feeItemId, int quantity, String? note) async {
+    await _client.rpc('create_supply_order', params: {
+      'p_child_id': childId,
+      'p_fee_item_id': feeItemId,
+      'p_quantity': quantity,
+      'p_note': note,
+    });
+  }
+
+  Future<List<SupplyOrder>> fetchMySupplyOrders(String childId) async {
+    final rows = await _client.rpc('fetch_my_supply_orders', params: {'p_child_id': childId});
+    return [for (final r in (rows as List)) SupplyOrder.fromMap(r as Map<String, dynamic>)];
+  }
+
+  Future<void> cancelSupplyOrder(String orderId) async {
+    await _client.rpc('cancel_supply_order', params: {'p_order_id': orderId});
   }
 
   String _translateEnrollmentError(String message) {

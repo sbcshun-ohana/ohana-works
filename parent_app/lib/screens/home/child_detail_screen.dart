@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/child_context_app_bar_title.dart';
 import '../attendance/attendance_record_screen.dart';
 import '../billing/invoice_list_screen.dart';
+import '../billing/supply_order_screen.dart';
 import '../class_photos/class_photos_screen.dart';
 import '../communication_book/communication_book_list_screen.dart';
 import '../communication_book/communication_book_notice_list_screen.dart';
@@ -490,6 +491,18 @@ class _ChildDetailScreenState extends State<ChildDetailScreen> {
           onTap: () => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => InvoiceListScreen(guardianService: widget.guardianService, child: widget.child),
+            ),
+          ),
+        ),
+      // 備品注文(401): 園の備品カタログから注文→園承認→次回請求に合算。
+      if (_enabledFeatures.contains('billing_enabled'))
+        _GridMenuItem(
+          icon: Icons.shopping_bag_rounded,
+          color: AppColors.warmOrange,
+          label: '備品注文',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => SupplyOrderScreen(guardianService: widget.guardianService, child: widget.child),
             ),
           ),
         ),
