@@ -360,6 +360,19 @@ function GuidancePlansContent() {
 
         {/* エディタ */}
         {detail && <PlanEditor detail={detail} isManager={isManager} individualTargets={individualTargets}
+          contextLabel={(() => {
+            // どのクラス(何歳児)・いつの計画かをタイトルで判別できるようにする(俊要望 2026-08-31)
+            const cls = classes.find((c) => c.class_id === detail.plan.class_id);
+            const parts: string[] = [];
+            if (cls) {
+              const age = cls.age_group.endsWith("児") ? cls.age_group : `${cls.age_group}児`;
+              parts.push(`${cls.class_name}(${age})`);
+            }
+            parts.push(`${detail.plan.fiscal_year}年度`);
+            if (detail.plan.month) parts.push(`${detail.plan.month}月分`);
+            if (detail.plan.week_start_date) parts.push(`${detail.plan.week_start_date}〜の週`);
+            return parts.join(" ");
+          })()}
           savedAt={savedAt} onField={setField} onInsert={insertExample} onSaveIndividual={saveIndividual}
           onClose={() => setDetail(null)}
           onSubmit={() => runAction(async (s) => await s.rpc("submit_guidance_plan", { p_id: detail.plan.id }), "申請しました")}
@@ -442,6 +455,7 @@ function exportSafetyExcel(XLSX: typeof import("xlsx"), p: { content: Record<str
 
 function PlanEditor(props: {
   detail: PlanDetail; isManager: boolean; busy: boolean; savedAt: string | null;
+  contextLabel: string;   // 例「かぜ組(3歳児) 2026年度 8月分」
   individualTargets: { child_id: string; display_name: string; is_kahai: boolean }[];
   onField: (s: string, k: string, v: string) => void;
   onInsert: (s: string, k: string, v: string) => void;
@@ -547,6 +561,9 @@ function PlanEditor(props: {
     <section className="space-y-4 rounded-2xl border-2 border-sky-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-slate-800">{detail.template.title}
+          {props.contextLabel && (
+            <span className="ml-2 font-semibold text-sky-700">{props.contextLabel}</span>
+          )}
           <span className={`ml-3 rounded-full px-2 py-0.5 text-xs font-semibold ${(STATUS_LABEL[st] ?? STATUS_LABEL.draft).cls}`}>{(STATUS_LABEL[st] ?? { label: st }).label}</span>
         </h3>
         <div className="flex items-center gap-3">
