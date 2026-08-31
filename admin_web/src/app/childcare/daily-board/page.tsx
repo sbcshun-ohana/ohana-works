@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { ChildcareNav } from "@/components/ChildcareNav";
 import { ChildInternalNotesModal } from "@/components/ChildInternalNotesModal";
+import { HandoverCardModal } from "@/components/HandoverCardModal";
 import { AttendanceTimeBar } from "@/components/AttendanceTimeBar";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
 import { useChildcareClass } from "@/hooks/useChildcareClass";
@@ -170,6 +171,10 @@ function ChildcareDailyBoardPageContent() {
   const [reloadToken, setReloadToken] = useState(0);
   const [internalNotesEnabled, setInternalNotesEnabled] = useState(false);
   const [internalNotesChild, setInternalNotesChild] = useState<{ id: string; name: string } | null>(null);
+  // 感染症管理フラグ(209)。ONの施設のみ行に「引き継ぎカード」アイコンを出す。
+  const [infectionEnabled, setInfectionEnabled] = useState(false);
+  // 引き継ぎカード作成モーダル(209)。対象児。
+  const [handoverChild, setHandoverChild] = useState<{ id: string; name: string } | null>(null);
   // 登園メモ(244・職員内部・当日状況把握用)。child_id→本文。編集中の下書きは別マップで保持。
   const [arrivalNoteByChild, setArrivalNoteByChild] = useState<Record<string, string>>({});
   const [arrivalDraftByChild, setArrivalDraftByChild] = useState<Record<string, string>>({});
@@ -185,6 +190,9 @@ function ChildcareDailyBoardPageContent() {
       createClient()
         .rpc("is_child_internal_notes_enabled_for_office", { p_office_id: selectedOffice })
         .then(({ data }) => setInternalNotesEnabled(Boolean(data)));
+      createClient()
+        .rpc("is_infection_control_enabled_for_office", { p_office_id: selectedOffice })
+        .then(({ data }) => setInfectionEnabled(Boolean(data)));
     }
     loadFlag();
   }, [selectedOffice]);
@@ -797,6 +805,13 @@ function ChildcareDailyBoardPageContent() {
               <span className="text-xl leading-none">🌡️</span>
               <span className="text-sm font-semibold">健康チェック</span>
             </Link>
+            <Link
+              href={`/childcare/contacts?office=${selectedOffice}${selectedClass ? `&class=${selectedClass}` : ""}&date=${businessDate}`}
+              className="flex min-w-[104px] flex-col items-center justify-center gap-0.5 rounded-xl border border-orange-100 bg-orange-50 px-4 py-2 text-orange-600 transition hover:bg-orange-100"
+            >
+              <span className="text-xl leading-none">📔</span>
+              <span className="text-sm font-semibold">連絡帳</span>
+            </Link>
           </div>
 
           {/* 連絡帳一括(承認済み・未公開が対象)。同じ行の右側に配置。 */}
@@ -1068,17 +1083,34 @@ function ChildcareDailyBoardPageContent() {
                     </td>
                     {internalNotesEnabled && (
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() =>
-                            setInternalNotesChild({
-                              id: row.child_id,
-                              name: `${row.display_name}${row.honorific_suffix ?? ""}`,
-                            })
-                          }
-                          className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
-                        >
-                          🔒 園内記録
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() =>
+                              setInternalNotesChild({
+                                id: row.child_id,
+                                name: `${row.display_name}${row.honorific_suffix ?? ""}`,
+                              })
+                            }
+                            className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                          >
+                            🔒 園内記録
+                          </button>
+                          {/* 引き継ぎカード作成(209・感染症ON施設のみ・小アイコン) */}
+                          {infectionEnabled && (
+                            <button
+                              onClick={() =>
+                                setHandoverChild({
+                                  id: row.child_id,
+                                  name: `${row.display_name}${row.honorific_suffix ?? ""}`,
+                                })
+                              }
+                              title="引き継ぎカードを作成"
+                              className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-sm text-rose-600 hover:bg-rose-100"
+                            >
+                              🩺
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                     {/* 登園メモ(職員内部・保護者非公開)。インライン編集・フォーカスを外すと保存。 */}
@@ -1218,6 +1250,15 @@ function ChildcareDailyBoardPageContent() {
           childName={internalNotesChild.name}
           officeId={selectedOffice}
           onClose={() => setInternalNotesChild(null)}
+        />
+      )}
+
+      {handoverChild && (
+        <HandoverCardModal
+          childId={handoverChild.id}
+          childName={handoverChild.name}
+          onClose={() => setHandoverChild(null)}
+          onSent={() => { setHandoverChild(null); setToast("引き継ぎカードを保護者へ送信しました"); }}
         />
       )}
 
