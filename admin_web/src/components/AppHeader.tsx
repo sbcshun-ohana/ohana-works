@@ -72,6 +72,7 @@ function AppHeaderInner() {
       ? [
           { href: "/billing/fee-master", label: "料金マスター" },
           { href: "/billing/invoices", label: "請求管理" },
+          { href: "/childcare/temp-care", label: "一時預かり" },
         ]
       : []),
     ...(showChildcare ? [{ href: "/childcare/daily-board", label: "保育業務" }] : []),
@@ -133,12 +134,20 @@ function AppHeaderInner() {
         {navItems.map((item) => {
           // 「保育業務」タブは /childcare 配下でアクティブ。ただし重要事項説明書はトップレベル扱いのため除外。
           const isActive = item.href === "/childcare/daily-board"
-            ? pathname.startsWith("/childcare") && !pathname.startsWith("/childcare/important-matters")
+            ? pathname.startsWith("/childcare")
+                && !pathname.startsWith("/childcare/important-matters")
+                && !pathname.startsWith("/childcare/temp-care")
             : pathname === item.href;
+          // 施設選択に依存するページへのタブ遷移では現在の ?office= を引き継ぐ。
+          // (引き継がないと遷移時に既定施設=大和へ戻り、一時預かり登録が誤施設で作られる等の事故になる)
+          const isOfficeScoped = item.href.startsWith("/childcare") || CHILDCARE_OFFICE_PAGES.includes(item.href);
+          const href = isOfficeScoped && selectedOffice
+            ? `${item.href}?office=${selectedOffice}`
+            : item.href;
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={href}
               className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 isActive
                   ? "border-sky-200 bg-sky-50 text-sky-700"
