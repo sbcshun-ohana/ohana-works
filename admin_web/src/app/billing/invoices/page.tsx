@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { useChildcareOffices } from "@/hooks/useChildcareOffices";
@@ -171,6 +171,22 @@ function BillingInvoicesPageContent() {
     return () => { stale = true; };
   }, [selectedOffice, month, reloadToken]);
 
+  // 施設・月を切り替えたら明細モーダルと手動明細フォームを閉じる(旧施設の表示残り・誤計上防止)
+  useEffect(() => {
+    setDetail(null);
+    resetManualForm();
+  }, [selectedOffice, month]);
+
+  // 明細取得のレースガード(応答順逆転で別請求書の明細を表示しない・閉じた後の復活を防ぐ)
+  const detailReq = useRef(0);
+
+  function resetManualForm() {
+    setMiCat("supply");
+    setMiDesc("");
+    setMiQty("1");
+    setMiUnit("");
+  }
+
   async function runAction(rpcName: string, params: Record<string, unknown>, confirmMsg?: string) {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
     setBusy(true);
@@ -187,7 +203,10 @@ function BillingInvoicesPageContent() {
   }
 
   async function openDetail(inv: InvoiceRow) {
+    resetManualForm();  // 別請求書の入力残りを持ち込まない(誤計上防止)
+    const req = ++detailReq.current;
     const { data: d, error } = await createClient().rpc("fetch_invoice_detail", { p_invoice_id: inv.id });
+    if (req !== detailReq.current) return;  // 後発の要求が既にある/閉じられた→破棄
     if (error) {
       setActionError(error.message);
       return;
@@ -195,14 +214,23 @@ function BillingInvoicesPageContent() {
     setDetail(d as InvoiceDetail);
   }
 
-  // 明細モーダル内の操作後に、モーダルと一覧の両方を最新化する
-  async function refreshDetail(invoiceId: string) {
-    const { data: d, error } = await createClient().rpc("fetch_invoice_detail", { p_invoice_id: invoiceId });
-    if (!error) setDetail(d as InvoiceDetail);
-    reload();
+  function closeDetail() {
+    detailReq.current++;  // in-flight応答を無効化(閉じた後の復活防止)
+    setDetail(null);
+    resetManualForm();
   }
 
-  async function handleAddManualItem(invoiceId: string, category: string, description: string, quantity: number, unitAmount: number) {
+  // 明細モーダル内の操作後に、モーダルと一覧の両方を最新化する
+  async function refreshDetail(invoiceId: string) {
+    const req = ++detailReq.current;
+    const { data: d, error } = await createClient().rpc("fetch_invoice_detail", { p_invoice_id: invoiceId });
+    reload();
+    if (req !== detailReq.current) return;  // 閉じた/別請求書に切替済み
+    if (!error) setDetail(d as InvoiceDetail);
+  }
+
+  // 成功時のみ true。フォームクリアは呼び出し側が成功時だけ行う(失敗時の入力消去を防ぐ)
+  async function handleAddManualItem(invoiceId: string, category: string, description: string, quantity: number, unitAmount: number): Promise<boolean> {
     setBusy(true);
     const { error } = await createClient().rpc("add_manual_invoice_item", {
       p_invoice_id: invoiceId,
@@ -214,9 +242,10 @@ function BillingInvoicesPageContent() {
     setBusy(false);
     if (error) {
       window.alert(`追加に失敗しました: ${error.message}`);
-      return;
+      return false;
     }
     await refreshDetail(invoiceId);
+    return true;
   }
 
   async function handleDeleteManualItem(invoiceId: string, item: InvoiceItem) {
@@ -584,7 +613,7 @@ function BillingInvoicesPageContent() {
                 <span className="ml-2 font-mono text-xs font-normal text-slate-500">{detail.invoice.invoice_no}</span>
               </h3>
               <button
-                onClick={() => setDetail(null)}
+                onClick={closeDetail}
                 className="rounded-lg border border-slate-300 px-3 py-1 text-sm text-slate-600 hover:bg-slate-50"
               >
                 閉じる
@@ -672,13 +701,15 @@ function BillingInvoicesPageContent() {
                     onClick={() => {
                       const qty = Number(miQty);
                       const unit = Number(miUnit);
-                      if (!miDesc.trim() || miUnit.trim() === "" || !Number.isFinite(qty) || qty <= 0
+                      // 数量は正の整数のみ(備品数量に小数の業務要件なし)、単価は0以上の整数
+                      if (!miDesc.trim() || miUnit.trim() === "" || !Number.isInteger(qty) || qty < 1
                           || !Number.isInteger(unit) || unit < 0) {
-                        window.alert("内容・数量(1以上)・単価(0円以上の整数)を入力してください");
+                        window.alert("内容・数量(1以上の整数)・単価(0円以上の整数)を入力してください");
                         return;
                       }
-                      void handleAddManualItem(detail.invoice.id, miCat, miDesc.trim(), qty, unit)
-                        .then(() => { setMiDesc(""); setMiQty("1"); setMiUnit(""); });
+                      const invId = detail.invoice.id;
+                      void handleAddManualItem(invId, miCat, miDesc.trim(), qty, unit)
+                        .then((ok) => { if (ok) resetManualForm(); });  // 成功時のみクリア
                     }}
                     disabled={busy}
                     className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
